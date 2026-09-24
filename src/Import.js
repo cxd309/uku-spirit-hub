@@ -53,12 +53,13 @@ function _importFile_(event, file) {
  * successful imports replace that event's responses and clear its status
  * failed imports mark the event ERROR and keep its previous responses
  * responses are written before Events, so an interrupted run is simply repeated
+ * @returns {string} a one-line summary of the import
  */
-function importEvents() {
+function _importEvents_() {
   const eventsSheet = _getEventsSheet_();
   const responsesSheet = _getResponsesSheet_();
 
-  const files = _scanCategory_();
+  const files = _scanCategory_(_readConfig_().category);
   const fileById = new Map(files.map((f) => [f.id, f]));
   const events = _syncEvents_(_readEvents_(eventsSheet), files);
 
@@ -91,5 +92,8 @@ function importEvents() {
   _writeEvents_(eventsSheet, updatedEvents);
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
-  console.log(`Imported ${results.size - failed} event(s), ${imported.length} response(s); ${failed} failed`);
+  const imported_ = results.size - failed;
+  if (results.size === 0) return "Nothing to import: no events are NEW or REFRESH";
+  return `Imported ${imported_} event(s), ${imported.length} response(s)`
+    + (failed > 0 ? `; ${failed} failed (see Events tab)` : "");
 }

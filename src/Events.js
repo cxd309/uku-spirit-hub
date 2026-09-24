@@ -237,3 +237,25 @@ function _syncEvents_(existing, files) {
 function _tournamentName_(event) {
   return event.nameOverride || event.defaultName;
 }
+
+/**
+ * scan the category folder and bring the Events tab up to date
+ *
+ * Does not import any responses
+ *
+ * @returns {string} a one-line summary of the Events tab
+ */
+function _scanEvents_() {
+  const sheet = _getEventsSheet_();
+  const events = _syncEvents_(_readEvents_(sheet), _scanCategory_(_readConfig_().category));
+  _writeEvents_(sheet, events);
+
+  /** @type {Record<string, number>} */
+  const counts = {};
+  for (const e of events) {
+    const label = e.status || "up to date";
+    counts[label] = (counts[label] || 0) + 1;
+  }
+  const breakdown = Object.entries(counts).map(([status, n]) => `${n} ${status}`).join(", ");
+  return `${events.length} events: ${breakdown}`;
+}

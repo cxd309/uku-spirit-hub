@@ -5,13 +5,6 @@
 const RESULTS_FILE_SUFFIX = "spirit results and breakdown";
 
 /**
- * category this hub covers
- * the name of a folder directly inside the season folder
- * NOTE: will move to config inside sheet in future
- */
-const HUB_CATEGORY = "Club";
-
-/**
  * A results file found under the season folder
  *
  * @typedef {Object} ResultsFile
@@ -47,20 +40,25 @@ function _findSeasonFolder_() {
  *
  * a results file is any Google Sheet inside a category folder, at any depth
  * files directly in the season folder (like the Hub itself) are ignored
- *
- * @returns {ResultsFile[]}   all results files found.
+ * @param {string} category name of the folder directly inside season folder
+ * @returns {ResultsFile[]}   all results files found
+ * @throws {Error} if the category folder doesn't exist
  */
-function _scanCategory_() {
+function _scanCategory_(category) {
   const season = _findSeasonFolder_();
-  const matches = season.getFoldersByName(HUB_CATEGORY);
+  const matches = season.getFoldersByName(category);
   if (!matches.hasNext()) {
-    throw new Error(`No "${HUB_CATEGORY}" folder in season folder "${season.getName()}"`);
+    /** @type {string[]} */
+    const available = [];
+    const folders = season.getFolders();
+    while (folders.hasNext()) available.push(folders.next().getName());
+    throw new Error(`No "${category}" folder in "${season.getName()}". Available: ${available.join(", ")}`);
   }
-  const category = matches.next();
+  const folder = matches.next();
   if (matches.hasNext()) {
-    throw new Error(`More than one "${HUB_CATEGORY}" folder in season folder "${season.getName()}"`);
+    throw new Error(`More than one "${category}" folder in "${season.getName()}"`);
   }
-  return _scanFolder_(category, HUB_CATEGORY, []);
+  return _scanFolder_(folder, category, []);
 }
 
 /**
