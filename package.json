@@ -1,0 +1,13 @@
+{
+  "name": "uku-sotg-hub",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc -p jsconfig.json"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.4.1",
+    "@types/google-apps-script": "^2.0.13",
+    "dprint": "^0.57.4",
+    "typescript": "^5.9.0"
+  }
+}

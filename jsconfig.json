@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    // Type-check .js files using JSDoc annotations
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true,
+
+    // Apps Script runs modern JavaScript (V8) with no browser:
+    // leaving out "DOM" removes the browser globals, including the deprecated MimeType
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["google-apps-script"]
+  },
+  "include": ["src/**/*.js"]
+}
