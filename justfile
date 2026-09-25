@@ -1,3 +1,6 @@
+# version from src/Consts.js
+version := `grep -oE 'HUB_VERSION = "[^"]+"' src/Consts.js | cut -d'"' -f2`
+
 # List available recipes
 default:
     @just --list
@@ -25,6 +28,15 @@ login:
 status:
     npx clasp status
 
-# Run all checks, then upload src/ to the Apps Script project
-push: check
+# Delete dist/
+clean:
+    rm -rf dist
+
+# Join all src files into dist/SpiritHub-<version>.js
+build:
+    node scripts/build.mjs
+
+# Check, build, then push dist/SpiritHub-<version>.js to Apps Script
+push: check build
     npx clasp push
+    
