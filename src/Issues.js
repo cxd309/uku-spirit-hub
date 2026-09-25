@@ -191,6 +191,17 @@ function _responseTotal_(response) {
 }
 
 /**
+ * scores text with the response's comment quoted below it, if it has one
+ *
+ * @param {string}         text      the scores text
+ * @param {ResponseRecord} response  the response
+ * @returns {string} the text, with the comment on a new line
+ */
+function _withComment_(text, response) {
+  return response.comment === "" ? text : `${text}\n"${response.comment}"`;
+}
+
+/**
  * run the per-response checks over every response
  * pure, no google calls
  * skips events that are not included
@@ -223,12 +234,19 @@ function _responseIssueHits_(responses, events) {
         event,
         team: r.receiver,
         other: r.scorer,
-        text: minimums.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", "),
+        text: _withComment_(minimums.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", "), r),
         response: r,
       });
     }
     if (total < ISSUE_THRESHOLDS.singleLowScoreBelow) {
-      hits.push({ category: "singleLowScore", event, team: r.receiver, other: r.scorer, text: `Total ${total}`, response: r });
+      hits.push({
+        category: "singleLowScore",
+        event,
+        team: r.receiver,
+        other: r.scorer,
+        text: _withComment_(`Total ${total}`, r),
+        response: r,
+      });
     }
 
     if (event.international) continue;
