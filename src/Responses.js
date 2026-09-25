@@ -1,7 +1,7 @@
 /**
  * name of the responses tab
  */
-const RESPONSES_SHEET = "Responses";
+const RESPONSES_SHEET = "Results";
 
 /**
  * text for the info row above the Responses table
@@ -167,4 +167,25 @@ function _responseClubFormula_(row, side) {
   /** @param {keyof typeof TEAM_HEADERS} key */
   const teams = (key) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
   return `=IFERROR(XLOOKUP(${team}, ${teams("team")}, ${teams("club")}), "")`;
+}
+
+/**
+ * responses in the date order of their events, oldest first
+ * then by tournament, event, and source row, so each event's responses stay in their original order
+ * pure, returns a new array
+ *
+ * @param {ResponseRecord[]} responses  responses in any order
+ * @param {EventRecord[]}    events     events, used to find each response's date and tournament
+ * @returns {ResponseRecord[]} responses in date order
+ */
+function _sortResponses_(responses, events) {
+  const eventById = new Map(events.map((e) => [e.fileId, e]));
+  return [...responses].sort((a, b) => {
+    const ea = eventById.get(a.fileId);
+    const eb = eventById.get(b.fileId);
+    return _compareDates_(ea?.date ?? null, eb?.date ?? null)
+      || (ea?.tournament ?? "").localeCompare(eb?.tournament ?? "")
+      || a.fileId.localeCompare(b.fileId)
+      || a.sourceRow - b.sourceRow;
+  });
 }

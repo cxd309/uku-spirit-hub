@@ -88,7 +88,10 @@ function _importEvents_() {
 
   const replacedIds = new Set([...results].filter(([, r]) => r.ok).map(([id]) => id));
   const imported = [...results.values()].flatMap((r) => (r.ok ? r.responses : []));
-  const responses = [..._readResponses_(responsesSheet).filter((r) => !replacedIds.has(r.fileId)), ...imported];
+  const responses = _sortResponses_([
+    ..._readResponses_(responsesSheet).filter((r) => !replacedIds.has(r.fileId)),
+    ...imported,
+  ], updatedEvents);
 
   _writeResponses_(responsesSheet, responses);
   _writeEvents_(eventsSheet, updatedEvents);

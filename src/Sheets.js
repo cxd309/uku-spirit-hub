@@ -96,3 +96,16 @@ function _columnBelowHeader_(sheetName, column) {
   const letter = _columnLetter_(column);
   return `'${sheetName}'!$${letter}$${DATA_ROW}:$${letter}`;
 }
+
+/**
+ * compare two dates for sorting, oldest first
+ * null (invalid folder name) sorts last
+ *
+ * @param {Date|null} a  first date
+ * @param {Date|null} b  second date
+ * @returns {number} negative if a comes first, positive if b comes first, 0 if equal
+ */
+function _compareDates_(a, b) {
+  if (a === null || b === null) return (a === null ? 1 : 0) - (b === null ? 1 : 0);
+  return a.getTime() - b.getTime();
+}

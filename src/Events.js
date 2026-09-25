@@ -1,7 +1,7 @@
 /**
  * name of the Events tab
  */
-const EVENTS_SHEET = "Events";
+const EVENTS_SHEET = "Tournaments";
 
 /**
  * text for the info row above the Events table
@@ -237,7 +237,7 @@ function _syncEvents_(existing, files) {
       importedVersion: null,
     }));
 
-  return [...updated, ...added];
+  return _sortEvents_([...updated, ...added]);
 }
 
 /**
@@ -331,4 +331,20 @@ function _scanEvents_() {
   }
   const breakdown = Object.entries(counts).map(([status, n]) => `${n} ${status}`).join(", ");
   return `${events.length} events: ${breakdown}`;
+}
+
+/**
+ * events in date order, oldest first
+ * then by tournament and file name, so events on the same day have a fixed order
+ * pure, returns a new array
+ *
+ * @param {EventRecord[]} events  events in any order
+ * @returns {EventRecord[]} events in date order
+ */
+function _sortEvents_(events) {
+  return [...events].sort((a, b) =>
+    _compareDates_(a.date, b.date)
+    || a.tournament.localeCompare(b.tournament)
+    || a.fileName.localeCompare(b.fileName)
+  );
 }
