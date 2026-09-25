@@ -18,6 +18,7 @@ const CLUB_HEADERS = Object.freeze(
   /** @type {const} */ ({
     club: "Club",
     teams: "Teams",
+    events: "Tournaments",
     teamCount: "Team Count",
     tournamentsEntered: "Tournaments Entered",
     teamEntries: "Team Entries",
@@ -86,6 +87,11 @@ const CLUB_FORMULAS = Object.freeze({
     const { club, teams } = _clubFormulaRefs_(row);
     return `=SUMIF(${teams("club")}, ${club}, ${teams("eventCount")})`;
   },
+  events: (/** @type {number} */ row) => {
+    const { club, responses } = _clubFormulaRefs_(row);
+    return `=IFERROR(TEXTJOIN(", ", TRUE, UNIQUE(FILTER(${responses("tournament")}, `
+      + `(${responses("scorerClub")}=${club})+(${responses("receiverClub")}=${club})))), "")`;
+  },
 });
 
 /**
@@ -145,10 +151,5 @@ function _rebuildClubs_() {
     : teamsSheet.getRange(DATA_ROW, clubColumn, teamRows, 1).getValues().map((r) => r[0]);
 
   const clubs = _clubNames_(clubValues).map((name) => ({ club: name }));
-  const sheet = _getClubsSheet_();
-  _fitSheet_(sheet, HEADER_ROW + clubs.length, CLUB_KEYS.length);
-  if (clubs.length === 0) return;
-  sheet.getRange(DATA_ROW, 1, clubs.length, CLUB_KEYS.length).setValues(
-    clubs.map((c, i) => _clubToRow_(c, i + DATA_ROW)),
-  );
+  _writeTable_(_getClubsSheet_(), clubs.map((c, i) => _clubToRow_(c, i + DATA_ROW)), CLUB_KEYS.length);
 }

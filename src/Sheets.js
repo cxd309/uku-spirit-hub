@@ -109,3 +109,29 @@ function _compareDates_(a, b) {
   if (a === null || b === null) return (a === null ? 1 : 0) - (b === null ? 1 : 0);
   return a.getTime() - b.getTime();
 }
+
+/**
+ * write rows below the header, resize the tab to fit, and put a filter on the table
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet    tab to write
+ * @param {unknown[][]}                        rows     data rows, formulas included
+ * @param {number}                             columns  number of columns in the table
+ */
+function _writeTable_(sheet, rows, columns) {
+  _fitSheet_(sheet, HEADER_ROW + rows.length, columns);
+  if (rows.length > 0) sheet.getRange(DATA_ROW, 1, rows.length, columns).setValues(rows);
+  _applyFilter_(sheet, rows.length, columns);
+}
+
+/**
+ * put a fresh filter over the header row and data rows
+ * any existing filter is removed first, so people's filter settings are reset on each write
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet     tab to filter
+ * @param {number}                             dataRows  number of data rows
+ * @param {number}                             columns   number of columns in the table
+ */
+function _applyFilter_(sheet, dataRows, columns) {
+  sheet.getFilter()?.remove();
+  sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
+}

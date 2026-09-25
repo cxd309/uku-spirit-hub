@@ -152,9 +152,8 @@ function _readEvents_(sheet) {
  * @param {EventRecord[]}                      events  Records to write, in display order.
  */
 function _writeEvents_(sheet, events) {
-  _fitSheet_(sheet, HEADER_ROW + events.length, EVENT_KEYS.length);
+  _writeTable_(sheet, events.map(_eventToRow_), EVENT_KEYS.length);
   if (events.length === 0) return;
-  sheet.getRange(DATA_ROW, 1, events.length, EVENT_KEYS.length).setValues(events.map(_eventToRow_));
 
   /** @param {keyof typeof EVENT_HEADERS} key */
   const column = (key) => EVENT_KEYS.indexOf(key) + 1;

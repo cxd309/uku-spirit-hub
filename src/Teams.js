@@ -23,8 +23,7 @@ const TEAM_HEADERS = Object.freeze(
     suggestedClub: "Suggested Club",
     clubOverride: "Club Override",
     club: "Club",
-    firstSeen: "First Seen",
-    events: "Events",
+    events: "Tournaments",
     eventCount: "Event Count",
   }),
 );
@@ -76,10 +75,6 @@ function _teamFormulaRefs_(row) {
  * @type {Readonly<Partial<Record<keyof typeof TEAM_HEADERS, function(number): string>>>}
  */
 const TEAM_FORMULAS = Object.freeze({
-  firstSeen: (/** @type {number} */ row) => {
-    const { responses, plays } = _teamFormulaRefs_(row);
-    return `=IFERROR(INDEX(FILTER(${responses("tournament")}, ${plays}), 1), "")`;
-  },
   events: (/** @type {number} */ row) => {
     const { responses, plays } = _teamFormulaRefs_(row);
     return `=IFERROR(TEXTJOIN(", ", TRUE, UNIQUE(FILTER(${responses("tournament")}, ${plays}))), "")`;
@@ -149,11 +144,7 @@ function _teamToRow_(team, row) {
  * @param {TeamRecord[]}                       teams  teams to write, in display order
  */
 function _writeTeams_(sheet, teams) {
-  _fitSheet_(sheet, HEADER_ROW + teams.length, TEAM_KEYS.length);
-  if (teams.length === 0) return;
-  sheet.getRange(DATA_ROW, 1, teams.length, TEAM_KEYS.length).setValues(
-    teams.map((t, i) => _teamToRow_(t, i + DATA_ROW)),
-  );
+  _writeTable_(sheet, teams.map((t, i) => _teamToRow_(t, i + DATA_ROW)), TEAM_KEYS.length);
 }
 
 /**

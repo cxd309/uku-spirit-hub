@@ -53,6 +53,7 @@ function _getNameRulesSheet_() {
     sheet
       .getRange(DATA_ROW, NAME_RULE_HEADERS.indexOf("Enabled") + 1, rows.length, 1)
       .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+    _applyFilter_(sheet, rows.length, NAME_RULE_HEADERS.length);
   }
   return sheet;
 }

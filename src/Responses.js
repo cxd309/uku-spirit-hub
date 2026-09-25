@@ -131,11 +131,7 @@ function _readResponses_(sheet) {
  * @param {ResponseRecord[]}                   responses  all responses, in display order
  */
 function _writeResponses_(sheet, responses) {
-  _fitSheet_(sheet, HEADER_ROW + responses.length, RESPONSE_KEYS.length);
-  if (responses.length === 0) return;
-  sheet
-    .getRange(DATA_ROW, 1, responses.length, RESPONSE_KEYS.length)
-    .setValues(responses.map((r, i) => _responseToRow_(r, i + DATA_ROW)));
+  _writeTable_(sheet, responses.map((r, i) => _responseToRow_(r, i + DATA_ROW)), RESPONSE_KEYS.length);
 }
 
 /**
