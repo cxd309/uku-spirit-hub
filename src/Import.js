@@ -91,6 +91,16 @@ function _importEvents_() {
   _writeResponses_(responsesSheet, responses);
   _writeEvents_(eventsSheet, updatedEvents);
 
+  _getNameRulesSheet_();
+  const internationalIds = new Set(updatedEvents.filter((e) => e.international).map((e) => e.fileId));
+  const teamsSheet = _getTeamsSheet_();
+  _writeTeams_(
+    teamsSheet,
+    _mergeTeams_(_readTeams_(teamsSheet), _teamNamesFromResponses_(responses, internationalIds)),
+  );
+  SpreadsheetApp.flush();
+  _rebuildClubs_();
+
   const failed = [...results.values()].filter((r) => !r.ok).length;
   const imported_ = results.size - failed;
   if (results.size === 0) return "Nothing to import: no events are NEW or REFRESH";
