@@ -141,12 +141,24 @@ function _writeResponses_(sheet, responses) {
 function _tournamentFormula_(row) {
   const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
   /** @param {keyof typeof EVENT_HEADERS} key */
-  const events = (key) => {
-    const letter = _columnLetter_(EVENT_KEYS.indexOf(key) + 1);
-    return `'${EVENTS_SHEET}'!${letter}2:${letter}`;
-  };
-  const name = `IF(${events("nameOverride")}<>"", ${events("nameOverride")}, ${events("defaultName")})`;
-  return `=ARRAYFORMULA(IF(${id}2:${id}="", "", IFERROR(XLOOKUP(${id}2:${id}, ${
-    events("fileId")
-  }, ${name}), "(unknown event)")))`;
+  const events = (key) => _wholeColumn_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
+  return `=IFERROR(LET(o, XLOOKUP(${id}, ${events("fileId")}, ${events("nameOverride")}), `
+    + `IF(o<>"", o, XLOOKUP(${id}, ${events("fileId")}, ${events("defaultName")}))), "(unknown event)")`;
+}
+
+/**
+ * club formula for one side of one Responses row
+ * looks the team up on the Teams tab and returns its Club
+ * blank if the team is not on the Teams tab
+ *   e.g. foreign teams at international events
+ *
+ * @param {number}                 row   1-based sheet row the formula is for
+ * @param {"scorer" | "receiver"}  side  which team on the row
+ * @returns {string} the formula
+ */
+function _responseClubFormula_(row, side) {
+  const team = `$${_columnLetter_(RESPONSE_KEYS.indexOf(side) + 1)}${row}`;
+  /** @param {keyof typeof TEAM_HEADERS} key */
+  const teams = (key) => _wholeColumn_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
+  return `=IFERROR(XLOOKUP(${team}, ${teams("team")}, ${teams("club")}), "")`;
 }

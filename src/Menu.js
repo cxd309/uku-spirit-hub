@@ -12,6 +12,33 @@ function onOpen() {
 }
 
 /**
+ * rebuild the Clubs tab when a person changes something that affects club names
+ * `onEdit` is a reserved name, apps script runs it after every edit by a person
+ *
+ * only reacts to the Club Override column on Teams and anything on Name Rules
+ * skips quietly if another run holds the lock
+ *   an import rebuilds Clubs at the end anyway
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e  the edit event
+ */
+function onEdit(e) {
+  const sheetName = e.range.getSheet().getName();
+  const overrideColumn = TEAM_KEYS.indexOf("clubOverride") + 1;
+  const touchesOverride = sheetName === TEAMS_SHEET
+    && e.range.getColumn() <= overrideColumn
+    && e.range.getLastColumn() >= overrideColumn;
+  if (!touchesOverride && sheetName !== NAME_RULES_SHEET) return;
+
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(1000)) return;
+  try {
+    _rebuildClubs_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
  * how long to wait for another run to finish be giving up
  */
 const LOCK_WAIT_MS = 1000;
