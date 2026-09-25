@@ -9,7 +9,7 @@ const RESPONSES_SHEET = "Results";
  */
 const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
   + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
-  + "To Refresh run \"Scan for files\"";
+  + "To Refresh run \"Refresh Results\"";
 
 /**
  * responses tab columns, in order

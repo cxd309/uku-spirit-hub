@@ -14,20 +14,25 @@
 
 /**
  * read an event's results file into response records
+ * uses only the file ID from the Tournaments tab, no folder scan
  *
  * any error from Google (file deleted, no permission) is caught and returned as a
- * reason, so one bad file cannot stop the whole import
+ * reason, so one bad file cannot stop the whole refresh
  *
  * @param {EventRecord} event  the event to import
- * @param {ResultsFile} file   the event's file, from the current scan
  * @returns {ImportResult} the responses read, or why the file could not be read
  */
-function _importFile_(event, file) {
+function _importFile_(event) {
+  if (event.date === null) {
+    return {
+      ok: false,
+      reason: "folder name must be \"YYYYMMDD Tournament name\", fix it then run Refresh Tournaments",
+    };
+  }
   try {
-    const folder = _parseFolderName_(file.folderName);
-    if (!folder.ok) return { ok: false, reason: folder.reason };
-
-    const found = _findBreakdownSheet_(SpreadsheetApp.openById(file.id));
+    // version is read before the contents, so an edit made during the read is picked up next time
+    const version = new Date(DriveApp.getFileById(event.fileId).getLastUpdated().getTime());
+    const found = _findBreakdownSheet_(SpreadsheetApp.openById(event.fileId));
     if (!found.ok) return { ok: false, reason: found.reason };
 
     const { responses, problems } = _parseBreakdownRows_(found.sheet.getDataRange().getValues(), found.columns);
@@ -42,37 +47,35 @@ function _importFile_(event, file) {
         comment: r.comment,
       })),
       problems: problems,
-      version: file.lastUpdated,
+      version: version,
     };
   } catch (e) {
-    return { ok: false, reason: `could not read file: ${e instanceof Error ? e.message : String(e)}` };
+    const message = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: `could not open file (${message}), try Refresh Tournaments first` };
   }
 }
 
 /**
- * scan the category folder, then import every event marked NEW or REFRESH
+ * import every tournament marked NEW or REFRESH on the Tournaments tab, then refresh issues
+ * works from the Tournaments tab only, run Refresh Tournaments first to find new or edited files
  *
  * successful imports replace that event's responses and clear its status
  * failed imports mark the event ERROR and keep its previous responses
- * responses are written before Events, so an interrupted run is simply repeated
- * @returns {string} a one-line summary of the import
+ * responses are written before Tournaments, so an interrupted run is simply repeated
+ *
+ * @returns {string} a one-line summary of the refresh
  */
-function _importEvents_() {
+function _refreshResults_() {
   const eventsSheet = _getEventsSheet_();
   const responsesSheet = _getResponsesSheet_();
+  const events = _readEvents_(eventsSheet);
+  if (events.length === 0) return "No tournaments found: run Refresh Tournaments first";
 
-  const files = _scanCategory_(_readConfig_().category);
-  const fileById = new Map(files.map((f) => [f.id, f]));
-  const events = _syncEvents_(_readEvents_(eventsSheet), files);
+  const toImport = events.filter((e) => e.status === EVENT_STATUS.NEW || e.status === EVENT_STATUS.REFRESH);
+  if (toImport.length === 0) return "Nothing to refresh: no tournaments are NEW or REFRESH";
 
   /** @type {Map<string, ImportResult>} */
-  const results = new Map();
-  for (const event of events) {
-    const file = fileById.get(event.fileId);
-    if (file && (event.status === EVENT_STATUS.NEW || event.status === EVENT_STATUS.REFRESH)) {
-      results.set(event.fileId, _importFile_(event, file));
-    }
-  }
+  const results = _timed_("read files", () => new Map(toImport.map((e) => [e.fileId, _importFile_(e)])));
 
   const updatedEvents = events.map((event) => {
     const result = results.get(event.fileId);
@@ -93,27 +96,25 @@ function _importEvents_() {
     ...imported,
   ], updatedEvents);
 
-  _writeResponses_(responsesSheet, responses);
-  _writeEvents_(eventsSheet, updatedEvents);
+  _timed_("write results", () => _writeResponses_(responsesSheet, responses));
+  _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
 
   _getNameRulesSheet_();
   const internationalIds = new Set(updatedEvents.filter((e) => e.international).map((e) => e.fileId));
   const teamsSheet = _getTeamsSheet_();
-  _writeTeams_(
-    teamsSheet,
-    _mergeTeams_(_readTeams_(teamsSheet), _teamNamesFromResponses_(responses, internationalIds)),
-  );
-  SpreadsheetApp.flush();
-  _rebuildClubs_();
-  const drafts = [
-    ..._draftsFromHits_(_responseIssueHits_(responses, updatedEvents)),
-    ..._teamEventIssueDrafts_(responses, updatedEvents),
-  ];
-  const newIssues = _appendIssues_(_issueRecords_(drafts, responses, _readTeamClubs_(), new Date()));
+  _timed_("write teams", () =>
+    _writeTeams_(
+      teamsSheet,
+      _mergeTeams_(_readTeams_(teamsSheet), _teamNamesFromResponses_(responses, internationalIds)),
+    ));
+  _timed_("rebuild clubs", () => {
+    SpreadsheetApp.flush();
+    _rebuildClubs_();
+  });
+  const newIssues = _timed_("issues", () => _appendNewIssues_(responses, updatedEvents));
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
-  const imported_ = results.size - failed;
-  if (results.size === 0) return "Nothing to import: no events are NEW or REFRESH";
-  return `Imported ${imported_} event(s), ${imported.length} response(s)`
-    + (failed > 0 ? `; ${failed} failed (see Events tab)` : "") + `…, ${newIssues} new issue(s)`;
+  return `Imported ${results.size - failed} tournament(s), ${imported.length} response(s)`
+    + (failed > 0 ? `; ${failed} failed (see Tournaments tab)` : "")
+    + `; ${newIssues} new issue(s)`;
 }

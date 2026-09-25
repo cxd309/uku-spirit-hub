@@ -12,8 +12,8 @@ const EVENTS_INFO = "All the found spirit results files in the folder for this c
   + "User editable columns:\n"
   + "- Status: filled on refresh, set to REFRESH to re-import results\n"
   + "- International: is this an international tournament\n"
-  + "- Import: Should these results be inluded in spirit award and issue tracking\n\n"
-  + "To Refresh run \"Import new and refreshed events\"";
+  + "- Include: should these results be included in the spirit award and issue tracking\n\n"
+  + "To find new or edited files run \"Refresh Tournaments\", to import them run \"Refresh Results\"";
 
 /**
  * events table columns, in order
@@ -313,14 +313,15 @@ function _highlightDuplicateTournaments_(sheet, rows) {
 /**
  * scan the category folder and bring the Events tab up to date
  *
- * Does not import any responses
+ * does not import any responses, Refresh Results does that
  *
  * @returns {string} a one-line summary of the Events tab
  */
-function _scanEvents_() {
+function _refreshTournaments_() {
   const sheet = _getEventsSheet_();
-  const events = _syncEvents_(_readEvents_(sheet), _scanCategory_(_readConfig_().category));
-  _writeEvents_(sheet, events);
+  const files = _timed_("scan drive", () => _scanCategory_(_readConfig_().category));
+  const events = _syncEvents_(_readEvents_(sheet), files);
+  _timed_("write tournaments", () => _writeEvents_(sheet, events));
 
   /** @type {Record<string, number>} */
   const counts = {};

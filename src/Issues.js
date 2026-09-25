@@ -12,7 +12,7 @@ const ISSUES_INFO = "Spirit issues found in the results, one row per issue per t
   + "- Status: NEW, IN PROGRESS or CLOSED\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
-  + "New issues are added on each import, existing rows are never changed, so sort and filter freely";
+  + "New issues are added by Refresh Results and Refresh Issues, existing rows are never changed, so sort and filter freely";
 
 /**
  * issues table columns, in order
@@ -59,6 +59,8 @@ const ISSUE_THRESHOLDS = Object.freeze({
   lowScoreAtOrBelow: 6,
   lowScoreCount: 2,
   lowAverageBelow: 8,
+  monitoringAverageBelow: 9,
+  monitoringBreaches: 2,
 });
 
 /**
@@ -103,6 +105,15 @@ const ISSUE_CATEGORIES = Object.freeze({
     code: "LOW-AVERAGE",
     label: `Average score below ${ISSUE_THRESHOLDS.lowAverageBelow} at a tournament`,
   },
+  monitoring: {
+    code: "MONITORING",
+    label:
+      `${ISSUE_THRESHOLDS.monitoringBreaches} team averages below ${ISSUE_THRESHOLDS.monitoringAverageBelow} in the season`,
+  },
+  monitoringBreach: {
+    code: "MONITORING-BREACH",
+    label: `Averaged below ${ISSUE_THRESHOLDS.monitoringAverageBelow} again while on monitoring`,
+  },
 });
 
 /**
@@ -115,7 +126,7 @@ const ISSUE_CATEGORIES = Object.freeze({
  * @property {string}    category           label of the check
  * @property {string}    team               team the issue is about
  * @property {string}    tournaments        tournament name(s)
- * @property {Date|null} tournamentDate     tournament date, null if unknown
+ * @property {Date|string|null} tournamentDate  tournament date, null if unknown, comma separated text for several
  * @property {string}    details            one line per response that triggered it
  * @property {string}    received           total of each flagged response, comma separated
  * @property {string}    given              total of the reply to each flagged response, comma separated
@@ -146,6 +157,17 @@ const ISSUE_CATEGORIES = Object.freeze({
  * @property {string}                        team      team the issue is about
  * @property {string}                        details   text for the Details cell
  * @property {ResponseRecord[]}              responses the flagged responses, empty when there are none
+ */
+
+/**
+ * one team averaging below the monitoring threshold at one tournament
+ *
+ * @typedef {Object} ClubBreach
+ * @property {string}           club       club of the team
+ * @property {string}           team       team that averaged below the threshold
+ * @property {EventRecord}      event      the tournament
+ * @property {ResponseRecord[]} responses  every score the team received there
+ * @property {number}           average    the team's average there
  */
 
 /**
@@ -234,6 +256,37 @@ function _issueDetails_(hits) {
 }
 
 /**
+ * group one event's responses by the team receiving them
+ * pure, never modifies its arguments
+ *
+ * @param {ResponseRecord[]} atEvent  responses from one event
+ * @returns {Map<string, ResponseRecord[]>} team key → responses received, in the order given
+ */
+function _receivedByTeam_(atEvent) {
+  /** @type {Map<string, ResponseRecord[]>} */
+  const receivedBy = new Map();
+  for (const r of atEvent) {
+    const key = _teamKey_(r.receiver);
+    receivedBy.set(key, [...(receivedBy.get(key) ?? []), r]);
+  }
+  return receivedBy;
+}
+
+/**
+ * text for the Details cell of an average issue
+ * the average, then every score received
+ *
+ * @param {ResponseRecord[]} received  every score one team received at one event
+ * @returns {string} the details text
+ */
+function _averageDetails_(received) {
+  const totals = received.map(_responseTotal_);
+  const average = totals.reduce((a, b) => a + b, 0) / totals.length;
+  const lines = received.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
+  return `Average: ${average.toFixed(2)} from ${totals.length} scores\n\n${lines.join("\n\n")}`;
+}
+
+/**
  * the issue id for a check, event and team
  * readable, and the same every run so an issue is never added twice
  *
@@ -288,17 +341,9 @@ function _teamEventIssueDrafts_(responses, events) {
   for (const event of events.filter((e) => e.include)) {
     const atEvent = responses.filter((r) => r.fileId === event.fileId);
 
-    /** @type {Map<string, ResponseRecord[]>} */
-    const receivedBy = new Map();
-    for (const r of atEvent) {
-      const key = _teamKey_(r.receiver);
-      receivedBy.set(key, [...(receivedBy.get(key) ?? []), r]);
-    }
-
-    for (const received of receivedBy.values()) {
+    for (const received of _receivedByTeam_(atEvent).values()) {
       const team = received[0].receiver;
       const totals = received.map(_responseTotal_);
-      const scoreLines = received.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
 
       const low = received.filter((r) => _responseTotal_(r) <= ISSUE_THRESHOLDS.lowScoreAtOrBelow);
       if (low.length >= ISSUE_THRESHOLDS.lowScoreCount) {
@@ -314,12 +359,11 @@ function _teamEventIssueDrafts_(responses, events) {
 
       const average = totals.reduce((a, b) => a + b, 0) / totals.length;
       if (average < ISSUE_THRESHOLDS.lowAverageBelow) {
-        const heading = `Average: ${average.toFixed(2)} from ${totals.length} scores`;
         drafts.push({
           category: "lowAverage",
           event,
           team,
-          details: `${heading}\n\n${scoreLines.join("\n\n")}`,
+          details: _averageDetails_(received),
           responses: received,
         });
       }
@@ -361,7 +405,7 @@ function _teamEventIssueDrafts_(responses, events) {
  * given: total of the reply, the receiver scoring the scorer at the same tournament
  *   a pair that played twice is matched first to first, second to second
  * tournament average: average received at the tournament by each team that received a flagged score
- *   the flagged responses are left out, except for low average where the full average is the point
+ *   the flagged responses are left out, except for average issues where the full average is the point
  *
  * @param {IssueDraft}       draft      the draft
  * @param {ResponseRecord[]} responses  all responses
@@ -378,7 +422,8 @@ function _issueScoreColumns_(draft, responses) {
    */
   const isPair = (r, scorer, receiver) =>
     _teamKey_(r.scorer) === _teamKey_(scorer) && _teamKey_(r.receiver) === _teamKey_(receiver);
-  const excluded = draft.category === "lowAverage" ? [] : draft.responses;
+  const isAverage = draft.category === "lowAverage" || draft.category === "monitoringBreach";
+  const excluded = isAverage ? [] : draft.responses;
 
   const received = draft.responses.map((r) => String(_responseTotal_(r)));
 
@@ -428,6 +473,93 @@ function _issueRecords_(drafts, responses, clubOf, today) {
 }
 
 /**
+ * find every monitoring breach, grouped by club
+ * pure, no google calls
+ * a breach is a team averaging below the threshold at a tournament
+ *   two teams from one club at the same tournament are two breaches
+ * skips events that are not included, and international events
+ *
+ * @param {ResponseRecord[]}    responses  all responses
+ * @param {EventRecord[]}       events     all events, in date order
+ * @param {Map<string, string>} clubOf     team key → club, from the Teams tab
+ * @returns {Map<string, ClubBreach[]>} club → its breaches in date order, teams without a club are skipped
+ */
+function _clubBreaches_(responses, events, clubOf) {
+  /** @type {Map<string, ClubBreach[]>} */
+  const breachesByClub = new Map();
+  for (const event of events.filter((e) => e.include && !e.international)) {
+    const atEvent = responses.filter((r) => r.fileId === event.fileId);
+    for (const [key, received] of _receivedByTeam_(atEvent)) {
+      const club = clubOf.get(key) ?? "";
+      const average = received.map(_responseTotal_).reduce((a, b) => a + b, 0) / received.length;
+      if (club === "" || average >= ISSUE_THRESHOLDS.monitoringAverageBelow) continue;
+      const breach = { club, team: received[0].receiver, event, responses: received, average };
+      breachesByClub.set(club, [...(breachesByClub.get(club) ?? []), breach]);
+    }
+  }
+  return breachesByClub;
+}
+
+/**
+ * Issues rows for the club monitoring list
+ * pure, never modifies its arguments
+ * a club goes on the list at its second breach, one MONITORING row lists those breaches
+ * every later breach gets its own MONITORING-BREACH row
+ * a hub covers one season, so the MONITORING id is just the club
+ *
+ * @param {Map<string, ClubBreach[]>} breachesByClub  from _clubBreaches_
+ * @param {ResponseRecord[]}          responses       all responses, for the score columns of breach rows
+ * @param {Map<string, string>}       clubOf          team key → club, from the Teams tab
+ * @param {Date}                      today           date to record as the Issue Date
+ * @returns {IssueRecord[]} MONITORING rows, then MONITORING-BREACH rows
+ */
+function _monitoringIssues_(breachesByClub, responses, clubOf, today) {
+  const needed = ISSUE_THRESHOLDS.monitoringBreaches;
+  /** @param {ClubBreach} b */
+  const dateOf = (b) => (b.event.date ? _isoDate_(b.event.date) : "no date");
+  /** @type {IssueRecord[]} */
+  const listed = [];
+  /** @type {IssueDraft[]} */
+  const later = [];
+
+  for (const [club, breaches] of breachesByClub) {
+    if (breaches.length < needed) continue;
+    const first = breaches.slice(0, needed);
+    const blocks = first.map((b) =>
+      `${b.event.tournament} (${dateOf(b)}):\n${b.team} averaged ${
+        b.average.toFixed(2)
+      } from ${b.responses.length} scores`
+    );
+    listed.push({
+      issueId: `${ISSUE_CATEGORIES.monitoring.code} | ${club}`,
+      dateCreated: today,
+      club,
+      category: ISSUE_CATEGORIES.monitoring.label,
+      team: first.map((b) => b.team).join(", "),
+      tournaments: first.map((b) => b.event.tournament).join(", "),
+      tournamentDate: first.map(dateOf).join(", "),
+      details: `Number of breaches: ${first.length}\n\n${blocks.join("\n\n")}`,
+      received: "",
+      given: "",
+      tournamentAverage: first.map((b) => b.average.toFixed(2)).join(", "),
+      status: ISSUE_STATUSES[0],
+      committeeMember: "",
+      notes: "",
+    });
+    for (const b of breaches.slice(needed)) {
+      later.push({
+        category: "monitoringBreach",
+        event: b.event,
+        team: b.team,
+        details: _averageDetails_(b.responses),
+        responses: b.responses,
+      });
+    }
+  }
+  return [...listed, ..._issueRecords_(later, responses, clubOf, today)];
+}
+
+/**
  * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Issues tab, created on first use
  */
 function _getIssuesSheet_() {
@@ -471,4 +603,39 @@ function _appendIssues_(issues) {
   }
   _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, ISSUE_KEYS.length);
   return added.length;
+}
+
+/**
+ * run every check and add the issues that are not already on the Issues tab
+ * reads the clubs from the Teams tab, so Teams must be up to date first
+ *
+ * @param {ResponseRecord[]} responses  all responses, in date order
+ * @param {EventRecord[]}    events     all events, in date order
+ * @returns {number} how many new issues were added
+ */
+function _appendNewIssues_(responses, events) {
+  const drafts = [
+    ..._draftsFromHits_(_responseIssueHits_(responses, events)),
+    ..._teamEventIssueDrafts_(responses, events),
+  ];
+  const clubOf = _readTeamClubs_();
+  const today = new Date();
+  return _appendIssues_([
+    ..._issueRecords_(drafts, responses, clubOf, today),
+    ..._monitoringIssues_(_clubBreaches_(responses, events, clubOf), responses, clubOf, today),
+  ]);
+}
+
+/**
+ * run every check on what is already in the spreadsheet, no files are read
+ * use after changing Include, International, a club override or a threshold
+ * tabs may have been sorted by hand, so events and responses are put back in date order first
+ *
+ * @returns {string} a one-line summary
+ */
+function _refreshIssues_() {
+  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
+  const responses = _sortResponses_(_readResponses_(_getResponsesSheet_()), events);
+  if (responses.length === 0) return "No results found: run Refresh Results first";
+  return `${_appendNewIssues_(responses, events)} new issue(s)`;
 }
