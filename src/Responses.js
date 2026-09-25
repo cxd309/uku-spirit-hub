@@ -27,6 +27,7 @@ const RESPONSE_HEADERS = Object.freeze(
     receiverClub: "Receiving Club",
     tournament: "Tournament",
     included: "Included",
+    countsForAward: "Counts for Award",
     rules: "Rules",
     fouls: "Fouls",
     fairMindedness: "Fair-Mindedness",
@@ -53,6 +54,11 @@ const RESPONSE_FORMULAS = Object.freeze({
     /** @param {keyof typeof EVENT_HEADERS} key */
     const events = (key) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
     return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("include")}), FALSE)`;
+  },
+  countsForAward: (/** @type {number} */ row) => {
+    /** @param {keyof typeof RESPONSE_HEADERS} key */
+    const cell = (key) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
+    return `=AND(${cell("included")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
   },
   total: (/** @type {number} */ row) => {
     const cells = SCORE_KEYS.map((key) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`);

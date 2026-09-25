@@ -105,13 +105,12 @@ const CLUB_FORMULAS = Object.freeze({
   },
   responsesReceived: (/** @type {number} */ row) => {
     const { club, responses } = _clubFormulaRefs_(row);
-    return `=COUNTIFS(${responses("receiverClub")}, ${club}, ${responses("included")}, TRUE)`;
+    return `=COUNTIFS(${responses("receiverClub")}, ${club}, ${responses("countsForAward")}, TRUE)`;
   },
   meanScore: (/** @type {number} */ row) => {
     const { club, responses } = _clubFormulaRefs_(row);
-    return `=IFERROR(AVERAGEIFS(${responses("total")}, ${responses("receiverClub")}, ${club}, ${
-      responses("included")
-    }, TRUE), "")`;
+    return `=IFERROR(AVERAGEIFS(${responses("total")}, ${responses("receiverClub")}, ${club}, `
+      + `${responses("countsForAward")}, TRUE), "")`;
   },
   qualifies: (/** @type {number} */ row) => {
     const { cell } = _clubFormulaRefs_(row);
