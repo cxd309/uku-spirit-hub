@@ -105,10 +105,12 @@ function _importEvents_() {
   );
   SpreadsheetApp.flush();
   _rebuildClubs_();
+  const hits = _responseIssueHits_(responses, updatedEvents);
+  const newIssues = _appendIssues_(_groupIssueHits_(hits, _readTeamClubs_(), new Date()));
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
   const imported_ = results.size - failed;
   if (results.size === 0) return "Nothing to import: no events are NEW or REFRESH";
   return `Imported ${imported_} event(s), ${imported.length} response(s)`
-    + (failed > 0 ? `; ${failed} failed (see Events tab)` : "");
+    + (failed > 0 ? `; ${failed} failed (see Events tab)` : "") + `…, ${newIssues} new issue(s)`;
 }

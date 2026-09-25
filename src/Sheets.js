@@ -135,3 +135,14 @@ function _applyFilter_(sheet, dataRows, columns) {
   sheet.getFilter()?.remove();
   sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
 }
+
+/**
+ * date as yyyy-mm-dd, using the date's own calendar day
+ *
+ * @param {Date} date  the date
+ * @returns {string} e.g. "2025-11-01"
+ */
+function _isoDate_(date) {
+  const pad = (/** @type {number} */ n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}

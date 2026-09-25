@@ -17,6 +17,7 @@ function _setup_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const before = new Set(ss.getSheets().map((s) => s.getName()));
 
+  _getIssuesSheet_();
   _getEventsSheet_();
   _getResponsesSheet_();
   _getTeamsSheet_();

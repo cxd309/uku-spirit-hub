@@ -200,3 +200,21 @@ function _mergeTeams_(existing, names) {
 
   return [...current, ...keptForOverride].sort((a, b) => a.team.localeCompare(b.team, "en", { sensitivity: "base" }));
 }
+
+/**
+ * club for every team, read from the Club column on the Teams tab
+ * reads formula results, so call SpreadsheetApp.flush() first after writing Teams
+ *
+ * @returns {Map<string, string>} team key → club
+ */
+function _readTeamClubs_() {
+  const sheet = _getTeamsSheet_();
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
+  if (rowCount < 1) return new Map();
+  const teamIndex = TEAM_KEYS.indexOf("team");
+  const clubIndex = TEAM_KEYS.indexOf("club");
+  return new Map(
+    sheet.getRange(DATA_ROW, 1, rowCount, TEAM_KEYS.length).getValues()
+      .map((row) => [_teamKey_(String(row[teamIndex])), String(row[clubIndex])]),
+  );
+}
