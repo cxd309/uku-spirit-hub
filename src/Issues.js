@@ -22,12 +22,16 @@ const ISSUES_INFO = "Spirit issues found in the results, one row per issue per t
 const ISSUE_HEADERS = Object.freeze(
   /** @type {const} */ ({
     issueId: "Issue ID",
+    dateCreated: "Issue Date",
     club: "Club",
     category: "Issue Category",
     team: "Team",
     tournaments: "Tournament(s)",
+    tournamentDate: "Tournament Date",
     details: "Details",
-    dateCreated: "Date Created",
+    received: "Received",
+    given: "Given",
+    tournamentAverage: "Tournament Average",
     status: "Status",
     committeeMember: "Committee Member",
     notes: "Notes",
@@ -105,16 +109,20 @@ const ISSUE_CATEGORIES = Object.freeze({
  * one row of the Issues tab
  *
  * @typedef {Object} IssueRecord
- * @property {string}  issueId          check, tournament and team, unique per issue
- * @property {string}  club             club the issue is about
- * @property {string}  category         label of the check
- * @property {string}  team             team the issue is about
- * @property {string}  tournaments      tournament name(s)
- * @property {string}  details          one line per response that triggered it
- * @property {Date}    dateCreated      when the issue was first added
- * @property {string}  status           one of ISSUE_STATUSES
- * @property {string}  committeeMember  who is handling it
- * @property {string}  notes            free text
+ * @property {string}    issueId            check, tournament and team, unique per issue
+ * @property {Date}      dateCreated        when the issue was first added
+ * @property {string}    club               club the issue is about
+ * @property {string}    category           label of the check
+ * @property {string}    team               team the issue is about
+ * @property {string}    tournaments        tournament name(s)
+ * @property {Date|null} tournamentDate     tournament date, null if unknown
+ * @property {string}    details            one line per response that triggered it
+ * @property {string}    received           total of each flagged response, comma separated
+ * @property {string}    given              total of the reply to each flagged response, comma separated
+ * @property {string}    tournamentAverage  average received at the tournament by each team that received a flagged score
+ * @property {string}    status             one of ISSUE_STATUSES
+ * @property {string}    committeeMember    who is handling it
+ * @property {string}    notes              free text
  */
 
 /**
@@ -126,6 +134,7 @@ const ISSUE_CATEGORIES = Object.freeze({
  * @property {string}                        team      team the issue is about
  * @property {string}                        other     the other team in the response
  * @property {string}                        text      the comment, or the scores that triggered it
+ * @property {ResponseRecord}                response  the response itself
  */
 
 /**
@@ -136,6 +145,7 @@ const ISSUE_CATEGORIES = Object.freeze({
  * @property {EventRecord}                   event     the event it is about
  * @property {string}                        team      team the issue is about
  * @property {string}                        details   text for the Details cell
+ * @property {ResponseRecord[]}              responses the flagged responses, empty when there are none
  */
 
 /**
@@ -178,15 +188,30 @@ function _responseIssueHits_(responses, events) {
           team: r.scorer,
           other: r.receiver,
           text: `Total ${total}`,
+          response: r,
         });
       }
       const flagged = SCORE_KEYS.filter((key) => ISSUE_THRESHOLDS.commentCategoryScores.includes(r[key]));
       if (flagged.length > 0) {
         const scores = flagged.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", ");
-        hits.push({ category: "categoryWithoutComment", event, team: r.scorer, other: r.receiver, text: scores });
+        hits.push({
+          category: "categoryWithoutComment",
+          event,
+          team: r.scorer,
+          other: r.receiver,
+          text: scores,
+          response: r,
+        });
       }
     } else if (keywords.test(r.comment)) {
-      hits.push({ category: "dangerousPlay", event, team: r.receiver, other: r.scorer, text: r.comment });
+      hits.push({
+        category: "dangerousPlay",
+        event,
+        team: r.receiver,
+        other: r.scorer,
+        text: r.comment,
+        response: r,
+      });
     }
   }
   return hits;
@@ -241,6 +266,7 @@ function _draftsFromHits_(hits) {
     event: grouped[0].event,
     team: grouped[0].team,
     details: _issueDetails_(grouped),
+    responses: grouped.map((hit) => hit.response),
   }));
 }
 
@@ -282,13 +308,20 @@ function _teamEventIssueDrafts_(responses, events) {
           event,
           team,
           details: `Number of scores: ${low.length}\n\n${lines.join("\n\n")}`,
+          responses: low,
         });
       }
 
       const average = totals.reduce((a, b) => a + b, 0) / totals.length;
       if (average < ISSUE_THRESHOLDS.lowAverageBelow) {
         const heading = `Average: ${average.toFixed(2)} from ${totals.length} scores`;
-        drafts.push({ category: "lowAverage", event, team, details: `${heading}\n\n${scoreLines.join("\n\n")}` });
+        drafts.push({
+          category: "lowAverage",
+          event,
+          team,
+          details: `${heading}\n\n${scoreLines.join("\n\n")}`,
+          responses: received,
+        });
       }
 
       if (!event.international) {
@@ -308,6 +341,7 @@ function _teamEventIssueDrafts_(responses, events) {
             event,
             team,
             details: `${heading}\n\nMissing for:\n${missing.join("\n")}`,
+            responses: [],
           });
         }
       }
@@ -317,24 +351,76 @@ function _teamEventIssueDrafts_(responses, events) {
 }
 
 /**
+ * the Received, Given and Tournament Average cells for one draft
+ * received and given have one value per flagged response, comma separated
+ * tournament average has one value per team that received a flagged score
+ * all blank when nothing was flagged
+ * pure, never modifies its arguments
+ *
+ * received: total of the flagged response
+ * given: total of the reply, the receiver scoring the scorer at the same tournament
+ *   a pair that played twice is matched first to first, second to second
+ * tournament average: average received at the tournament by each team that received a flagged score
+ *   the flagged responses are left out, except for low average where the full average is the point
+ *
+ * @param {IssueDraft}       draft      the draft
+ * @param {ResponseRecord[]} responses  all responses
+ * @returns {{received: string, given: string, tournamentAverage: string}} the three cells
+ */
+function _issueScoreColumns_(draft, responses) {
+  if (draft.responses.length === 0) return { received: "", given: "", tournamentAverage: "" };
+
+  const atEvent = responses.filter((r) => r.fileId === draft.event.fileId);
+  /**
+   * @param {ResponseRecord} r
+   * @param {string} scorer
+   * @param {string} receiver
+   */
+  const isPair = (r, scorer, receiver) =>
+    _teamKey_(r.scorer) === _teamKey_(scorer) && _teamKey_(r.receiver) === _teamKey_(receiver);
+  const excluded = draft.category === "lowAverage" ? [] : draft.responses;
+
+  const received = draft.responses.map((r) => String(_responseTotal_(r)));
+
+  const given = draft.responses.map((r) => {
+    const index = atEvent.filter((x) => isPair(x, r.scorer, r.receiver)).indexOf(r);
+    const reply = atEvent.filter((x) => isPair(x, r.receiver, r.scorer))[index];
+    return reply ? String(_responseTotal_(reply)) : "–";
+  });
+
+  const receivers = [...new Set(draft.responses.map((r) => _teamKey_(r.receiver)))];
+  const tournamentAverage = receivers.map((key) => {
+    const totals = atEvent
+      .filter((x) => _teamKey_(x.receiver) === key && !excluded.includes(x))
+      .map(_responseTotal_);
+    return totals.length === 0 ? "–" : (totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(2);
+  });
+
+  return { received: received.join(", "), given: given.join(", "), tournamentAverage: tournamentAverage.join(", ") };
+}
+
+/**
  * turn drafts into Issues rows
  * pure, never modifies its arguments
  * INTERNATIONAL is put above the details for international tournaments
  *
- * @param {IssueDraft[]}        drafts  drafts from every check
- * @param {Map<string, string>} clubOf  team key → club, from the Teams tab
- * @param {Date}                today   date to record as Date Created
+ * @param {IssueDraft[]}        drafts     drafts from every check
+ * @param {ResponseRecord[]}    responses  all responses, for the score columns
+ * @param {Map<string, string>} clubOf     team key → club, from the Teams tab
+ * @param {Date}                today      date to record as the Issue Date
  * @returns {IssueRecord[]} issues in the order given
  */
-function _issueRecords_(drafts, clubOf, today) {
+function _issueRecords_(drafts, responses, clubOf, today) {
   return drafts.map((draft) => ({
     issueId: _issueId_(draft.category, draft.event, draft.team),
+    dateCreated: today,
     club: clubOf.get(_teamKey_(draft.team)) ?? "",
     category: ISSUE_CATEGORIES[draft.category].label,
     team: draft.team,
     tournaments: draft.event.tournament,
+    tournamentDate: draft.event.date,
     details: `${draft.event.international ? "INTERNATIONAL\n\n" : ""}${draft.details}`,
-    dateCreated: today,
+    ..._issueScoreColumns_(draft, responses),
     status: ISSUE_STATUSES[0],
     committeeMember: "",
     notes: "",
@@ -373,14 +459,16 @@ function _appendIssues_(issues) {
   const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
   _fitSheet_(sheet, firstNew + added.length - 1, ISSUE_KEYS.length);
   sheet.getRange(firstNew, 1, added.length, ISSUE_KEYS.length).setValues(
-    added.map((issue) => ISSUE_KEYS.map((key) => issue[key])),
+    added.map((issue) => ISSUE_KEYS.map((key) => issue[key] ?? "")),
   );
 
   /** @param {keyof typeof ISSUE_HEADERS} key */
   const column = (key) => ISSUE_KEYS.indexOf(key) + 1;
   const statusRule = SpreadsheetApp.newDataValidation().requireValueInList([...ISSUE_STATUSES], true).build();
   sheet.getRange(firstNew, column("status"), added.length, 1).setDataValidation(statusRule);
-  sheet.getRange(firstNew, column("dateCreated"), added.length, 1).setNumberFormat("yyyy-mm-dd");
+  for (const key of /** @type {const} */ (["dateCreated", "tournamentDate"])) {
+    sheet.getRange(firstNew, column(key), added.length, 1).setNumberFormat("yyyy-mm-dd");
+  }
   _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, ISSUE_KEYS.length);
   return added.length;
 }
