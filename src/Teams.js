@@ -4,6 +4,15 @@
 const TEAMS_SHEET = "Teams";
 
 /**
+ * text for the info row above the Teams table
+ * what the tab is, what to edit, how it refreshes
+ */
+const TEAMS_INFO = "Every team that has given or recieved a spirit score (international clubs excluded)\n\n"
+  + +"Suggested Club name is generated using the selected rules in the Name Rules tab this is the default \"best guess\" at a club\n\n"
+  + "To override the club use the Club Override column\n\n"
+  + "This table will be refreshed with the Responses table";
+
+/**
  * teams tab columns, in order
  * columns listed in TEAM_FORMULAS are formulas
  * the rest hold TeamRecord values
@@ -54,7 +63,7 @@ function _teamFormulaRefs_(row) {
   /** @param {keyof typeof TEAM_HEADERS} key */
   const cell = (key) => `$${_columnLetter_(TEAM_KEYS.indexOf(key) + 1)}${row}`;
   /** @param {keyof typeof RESPONSE_HEADERS} key */
-  const responses = (key) => _wholeColumn_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
+  const responses = (key) => _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
   const team = cell("team");
   const plays = `(${responses("scorer")}=${team})+(${responses("receiver")}=${team})`;
   return { team, cell, responses, plays };
@@ -98,7 +107,7 @@ const TEAM_FORMULAS = Object.freeze({
 function _getTeamsSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(TEAM_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), TEAMS_SHEET, headers).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), TEAMS_SHEET, headers, TEAMS_INFO).sheet;
 }
 
 /**
@@ -108,12 +117,12 @@ function _getTeamsSheet_() {
  * @returns {TeamRecord[]} every team on the tab
  */
 function _readTeams_(sheet) {
-  const rowCount = sheet.getLastRow() - 1;
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   const teamIndex = TEAM_KEYS.indexOf("team");
   const overrideIndex = TEAM_KEYS.indexOf("clubOverride");
   return sheet
-    .getRange(2, 1, rowCount, TEAM_KEYS.length)
+    .getRange(DATA_ROW, 1, rowCount, TEAM_KEYS.length)
     .getValues()
     .map((row) => ({ team: String(row[teamIndex]).trim(), clubOverride: String(row[overrideIndex]).trim() }))
     .filter((t) => t.team !== "");
@@ -140,9 +149,11 @@ function _teamToRow_(team, row) {
  * @param {TeamRecord[]}                       teams  teams to write, in display order
  */
 function _writeTeams_(sheet, teams) {
-  _fitSheet_(sheet, 1 + teams.length, TEAM_KEYS.length);
+  _fitSheet_(sheet, HEADER_ROW + teams.length, TEAM_KEYS.length);
   if (teams.length === 0) return;
-  sheet.getRange(2, 1, teams.length, TEAM_KEYS.length).setValues(teams.map((t, i) => _teamToRow_(t, i + 2)));
+  sheet.getRange(DATA_ROW, 1, teams.length, TEAM_KEYS.length).setValues(
+    teams.map((t, i) => _teamToRow_(t, i + DATA_ROW)),
+  );
 }
 
 /**

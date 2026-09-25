@@ -4,6 +4,12 @@
 const CLUBS_SHEET = "Clubs";
 
 /**
+ * text for the info row above the Clubs table
+ * what the tab is, what to edit, how it refreshes
+ */
+const CLUBS_INFO = "Every known club and its teams, generated from Teams tab\n\n"
+  + "DO NOT EDIT this table, it is refreshed every time there is a change in the Teams tab";
+/**
  * clubs tab columns, in order
  * columns listed in CLUB_FORMULAS are formulas
  * the rest hold ClubRecord values
@@ -88,7 +94,7 @@ const CLUB_FORMULAS = Object.freeze({
 function _getClubsSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(CLUB_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUBS_SHEET, headers).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUBS_SHEET, headers, CLUBS_INFO).sheet;
 }
 
 /**
@@ -132,13 +138,17 @@ function _clubToRow_(club, row) {
  */
 function _rebuildClubs_() {
   const teamsSheet = _getTeamsSheet_();
-  const teamRows = teamsSheet.getLastRow() - 1;
+  const teamRows = teamsSheet.getLastRow() - HEADER_ROW;
   const clubColumn = TEAM_KEYS.indexOf("club") + 1;
-  const clubValues = teamRows < 1 ? [] : teamsSheet.getRange(2, clubColumn, teamRows, 1).getValues().map((r) => r[0]);
+  const clubValues = teamRows < 1
+    ? []
+    : teamsSheet.getRange(DATA_ROW, clubColumn, teamRows, 1).getValues().map((r) => r[0]);
 
   const clubs = _clubNames_(clubValues).map((name) => ({ club: name }));
   const sheet = _getClubsSheet_();
-  _fitSheet_(sheet, 1 + clubs.length, CLUB_KEYS.length);
+  _fitSheet_(sheet, HEADER_ROW + clubs.length, CLUB_KEYS.length);
   if (clubs.length === 0) return;
-  sheet.getRange(2, 1, clubs.length, CLUB_KEYS.length).setValues(clubs.map((c, i) => _clubToRow_(c, i + 2)));
+  sheet.getRange(DATA_ROW, 1, clubs.length, CLUB_KEYS.length).setValues(
+    clubs.map((c, i) => _clubToRow_(c, i + DATA_ROW)),
+  );
 }

@@ -5,6 +5,13 @@
 const CONFIG_SHEET = "Config";
 
 /**
+ * text for the info row above the Config table
+ * what the tab is, what to edit, how it refreshes
+ */
+const CONFIG_INFO = "Settings for the Hub\n\n"
+  + "Only edit the values column";
+
+/**
  * header row of the Config tab
  */
 const CONFIG_HEADERS = Object.freeze([
@@ -42,7 +49,7 @@ const CONFIG_SETTINGS = Object.freeze(
  */
 function _getConfigSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const { sheet } = _getOrCreateSheet_(ss, CONFIG_SHEET, CONFIG_HEADERS);
+  const { sheet } = _getOrCreateSheet_(ss, CONFIG_SHEET, CONFIG_HEADERS, CONFIG_INFO);
   const present = new Set(_readConfigRows_(sheet).map((row) => row.label));
   const missing = Object.values(CONFIG_SETTINGS).filter((s) => !present.has(s.label));
   if (missing.length > 0) {
@@ -62,10 +69,10 @@ function _getConfigSheet_() {
  * @returns {{label:string, value:string}[]} one entry per non-empty row
  */
 function _readConfigRows_(sheet) {
-  const rowCount = sheet.getLastRow() - 1;
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   return sheet
-    .getRange(2, 1, rowCount, 2)
+    .getRange(DATA_ROW, 1, rowCount, 2)
     .getValues()
     .map(([label, value]) => ({ label: String(label).trim(), value: String(value).trim() }))
     .filter((row) => row.label !== "");

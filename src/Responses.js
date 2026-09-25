@@ -4,6 +4,14 @@
 const RESPONSES_SHEET = "Responses";
 
 /**
+ * text for the info row above the Responses table
+ * what the tab is, what to edit, how it refreshes
+ */
+const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
+  + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
+  + "To Refresh run \"Scan for files\"";
+
+/**
  * responses tab columns, in order
  * keys are the names used in code
  * values are the header text
@@ -99,7 +107,7 @@ function _responseToRow_(response, row) {
 function _getResponsesSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(RESPONSE_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers, RESPONSES_INFO).sheet;
 }
 
 /**
@@ -107,10 +115,10 @@ function _getResponsesSheet_() {
  * @returns {ResponseRecord[]} every response on the tab
  */
 function _readResponses_(sheet) {
-  const rowCount = sheet.getLastRow() - 1;
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   return sheet
-    .getRange(2, 1, rowCount, RESPONSE_KEYS.length)
+    .getRange(DATA_ROW, 1, rowCount, RESPONSE_KEYS.length)
     .getValues()
     .map(_responseFromRow_)
     .filter((r) => r.fileId !== "");
@@ -123,11 +131,11 @@ function _readResponses_(sheet) {
  * @param {ResponseRecord[]}                   responses  all responses, in display order
  */
 function _writeResponses_(sheet, responses) {
-  _fitSheet_(sheet, 1 + responses.length, RESPONSE_KEYS.length);
+  _fitSheet_(sheet, HEADER_ROW + responses.length, RESPONSE_KEYS.length);
   if (responses.length === 0) return;
   sheet
-    .getRange(2, 1, responses.length, RESPONSE_KEYS.length)
-    .setValues(responses.map((r, i) => _responseToRow_(r, i + 2)));
+    .getRange(DATA_ROW, 1, responses.length, RESPONSE_KEYS.length)
+    .setValues(responses.map((r, i) => _responseToRow_(r, i + DATA_ROW)));
 }
 
 /**
@@ -141,7 +149,7 @@ function _writeResponses_(sheet, responses) {
 function _tournamentFormula_(row) {
   const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
   /** @param {keyof typeof EVENT_HEADERS} key */
-  const events = (key) => _wholeColumn_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
+  const events = (key) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
   return `=IFERROR(LET(o, XLOOKUP(${id}, ${events("fileId")}, ${events("nameOverride")}), `
     + `IF(o<>"", o, XLOOKUP(${id}, ${events("fileId")}, ${events("defaultName")}))), "(unknown event)")`;
 }
@@ -159,6 +167,6 @@ function _tournamentFormula_(row) {
 function _responseClubFormula_(row, side) {
   const team = `$${_columnLetter_(RESPONSE_KEYS.indexOf(side) + 1)}${row}`;
   /** @param {keyof typeof TEAM_HEADERS} key */
-  const teams = (key) => _wholeColumn_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
+  const teams = (key) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
   return `=IFERROR(XLOOKUP(${team}, ${teams("team")}, ${teams("club")}), "")`;
 }

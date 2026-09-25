@@ -6,6 +6,8 @@
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("SOTG Hub")
+    .addItem("Setup hub", "setup")
+    .addSeparator()
     .addItem("Scan for files", "scanEvents")
     .addItem("Import new and refreshed events", "importEvents")
     .addToUi();

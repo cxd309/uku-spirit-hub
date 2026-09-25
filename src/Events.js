@@ -4,6 +4,18 @@
 const EVENTS_SHEET = "Events";
 
 /**
+ * text for the info row above the Events table
+ * what the tab is, what to edit, how it refreshes
+ */
+const EVENTS_INFO = "All the found spirit results files in the folder for this category (e.g. University, Club)\n\n"
+  + "User editable columns:\n"
+  + "- Name Override: set a name for the tournament\n"
+  + "- Status: filled on refresh, set to REFRESH to re-import results\n"
+  + "- International: is this an international tournament\n"
+  + "- Import: Should these results be inluded in spirit award and issue tracking\n\n"
+  + "To Refresh run \"Import new and refreshed events\"";
+
+/**
  * events table columns, in order
  * keys are the names used in code
  * values are the header text
@@ -73,7 +85,7 @@ function _getEventsSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   /** @type {readonly string[]} */
   const headers = Object.values(EVENT_HEADERS);
-  return _getOrCreateSheet_(ss, EVENTS_SHEET, headers).sheet;
+  return _getOrCreateSheet_(ss, EVENTS_SHEET, headers, EVENTS_INFO).sheet;
 }
 
 /**
@@ -120,10 +132,10 @@ function _eventToRow_(event) {
  * @returns {EventRecord[]} one record per data row
  */
 function _readEvents_(sheet) {
-  const rowCount = sheet.getLastRow() - 1;
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   return sheet
-    .getRange(2, 1, rowCount, EVENT_KEYS.length)
+    .getRange(DATA_ROW, 1, rowCount, EVENT_KEYS.length)
     .getValues()
     .map(_eventFromRow_)
     .filter((event) => event.fileId !== "");
@@ -140,20 +152,20 @@ function _readEvents_(sheet) {
  * @param {EventRecord[]}                      events  Records to write, in display order.
  */
 function _writeEvents_(sheet, events) {
-  _fitSheet_(sheet, 1 + events.length, EVENT_KEYS.length);
+  _fitSheet_(sheet, HEADER_ROW + events.length, EVENT_KEYS.length);
   if (events.length === 0) return;
-  sheet.getRange(2, 1, events.length, EVENT_KEYS.length).setValues(events.map(_eventToRow_));
+  sheet.getRange(DATA_ROW, 1, events.length, EVENT_KEYS.length).setValues(events.map(_eventToRow_));
 
   /** @param {keyof typeof EVENT_HEADERS} key */
   const column = (key) => EVENT_KEYS.indexOf(key) + 1;
 
   const statuses = Object.values(EVENT_STATUS).filter((s) => s !== "");
   const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statuses, true).build();
-  sheet.getRange(2, column("status"), events.length, 1).setDataValidation(statusRule);
+  sheet.getRange(DATA_ROW, column("status"), events.length, 1).setDataValidation(statusRule);
 
   const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-  sheet.getRange(2, column("international"), events.length, 1).setDataValidation(checkbox);
-  sheet.getRange(2, column("include"), events.length, 1).setDataValidation(checkbox);
+  sheet.getRange(DATA_ROW, column("international"), events.length, 1).setDataValidation(checkbox);
+  sheet.getRange(DATA_ROW, column("include"), events.length, 1).setDataValidation(checkbox);
 }
 
 /**
