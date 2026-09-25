@@ -49,82 +49,68 @@ const ISSUE_KEYS = /** @type {(keyof typeof ISSUE_HEADERS)[]} */ (Object.keys(IS
 const ISSUE_STATUSES = Object.freeze(["NEW", "IN PROGRESS", "CLOSED"]);
 
 /**
- * policy thresholds used by the checks
- * kept in one place so they can move to the Config tab later
- */
-const ISSUE_THRESHOLDS = Object.freeze({
-  commentTotalAbove: 14,
-  commentTotalBelow: 6,
-  commentCategoryScores: Object.freeze([0, 4]),
-  lowScoreAtOrBelow: 6,
-  lowScoreCount: 2,
-  lowAverageBelow: 8,
-  monitoringAverageBelow: 9,
-  monitoringBreaches: 2,
-  categoryMinimum: 0,
-  singleLowScoreBelow: 6,
-});
-
-/**
- * words in a comment that flag possible dangerous play
- * matched as whole words, case-insensitive
- */
-const DANGEROUS_PLAY_KEYWORDS = Object.freeze([
-  "dangerous",
-  "danger",
-  "reckless",
-  "unsafe",
-]);
-
-/**
  * every issue check
- * code goes into the Issue ID, label into the Issue Category column
+ * code goes into the Issue ID and the Rule column of the Issue Rules tab
+ * label goes into the Issue Category column, built from the current settings
  */
 const ISSUE_CATEGORIES = Object.freeze({
   totalWithoutComment: {
     code: "TOTAL-NO-COMMENT",
-    label:
-      `Total above ${ISSUE_THRESHOLDS.commentTotalAbove} or below ${ISSUE_THRESHOLDS.commentTotalBelow} without comment`,
+    /** @param {IssueSettings} s */
+    label: (s) => `Total above ${s.commentTotalAbove} or below ${s.commentTotalBelow} without comment`,
   },
   categoryWithoutComment: {
     code: "CATEGORY-NO-COMMENT",
-    label: `Category scored ${ISSUE_THRESHOLDS.commentCategoryScores.join(" or ")} without comment`,
+    /** @param {IssueSettings} s */
+    label: (s) => `Category scored ${s.commentCategoryScores.join(" or ")} without comment`,
   },
   dangerousPlay: {
     code: "DANGEROUS-PLAY",
-    label: "Dangerous play mentioned",
+    /** @param {IssueSettings} s */
+    label: (s) => "Dangerous play mentioned",
   },
   notSubmitted: {
     code: "NOT-SUBMITTED",
-    label: "Spirit scores not submitted",
+    /** @param {IssueSettings} s */
+    label: (s) => "Spirit scores not submitted",
   },
   twoLowScores: {
     code: "LOW-SCORES",
-    label:
-      `${ISSUE_THRESHOLDS.lowScoreCount} or more scores of ${ISSUE_THRESHOLDS.lowScoreAtOrBelow} or below at a tournament`,
+    /** @param {IssueSettings} s */
+    label: (s) => `${s.lowScoreCount} or more scores of ${s.lowScoreAtOrBelow} or below at a tournament`,
   },
   lowAverage: {
     code: "LOW-AVERAGE",
-    label: `Average score below ${ISSUE_THRESHOLDS.lowAverageBelow} at a tournament`,
+    /** @param {IssueSettings} s */
+    label: (s) => `Average score below ${s.lowAverageBelow} at a tournament`,
   },
   categoryMinimum: {
     code: "MIN-CATEGORY",
-    label: `Received ${ISSUE_THRESHOLDS.categoryMinimum} in a category`,
+    /** @param {IssueSettings} s */
+    label: (s) => `Received ${s.categoryMinimum} in a category`,
   },
   singleLowScore: {
     code: "SINGLE-LOW-SCORE",
-    label: `Received a score below ${ISSUE_THRESHOLDS.singleLowScoreBelow}`,
+    /** @param {IssueSettings} s */
+    label: (s) => `Received a score below ${s.singleLowScoreBelow}`,
   },
   monitoring: {
     code: "MONITORING",
-    label:
-      `${ISSUE_THRESHOLDS.monitoringBreaches} team averages below ${ISSUE_THRESHOLDS.monitoringAverageBelow} in the season`,
+    /** @param {IssueSettings} s */
+    label: (s) => `${s.monitoringBreaches} team averages below ${s.monitoringAverageBelow} in the season`,
   },
   monitoringBreach: {
     code: "MONITORING-BREACH",
-    label: `Averaged below ${ISSUE_THRESHOLDS.monitoringAverageBelow} again while on monitoring`,
+    /** @param {IssueSettings} s */
+    label: (s) => `Averaged below ${s.monitoringAverageBelow} again while on monitoring`,
   },
 });
+
+/**
+ * key of one issue check, e.g. "lowAverage"
+ *
+ * @typedef {keyof typeof ISSUE_CATEGORIES} IssueCategoryKey
+ */
 
 /**
  * one row of the Issues tab
@@ -150,7 +136,7 @@ const ISSUE_CATEGORIES = Object.freeze({
  * one response that triggered a check, before grouping into issues
  *
  * @typedef {Object} IssueHit
- * @property {keyof typeof ISSUE_CATEGORIES} category  which check
+ * @property {IssueCategoryKey} category  which check
  * @property {EventRecord}                   event     the event the response is from
  * @property {string}                        team      team the issue is about
  * @property {string}                        other     the other team in the response
@@ -162,7 +148,7 @@ const ISSUE_CATEGORIES = Object.freeze({
  * an issue before it has an id, club, date or status
  *
  * @typedef {Object} IssueDraft
- * @property {keyof typeof ISSUE_CATEGORIES} category  which check
+ * @property {IssueCategoryKey} category  which check
  * @property {EventRecord}                   event     the event it is about
  * @property {string}                        team      team the issue is about
  * @property {string}                        details   text for the Details cell
@@ -213,11 +199,14 @@ function _withComment_(text, response) {
  *
  * @param {ResponseRecord[]} responses  all responses
  * @param {EventRecord[]}    events     all events
+ * @param {IssueSettings}    settings   thresholds from the Issue Rules tab
  * @returns {IssueHit[]} one hit per response per check it triggered
  */
-function _responseIssueHits_(responses, events) {
+function _responseIssueHits_(responses, events, settings) {
   const eventById = new Map(events.map((e) => [e.fileId, e]));
-  const keywords = new RegExp(`\\b(${DANGEROUS_PLAY_KEYWORDS.join("|")})\\b`, "i");
+  const escaped = settings.dangerousPlayKeywords.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // whole words only, not part of a longer word, works for keywords ending in punctuation too
+  const keywords = escaped.length === 0 ? null : new RegExp(`(?<!\\w)(${escaped.join("|")})(?!\\w)`, "i");
   /** @type {IssueHit[]} */
   const hits = [];
 
@@ -227,7 +216,7 @@ function _responseIssueHits_(responses, events) {
 
     const total = _responseTotal_(r);
 
-    const minimums = SCORE_KEYS.filter((key) => r[key] === ISSUE_THRESHOLDS.categoryMinimum);
+    const minimums = SCORE_KEYS.filter((key) => r[key] === settings.categoryMinimum);
     if (minimums.length > 0) {
       hits.push({
         category: "categoryMinimum",
@@ -238,7 +227,7 @@ function _responseIssueHits_(responses, events) {
         response: r,
       });
     }
-    if (total < ISSUE_THRESHOLDS.singleLowScoreBelow) {
+    if (total < settings.singleLowScoreBelow) {
       hits.push({
         category: "singleLowScore",
         event,
@@ -252,7 +241,7 @@ function _responseIssueHits_(responses, events) {
     if (event.international) continue;
 
     if (r.comment === "") {
-      if (total > ISSUE_THRESHOLDS.commentTotalAbove || total < ISSUE_THRESHOLDS.commentTotalBelow) {
+      if (total > settings.commentTotalAbove || total < settings.commentTotalBelow) {
         hits.push({
           category: "totalWithoutComment",
           event,
@@ -262,7 +251,7 @@ function _responseIssueHits_(responses, events) {
           response: r,
         });
       }
-      const flagged = SCORE_KEYS.filter((key) => ISSUE_THRESHOLDS.commentCategoryScores.includes(r[key]));
+      const flagged = SCORE_KEYS.filter((key) => settings.commentCategoryScores.includes(r[key]));
       if (flagged.length > 0) {
         const scores = flagged.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", ");
         hits.push({
@@ -274,7 +263,7 @@ function _responseIssueHits_(responses, events) {
           response: r,
         });
       }
-    } else if (keywords.test(r.comment)) {
+    } else if (keywords && keywords.test(r.comment)) {
       hits.push({
         category: "dangerousPlay",
         event,
@@ -344,7 +333,7 @@ function _averageDetails_(received) {
  * the issue id for a check, event and team
  * readable, and the same every run so an issue is never added twice
  *
- * @param {keyof typeof ISSUE_CATEGORIES} category  which check
+ * @param {IssueCategoryKey} category  which check
  * @param {EventRecord}                   event     the event
  * @param {string}                        team      the team
  * @returns {string} e.g. "LOW-AVERAGE | 2025-11-01 ELUXIR | Durham 1"
@@ -386,9 +375,10 @@ function _draftsFromHits_(hits) {
  *
  * @param {ResponseRecord[]} responses  all responses, in date order
  * @param {EventRecord[]}    events     all events, in date order
+ * @param {IssueSettings}    settings   thresholds from the Issue Rules tab
  * @returns {IssueDraft[]} one draft per check per team per event that triggered
  */
-function _teamEventIssueDrafts_(responses, events) {
+function _teamEventIssueDrafts_(responses, events, settings) {
   /** @type {IssueDraft[]} */
   const drafts = [];
 
@@ -399,8 +389,8 @@ function _teamEventIssueDrafts_(responses, events) {
       const team = received[0].receiver;
       const totals = received.map(_responseTotal_);
 
-      const low = received.filter((r) => _responseTotal_(r) <= ISSUE_THRESHOLDS.lowScoreAtOrBelow);
-      if (low.length >= ISSUE_THRESHOLDS.lowScoreCount) {
+      const low = received.filter((r) => _responseTotal_(r) <= settings.lowScoreAtOrBelow);
+      if (low.length >= settings.lowScoreCount) {
         const lines = low.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
         drafts.push({
           category: "twoLowScores",
@@ -412,7 +402,7 @@ function _teamEventIssueDrafts_(responses, events) {
       }
 
       const average = totals.reduce((a, b) => a + b, 0) / totals.length;
-      if (average < ISSUE_THRESHOLDS.lowAverageBelow) {
+      if (average < settings.lowAverageBelow) {
         drafts.push({
           category: "lowAverage",
           event,
@@ -507,14 +497,15 @@ function _issueScoreColumns_(draft, responses) {
  * @param {ResponseRecord[]}    responses  all responses, for the score columns
  * @param {Map<string, string>} clubOf     team key → club, from the Teams tab
  * @param {Date}                today      date to record as the Issue Date
+ * @param {IssueSettings}       settings   thresholds, for the Issue Category text
  * @returns {IssueRecord[]} issues in the order given
  */
-function _issueRecords_(drafts, responses, clubOf, today) {
+function _issueRecords_(drafts, responses, clubOf, today, settings) {
   return drafts.map((draft) => ({
     issueId: _issueId_(draft.category, draft.event, draft.team),
     dateCreated: today,
     club: clubOf.get(_teamKey_(draft.team)) ?? "",
-    category: ISSUE_CATEGORIES[draft.category].label,
+    category: ISSUE_CATEGORIES[draft.category].label(settings),
     team: draft.team,
     tournaments: draft.event.tournament,
     tournamentDate: draft.event.date,
@@ -536,9 +527,10 @@ function _issueRecords_(drafts, responses, clubOf, today) {
  * @param {ResponseRecord[]}    responses  all responses
  * @param {EventRecord[]}       events     all events, in date order
  * @param {Map<string, string>} clubOf     team key → club, from the Teams tab
+ * @param {IssueSettings}       settings   thresholds from the Issue Rules tab
  * @returns {Map<string, ClubBreach[]>} club → its breaches in date order, teams without a club are skipped
  */
-function _clubBreaches_(responses, events, clubOf) {
+function _clubBreaches_(responses, events, clubOf, settings) {
   /** @type {Map<string, ClubBreach[]>} */
   const breachesByClub = new Map();
   for (const event of events.filter((e) => e.include && !e.international)) {
@@ -546,7 +538,7 @@ function _clubBreaches_(responses, events, clubOf) {
     for (const [key, received] of _receivedByTeam_(atEvent)) {
       const club = clubOf.get(key) ?? "";
       const average = received.map(_responseTotal_).reduce((a, b) => a + b, 0) / received.length;
-      if (club === "" || average >= ISSUE_THRESHOLDS.monitoringAverageBelow) continue;
+      if (club === "" || average >= settings.monitoringAverageBelow) continue;
       const breach = { club, team: received[0].receiver, event, responses: received, average };
       breachesByClub.set(club, [...(breachesByClub.get(club) ?? []), breach]);
     }
@@ -565,10 +557,12 @@ function _clubBreaches_(responses, events, clubOf) {
  * @param {ResponseRecord[]}          responses       all responses, for the score columns of breach rows
  * @param {Map<string, string>}       clubOf          team key → club, from the Teams tab
  * @param {Date}                      today           date to record as the Issue Date
+ * @param {IssueSettings}             settings        thresholds and which checks are enabled
  * @returns {IssueRecord[]} MONITORING rows, then MONITORING-BREACH rows
  */
-function _monitoringIssues_(breachesByClub, responses, clubOf, today) {
-  const needed = ISSUE_THRESHOLDS.monitoringBreaches;
+function _monitoringIssues_(breachesByClub, responses, clubOf, today, settings) {
+  if (!settings.enabled.monitoring) return [];
+  const needed = settings.monitoringBreaches;
   /** @param {ClubBreach} b */
   const dateOf = (b) => (b.event.date ? _isoDate_(b.event.date) : "no date");
   /** @type {IssueRecord[]} */
@@ -588,7 +582,7 @@ function _monitoringIssues_(breachesByClub, responses, clubOf, today) {
       issueId: `${ISSUE_CATEGORIES.monitoring.code} | ${club}`,
       dateCreated: today,
       club,
-      category: ISSUE_CATEGORIES.monitoring.label,
+      category: ISSUE_CATEGORIES.monitoring.label(settings),
       team: first.map((b) => b.team).join(", "),
       tournaments: first.map((b) => b.event.tournament).join(", "),
       tournamentDate: first.map(dateOf).join(", "),
@@ -600,7 +594,7 @@ function _monitoringIssues_(breachesByClub, responses, clubOf, today) {
       committeeMember: "",
       notes: "",
     });
-    for (const b of breaches.slice(needed)) {
+    for (const b of settings.enabled.monitoringBreach ? breaches.slice(needed) : []) {
       later.push({
         category: "monitoringBreach",
         event: b.event,
@@ -610,7 +604,7 @@ function _monitoringIssues_(breachesByClub, responses, clubOf, today) {
       });
     }
   }
-  return [...listed, ..._issueRecords_(later, responses, clubOf, today)];
+  return [...listed, ..._issueRecords_(later, responses, clubOf, today, settings)];
 }
 
 /**
@@ -662,21 +656,24 @@ function _appendIssues_(issues) {
 /**
  * run every check and add the issues that are not already on the Issues tab
  * reads the clubs from the Teams tab, so Teams must be up to date first
+ * reads the thresholds from the Issue Rules tab, disabled checks add nothing
  *
  * @param {ResponseRecord[]} responses  all responses, in date order
  * @param {EventRecord[]}    events     all events, in date order
  * @returns {number} how many new issues were added
  */
 function _appendNewIssues_(responses, events) {
+  const settings = _readIssueSettings_();
   const drafts = [
-    ..._draftsFromHits_(_responseIssueHits_(responses, events)),
-    ..._teamEventIssueDrafts_(responses, events),
-  ];
+    ..._draftsFromHits_(_responseIssueHits_(responses, events, settings)),
+    ..._teamEventIssueDrafts_(responses, events, settings),
+  ].filter((draft) => settings.enabled[draft.category]);
   const clubOf = _readTeamClubs_();
   const today = new Date();
+  const breaches = _clubBreaches_(responses, events, clubOf, settings);
   return _appendIssues_([
-    ..._issueRecords_(drafts, responses, clubOf, today),
-    ..._monitoringIssues_(_clubBreaches_(responses, events, clubOf), responses, clubOf, today),
+    ..._issueRecords_(drafts, responses, clubOf, today, settings),
+    ..._monitoringIssues_(breaches, responses, clubOf, today, settings),
   ]);
 }
 

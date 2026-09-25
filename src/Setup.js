@@ -23,6 +23,7 @@ function _setup_() {
   _getTeamsSheet_();
   _getClubsSheet_();
   _getNameRulesSheet_();
+  _getIssueRulesSheet_();
   _getConfigSheet_();
 
   const blank = ss.getSheetByName("Sheet1");
