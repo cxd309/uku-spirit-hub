@@ -22,6 +22,10 @@ const CLUB_HEADERS = Object.freeze(
     teamCount: "Team Count",
     tournamentsEntered: "Tournaments Entered",
     teamEntries: "Team Entries",
+    responsesReceived: "Responses Received",
+    meanScore: "Mean Score",
+    qualifies: "Qualifies",
+    rank: "Rank",
   }),
 );
 
@@ -41,7 +45,9 @@ const CLUB_KEYS = /** @type {(keyof typeof CLUB_HEADERS)[]} */ (Object.keys(CLUB
  * references shared by the Clubs formulas for one row
  *
  * @typedef {Object} ClubFormulaRefs
- * @property {string}                                        club       this row's club cell, e.g. $A5
+ * @property {string}                                          club       this row's club cell, e.g. $A5
+ * @property {function(keyof typeof CLUB_HEADERS): string}     cell       another cell on this row
+ * @property {function(keyof typeof CLUB_HEADERS): string}     clubs      a Clubs column below its header
  * @property {function(keyof typeof TEAM_HEADERS): string}     teams      a Teams column below its header
  * @property {function(keyof typeof RESPONSE_HEADERS): string} responses  a Responses column below its header
  */
@@ -53,12 +59,15 @@ const CLUB_KEYS = /** @type {(keyof typeof CLUB_HEADERS)[]} */ (Object.keys(CLUB
  * @returns {ClubFormulaRefs} references for that row
  */
 function _clubFormulaRefs_(row) {
-  const club = `$${_columnLetter_(CLUB_KEYS.indexOf("club") + 1)}${row}`;
+  /** @param {keyof typeof CLUB_HEADERS} key */
+  const cell = (key) => `$${_columnLetter_(CLUB_KEYS.indexOf(key) + 1)}${row}`;
+  /** @param {keyof typeof CLUB_HEADERS} key */
+  const clubs = (key) => _columnBelowHeader_(CLUBS_SHEET, CLUB_KEYS.indexOf(key) + 1);
   /** @param {keyof typeof TEAM_HEADERS} key */
   const teams = (key) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
   /** @param {keyof typeof RESPONSE_HEADERS} key */
   const responses = (key) => _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
-  return { club, teams, responses };
+  return { club: cell("club"), cell, clubs, teams, responses };
 }
 
 /**
@@ -78,11 +87,6 @@ const CLUB_FORMULAS = Object.freeze({
     const { club, teams } = _clubFormulaRefs_(row);
     return `=COUNTIF(${teams("club")}, ${club})`;
   },
-  tournamentsEntered: (/** @type {number} */ row) => {
-    const { club, responses } = _clubFormulaRefs_(row);
-    return `=IFERROR(COUNTUNIQUE(FILTER(${responses("fileId")}, `
-      + `(${responses("scorerClub")}=${club})+(${responses("receiverClub")}=${club}))), 0)`;
-  },
   teamEntries: (/** @type {number} */ row) => {
     const { club, teams } = _clubFormulaRefs_(row);
     return `=SUMIF(${teams("club")}, ${club}, ${teams("eventCount")})`;
@@ -91,6 +95,33 @@ const CLUB_FORMULAS = Object.freeze({
     const { club, responses } = _clubFormulaRefs_(row);
     return `=IFERROR(TEXTJOIN(", ", TRUE, UNIQUE(FILTER(${responses("tournament")}, `
       + `(${responses("scorerClub")}=${club})+(${responses("receiverClub")}=${club})))), "")`;
+  },
+  tournamentsEntered: (/** @type {number} */ row) => {
+    const { club, responses } = _clubFormulaRefs_(row);
+    return `=IFERROR(COUNTUNIQUE(FILTER(${responses("fileId")}, `
+      + `((${responses("scorerClub")}=${club})+(${responses("receiverClub")}=${club}))*(${
+        responses("included")
+      }=TRUE))), 0)`;
+  },
+  responsesReceived: (/** @type {number} */ row) => {
+    const { club, responses } = _clubFormulaRefs_(row);
+    return `=COUNTIFS(${responses("receiverClub")}, ${club}, ${responses("included")}, TRUE)`;
+  },
+  meanScore: (/** @type {number} */ row) => {
+    const { club, responses } = _clubFormulaRefs_(row);
+    return `=IFERROR(AVERAGEIFS(${responses("total")}, ${responses("receiverClub")}, ${club}, ${
+      responses("included")
+    }, TRUE), "")`;
+  },
+  qualifies: (/** @type {number} */ row) => {
+    const { cell } = _clubFormulaRefs_(row);
+    return `=${cell("tournamentsEntered")}>=${_configValueExpression_("awardMinimumTournaments")}`;
+  },
+  rank: (/** @type {number} */ row) => {
+    const { cell, clubs } = _clubFormulaRefs_(row);
+    return `=IF(${cell("qualifies")}, COUNTIFS(${clubs("qualifies")}, TRUE, ${clubs("meanScore")}, ">"&${
+      cell("meanScore")
+    })+1, "")`;
   },
 });
 
@@ -152,4 +183,7 @@ function _rebuildClubs_() {
 
   const clubs = _clubNames_(clubValues).map((name) => ({ club: name }));
   _writeTable_(_getClubsSheet_(), clubs.map((c, i) => _clubToRow_(c, i + DATA_ROW)), CLUB_KEYS.length);
+  if (clubs.length > 0) {
+    _getClubsSheet_().getRange(DATA_ROW, CLUB_KEYS.indexOf("meanScore") + 1, clubs.length, 1).setNumberFormat("0.00");
+  }
 }

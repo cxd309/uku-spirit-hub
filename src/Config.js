@@ -30,7 +30,13 @@ const CONFIG_SETTINGS = Object.freeze(
   /** @type {const} */ ({
     category: {
       label: "Category",
+      default: "",
       description: "Folder inside the season folder that this Hub covers, e.g. University, Club, ...",
+    },
+    awardMinimumTournaments: {
+      label: "Award Minimum Tournaments",
+      default: "3",
+      description: "Minimum number of tournaments a club must enter to qualify for the spirit award",
     },
   }),
 );
@@ -57,7 +63,7 @@ function _getConfigSheet_() {
     _fitSheet_(sheet, firstEmpty + missing.length - 1, CONFIG_HEADERS.length);
     sheet
       .getRange(firstEmpty, 1, missing.length, CONFIG_HEADERS.length)
-      .setValues(missing.map((s) => [s.label, "", s.description]));
+      .setValues(missing.map((s) => [s.label, s.default, s.description]));
   }
   return sheet;
 }
@@ -89,5 +95,21 @@ function _readConfig_() {
   if (category === "") {
     throw new Error(`Set "${CONFIG_SETTINGS.category.label}" on the ${CONFIG_SHEET} tab`);
   }
-  return { category: category };
+  return {
+    category: category,
+    awardMinimumTournaments: values.get(CONFIG_SETTINGS.awardMinimumTournaments.label) ?? "",
+  };
+}
+
+/**
+ * formula expression that reads a setting's value from the Config tab
+ * so sheet formulas use the same setting people edit
+ *
+ * @param {keyof typeof CONFIG_SETTINGS} key  the setting
+ * @returns {string} an expression for use inside formulas, e.g. XLOOKUP("Category", ...)
+ */
+function _configValueExpression_(key) {
+  const labels = _columnBelowHeader_(CONFIG_SHEET, CONFIG_HEADERS.indexOf("Setting") + 1);
+  const values = _columnBelowHeader_(CONFIG_SHEET, CONFIG_HEADERS.indexOf("Value") + 1);
+  return `XLOOKUP("${CONFIG_SETTINGS[key].label}", ${labels}, ${values})`;
 }

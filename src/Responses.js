@@ -26,11 +26,13 @@ const RESPONSE_HEADERS = Object.freeze(
     receiver: "Receiving Team",
     receiverClub: "Receiving Club",
     tournament: "Tournament",
+    included: "Included",
     rules: "Rules",
     fouls: "Fouls",
     fairMindedness: "Fair-Mindedness",
     attitude: "Attitude",
     communication: "Communication",
+    total: "Total",
     comment: "Comment",
   }),
 );
@@ -46,6 +48,16 @@ const RESPONSE_FORMULAS = Object.freeze({
   scorerClub: (/** @type {number} */ row) => _responseClubFormula_(row, "scorer"),
   receiverClub: (/** @type {number} */ row) => _responseClubFormula_(row, "receiver"),
   tournament: _tournamentFormula_,
+  included: (/** @type {number} */ row) => {
+    const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
+    /** @param {keyof typeof EVENT_HEADERS} key */
+    const events = (key) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
+    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("include")}), FALSE)`;
+  },
+  total: (/** @type {number} */ row) => {
+    const cells = SCORE_KEYS.map((key) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`);
+    return `=${cells.join("+")}`;
+  },
 });
 
 /**
