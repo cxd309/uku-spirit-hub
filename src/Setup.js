@@ -22,6 +22,7 @@ function _setup_() {
   _getResponsesSheet_();
   _getTeamsSheet_();
   _getClubsSheet_();
+  _getClubStatsSheet_();
   _getNameRulesSheet_();
   _getIssueRulesSheet_();
   _getConfigSheet_();

@@ -11,6 +11,7 @@ function onOpen() {
     .addItem("Refresh Tournaments", "refreshTournaments")
     .addItem("Refresh Results", "refreshResults")
     .addItem("Refresh Issues", "refreshIssues")
+    .addItem("Refresh Club Statistics", "refreshClubStatistics")
     .addToUi();
 }
 
@@ -114,4 +115,12 @@ function refreshResults() {
  */
 function refreshIssues() {
   _notify_(_withLock_(() => _timed_("issues", _refreshIssues_)));
+}
+
+/**
+ * menu: recalculate the Club Statistics tab from what is already in the spreadsheet
+ * only ever run from the menu
+ */
+function refreshClubStatistics() {
+  _notify_(_withLock_(_refreshClubStatistics_));
 }

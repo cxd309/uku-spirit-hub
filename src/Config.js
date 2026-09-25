@@ -100,16 +100,3 @@ function _readConfig_() {
     awardMinimumTournaments: values.get(CONFIG_SETTINGS.awardMinimumTournaments.label) ?? "",
   };
 }
-
-/**
- * formula expression that reads a setting's value from the Config tab
- * so sheet formulas use the same setting people edit
- *
- * @param {keyof typeof CONFIG_SETTINGS} key  the setting
- * @returns {string} an expression for use inside formulas, e.g. XLOOKUP("Category", ...)
- */
-function _configValueExpression_(key) {
-  const labels = _columnBelowHeader_(CONFIG_SHEET, CONFIG_HEADERS.indexOf("Setting") + 1);
-  const values = _columnBelowHeader_(CONFIG_SHEET, CONFIG_HEADERS.indexOf("Value") + 1);
-  return `XLOOKUP("${CONFIG_SETTINGS[key].label}", ${labels}, ${values})`;
-}
