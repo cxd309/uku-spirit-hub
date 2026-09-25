@@ -61,6 +61,8 @@ const ISSUE_THRESHOLDS = Object.freeze({
   lowAverageBelow: 8,
   monitoringAverageBelow: 9,
   monitoringBreaches: 2,
+  categoryMinimum: 0,
+  singleLowScoreBelow: 6,
 });
 
 /**
@@ -104,6 +106,14 @@ const ISSUE_CATEGORIES = Object.freeze({
   lowAverage: {
     code: "LOW-AVERAGE",
     label: `Average score below ${ISSUE_THRESHOLDS.lowAverageBelow} at a tournament`,
+  },
+  categoryMinimum: {
+    code: "MIN-CATEGORY",
+    label: `Received ${ISSUE_THRESHOLDS.categoryMinimum} in a category`,
+  },
+  singleLowScore: {
+    code: "SINGLE-LOW-SCORE",
+    label: `Received a score below ${ISSUE_THRESHOLDS.singleLowScoreBelow}`,
   },
   monitoring: {
     code: "MONITORING",
@@ -183,7 +193,11 @@ function _responseTotal_(response) {
 /**
  * run the per-response checks over every response
  * pure, no google calls
- * skips events that are not included, and international events
+ * skips events that are not included
+ * min category and single low score are about the receiving team
+ *   not in the policy, extra checks for the committee
+ *   also run for international events, for awareness
+ * the comment checks skip international events
  *   comments are not available and the scoring teams are not UKU teams
  *
  * @param {ResponseRecord[]} responses  all responses
@@ -198,9 +212,26 @@ function _responseIssueHits_(responses, events) {
 
   for (const r of responses) {
     const event = eventById.get(r.fileId);
-    if (!event || !event.include || event.international) continue;
+    if (!event || !event.include) continue;
 
     const total = _responseTotal_(r);
+
+    const minimums = SCORE_KEYS.filter((key) => r[key] === ISSUE_THRESHOLDS.categoryMinimum);
+    if (minimums.length > 0) {
+      hits.push({
+        category: "categoryMinimum",
+        event,
+        team: r.receiver,
+        other: r.scorer,
+        text: minimums.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", "),
+        response: r,
+      });
+    }
+    if (total < ISSUE_THRESHOLDS.singleLowScoreBelow) {
+      hits.push({ category: "singleLowScore", event, team: r.receiver, other: r.scorer, text: `Total ${total}`, response: r });
+    }
+
+    if (event.international) continue;
 
     if (r.comment === "") {
       if (total > ISSUE_THRESHOLDS.commentTotalAbove || total < ISSUE_THRESHOLDS.commentTotalBelow) {
@@ -243,6 +274,7 @@ function _responseIssueHits_(responses, events) {
  * text for the Details cell of one per-response issue
  * a count, then one block per response
  *   comments are quoted in full, scores are listed
+ *   "From" when the team received the response, "To" when the team gave it
  *
  * @param {IssueHit[]} hits  every hit for this issue, all from the same check and event
  * @returns {string} the details text
@@ -251,7 +283,11 @@ function _issueDetails_(hits) {
   const first = hits[0];
   const isComment = first.category === "dangerousPlay";
   const count = `Number of ${isComment ? "comments" : "scores"}: ${hits.length}`;
-  const blocks = hits.map((hit) => isComment ? `From ${hit.other}:\n"${hit.text}"` : `To ${hit.other}:\n${hit.text}`);
+  const blocks = hits.map((hit) => {
+    const received = _teamKey_(hit.team) === _teamKey_(hit.response.receiver);
+    const text = isComment ? `"${hit.text}"` : hit.text;
+    return `${received ? "From" : "To"} ${hit.other}:\n${text}`;
+  });
   return `${count}\n\n${blocks.join("\n\n")}`;
 }
 
