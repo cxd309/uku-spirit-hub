@@ -22,7 +22,7 @@ const SCORE_KEYS = Object.freeze(
 );
 
 /**
- * 0-based column index of each breakdown column, keyed like BREAKDOWN-HEADERS
+ * 0-based column index of each breakdown column, keyed like BREAKDOWN_HEADERS
  *
  * @typedef {Record<keyof typeof BREAKDOWN_HEADERS, number>} BreakdownColumns
  */
@@ -160,8 +160,8 @@ function _parseBreakdownRows_(values, columns) {
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const sourceRow = i + 1;
-    const scorer = String(row[columns.yourTeam]).trim();
-    const receiver = String(row[columns.opponentTeam]).trim();
+    const scorer = _tidyTeamName_(row[columns.yourTeam]);
+    const receiver = _tidyTeamName_(row[columns.opponentTeam]);
     const comment = String(row[columns.comments]).trim();
 
     const isBlank = !scorer && !receiver && !comment && SCORE_KEYS.every((k) => row[columns[k]] === "");
@@ -200,4 +200,17 @@ function _parseBreakdownRows_(values, columns) {
     });
   }
   return { responses: responses, problems: problems };
+}
+
+/**
+ * tidy team name so the same team always has the same text
+ * curly apostrophes -> straight
+ * runs of whitespace -> single space
+ * trimmed
+ *
+ * @param {unknown} value  cell value
+ * @returns {string} the tidied name
+ */
+function _tidyTeamName_(value) {
+  return String(value).replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, " ").trim();
 }
