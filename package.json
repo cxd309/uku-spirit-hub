@@ -1,5 +1,5 @@
 {
-  "name": "uku-sotg-hub",
+  "name": "uku-spirit-hub",
   "private": true,
   "scripts": {
     "typecheck": "tsc -p jsconfig.json"
