@@ -73,3 +73,29 @@ function _columnLetter_(column) {
   }
   return letters;
 }
+
+/**
+ * absolute whole-column reference to another tab, e.g. 'Responses'!$C:$C
+ *
+ * @param {string} sheetName  tab name
+ * @param {number} column    1-based column number
+ * @returns {string} the reference, for use inside formulas
+ */
+function _wholeColumn_(sheetName, column) {
+  const letter = _columnLetter_(column);
+  return `'${sheetName}'!$${letter}:$${letter}`;
+}
+
+/**
+ * absolute reference to a column of another tab, below its header row
+ * e.g. 'Teams'!$A$2:$A
+ * use when the header text must not be counted as data
+ *
+ * @param {string} sheetName  tab name
+ * @param {number} column     1-based column number
+ * @returns {string} the reference, for use inside formulas
+ */
+function _columnBelowHeader_(sheetName, column) {
+  const letter = _columnLetter_(column);
+  return `'${sheetName}'!$${letter}$2:$${letter}`;
+}

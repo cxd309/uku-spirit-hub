@@ -4,22 +4,20 @@
 const RESPONSES_SHEET = "Responses";
 
 /**
- * header of the formula column after the data columns
- * its values are looked up from the Events tab by a single array formula
- */
-const RESPONSE_TOURNAMENT_HEADER = "Tournament";
-
-/**
  * responses tab columns, in order
  * keys are the names used in code
  * values are the header text
+ * columns listed in RESPONSE_FORMULAS are formulas, the rest hold ResponseRecord values
  */
 const RESPONSE_HEADERS = Object.freeze(
   /** @type {const} */ ({
     fileId: "File ID",
     sourceRow: "Source Row",
     scorer: "Scoring Team",
+    scorerClub: "Scoring Club",
     receiver: "Receiving Team",
+    receiverClub: "Receiving Club",
+    tournament: "Tournament",
     rules: "Rules",
     fouls: "Fouls",
     fairMindedness: "Fair-Mindedness",
@@ -28,6 +26,19 @@ const RESPONSE_HEADERS = Object.freeze(
     comment: "Comment",
   }),
 );
+
+/**
+ * formula columns of the Responses tab:
+ * for each, a function building that column's formula for a given sheet row
+ * every row gets its own formula, so sorting or filtering the tab never breaks them
+ *
+ * @type {Readonly<Partial<Record<keyof typeof RESPONSE_HEADERS, function(number): string>>>}
+ */
+const RESPONSE_FORMULAS = Object.freeze({
+  scorerClub: (/** @type {number} */ row) => _responseClubFormula_(row, "scorer"),
+  receiverClub: (/** @type {number} */ row) => _responseClubFormula_(row, "receiver"),
+  tournament: _tournamentFormula_,
+});
 
 /**
  * keys of ResponseRecord in column order
@@ -72,19 +83,22 @@ function _responseFromRow_(row) {
 }
 
 /**
- * @param {ResponseRecord} response  the record
+ * @param {ResponseRecord}  response  the record
+ * @param {number}          row       1-based sheet row it will be written to
  * @returns {unknown[]} values in RESPONSE_KEYS order
  */
-function _responseToRow_(response) {
-  return RESPONSE_KEYS.map((key) => response[key]);
+function _responseToRow_(response, row) {
+  return RESPONSE_KEYS.map((key) => {
+    const formula = RESPONSE_FORMULAS[key];
+    return formula ? formula(row) : response[/** @type {keyof ResponseRecord} */ (key)];
+  });
 }
-
 /**
  * @returns {GoogleAppsScript.Spreadsheet.Sheet} the responses tab, created on first use
  */
 function _getResponsesSheet_() {
   /** @type {readonly string[]} */
-  const headers = [...Object.values(RESPONSE_HEADERS), RESPONSE_TOURNAMENT_HEADER];
+  const headers = Object.values(RESPONSE_HEADERS);
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers).sheet;
 }
 
@@ -109,25 +123,23 @@ function _readResponses_(sheet) {
  * @param {ResponseRecord[]}                   responses  all responses, in display order
  */
 function _writeResponses_(sheet, responses) {
-  const tournamentColumn = RESPONSE_KEYS.length + 1;
-  _fitSheet_(sheet, 1 + responses.length, tournamentColumn);
-  if (responses.length > 0) {
-    sheet.getRange(2, 1, responses.length, RESPONSE_KEYS.length).setValues(responses.map(_responseToRow_));
-  }
-  sheet.getRange(2, tournamentColumn).setFormula(_tournamentFormula_());
+  _fitSheet_(sheet, 1 + responses.length, RESPONSE_KEYS.length);
+  if (responses.length === 0) return;
+  sheet
+    .getRange(2, 1, responses.length, RESPONSE_KEYS.length)
+    .setValues(responses.map((r, i) => _responseToRow_(r, i + 2)));
 }
 
 /**
- * build the array formula that fills the Tournament column:
- * for each response, the event's Name Override if set, otherwise its Default Name
+ * tournament formula for one Responses row
+ * the event's Name Override if set, otherwise its Default Name
+ * looked up by file id on the Events tab
  *
- * column letters are derived from RESPONSE_KEYS and EVENT_KEYS,
- * so reordering either header list keeps the formula correct.
- *
- * @returns {string} the formula for row 2 of the Tournament column.
+ * @param {number} row  1-based sheet row the formula is for
+ * @returns {string} the formula
  */
-function _tournamentFormula_() {
-  const id = _columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1);
+function _tournamentFormula_(row) {
+  const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
   /** @param {keyof typeof EVENT_HEADERS} key */
   const events = (key) => {
     const letter = _columnLetter_(EVENT_KEYS.indexOf(key) + 1);
