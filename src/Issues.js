@@ -9,7 +9,7 @@ const ISSUES_SHEET = "Issues";
  */
 const ISSUES_INFO = "Spirit issues found in the results, one row per issue per team per tournament\n\n"
   + "User editable columns:\n"
-  + "- Status: NEW, Contacted or Closed\n"
+  + "- Status: NEW, IN PROGRESS or CLOSED\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
   + "New issues are added on each import, existing rows are never changed, so sort and filter freely";
@@ -52,6 +52,9 @@ const ISSUE_THRESHOLDS = Object.freeze({
   commentTotalAbove: 14,
   commentTotalBelow: 6,
   commentCategoryScores: Object.freeze([0, 4]),
+  lowScoreAtOrBelow: 6,
+  lowScoreCount: 2,
+  lowAverageBelow: 8,
 });
 
 /**
@@ -83,6 +86,19 @@ const ISSUE_CATEGORIES = Object.freeze({
     code: "DANGEROUS-PLAY",
     label: "Dangerous play mentioned",
   },
+  notSubmitted: {
+    code: "NOT-SUBMITTED",
+    label: "Spirit scores not submitted",
+  },
+  twoLowScores: {
+    code: "LOW-SCORES",
+    label:
+      `${ISSUE_THRESHOLDS.lowScoreCount} or more scores of ${ISSUE_THRESHOLDS.lowScoreAtOrBelow} or below at a tournament`,
+  },
+  lowAverage: {
+    code: "LOW-AVERAGE",
+    label: `Average score below ${ISSUE_THRESHOLDS.lowAverageBelow} at a tournament`,
+  },
 });
 
 /**
@@ -113,6 +129,26 @@ const ISSUE_CATEGORIES = Object.freeze({
  */
 
 /**
+ * an issue before it has an id, club, date or status
+ *
+ * @typedef {Object} IssueDraft
+ * @property {keyof typeof ISSUE_CATEGORIES} category  which check
+ * @property {EventRecord}                   event     the event it is about
+ * @property {string}                        team      team the issue is about
+ * @property {string}                        details   text for the Details cell
+ */
+
+/**
+ * total of the five category scores in a response
+ *
+ * @param {ResponseRecord} response  the response
+ * @returns {number} the total
+ */
+function _responseTotal_(response) {
+  return SCORE_KEYS.reduce((sum, key) => sum + response[key], 0);
+}
+
+/**
  * run the per-response checks over every response
  * pure, no google calls
  * skips events that are not included, and international events
@@ -132,7 +168,7 @@ function _responseIssueHits_(responses, events) {
     const event = eventById.get(r.fileId);
     if (!event || !event.include || event.international) continue;
 
-    const total = SCORE_KEYS.reduce((sum, key) => sum + r[key], 0);
+    const total = _responseTotal_(r);
 
     if (r.comment === "") {
       if (total > ISSUE_THRESHOLDS.commentTotalAbove || total < ISSUE_THRESHOLDS.commentTotalBelow) {
@@ -157,9 +193,8 @@ function _responseIssueHits_(responses, events) {
 }
 
 /**
- * text for the Details cell of one issue
- * INTERNATIONAL first when the tournament is international
- * then a count, then one block per response
+ * text for the Details cell of one per-response issue
+ * a count, then one block per response
  *   comments are quoted in full, scores are listed
  *
  * @param {IssueHit[]} hits  every hit for this issue, all from the same check and event
@@ -168,37 +203,137 @@ function _responseIssueHits_(responses, events) {
 function _issueDetails_(hits) {
   const first = hits[0];
   const isComment = first.category === "dangerousPlay";
-  const header = first.event.international ? "INTERNATIONAL\n\n" : "";
   const count = `Number of ${isComment ? "comments" : "scores"}: ${hits.length}`;
   const blocks = hits.map((hit) => isComment ? `From ${hit.other}:\n"${hit.text}"` : `To ${hit.other}:\n${hit.text}`);
-  return `${header}${count}\n\n${blocks.join("\n\n")}`;
+  return `${count}\n\n${blocks.join("\n\n")}`;
 }
 
 /**
- * group hits into issues, one per check per team per tournament
+ * the issue id for a check, event and team
+ * readable, and the same every run so an issue is never added twice
+ *
+ * @param {keyof typeof ISSUE_CATEGORIES} category  which check
+ * @param {EventRecord}                   event     the event
+ * @param {string}                        team      the team
+ * @returns {string} e.g. "LOW-AVERAGE | 2025-11-01 ELUXIR | Durham 1"
+ */
+function _issueId_(category, event, team) {
+  const date = event.date ? _isoDate_(event.date) : "no date";
+  return `${ISSUE_CATEGORIES[category].code} | ${date} ${event.tournament} | ${team}`;
+}
+
+/**
+ * group per-response hits into drafts, one per check per team per tournament
  * pure, never modifies its arguments
  *
- * @param {IssueHit[]}          hits    hits from the checks
- * @param {Map<string, string>} clubOf  team key → club, from the Teams tab
- * @param {Date}                today   date to record as Date Created
- * @returns {IssueRecord[]} issues in the order they were first hit
+ * @param {IssueHit[]} hits  hits from the per-response checks
+ * @returns {IssueDraft[]} drafts in the order they were first hit
  */
-function _groupIssueHits_(hits, clubOf, today) {
+function _draftsFromHits_(hits) {
   /** @type {Map<string, IssueHit[]>} */
   const hitsById = new Map();
   for (const hit of hits) {
-    const eventLabel = `${hit.event.date ? _isoDate_(hit.event.date) : "no date"} ${hit.event.tournament}`;
-    const issueId = `${ISSUE_CATEGORIES[hit.category].code} | ${eventLabel} | ${hit.team}`;
-    hitsById.set(issueId, [...(hitsById.get(issueId) ?? []), hit]);
+    const id = _issueId_(hit.category, hit.event, hit.team);
+    hitsById.set(id, [...(hitsById.get(id) ?? []), hit]);
   }
-
-  return [...hitsById].map(([issueId, grouped]) => ({
-    issueId: issueId,
-    club: clubOf.get(_teamKey_(grouped[0].team)) ?? "",
-    category: ISSUE_CATEGORIES[grouped[0].category].label,
+  return [...hitsById.values()].map((grouped) => ({
+    category: grouped[0].category,
+    event: grouped[0].event,
     team: grouped[0].team,
-    tournaments: grouped[0].event.tournament,
     details: _issueDetails_(grouped),
+  }));
+}
+
+/**
+ * run the per-tournament checks for every team at every included event
+ * pure, no google calls
+ * low scores and low average also run for international events, for awareness
+ * scores not submitted is skipped for international events
+ *   the scoring teams there are not UKU teams
+ *
+ * @param {ResponseRecord[]} responses  all responses, in date order
+ * @param {EventRecord[]}    events     all events, in date order
+ * @returns {IssueDraft[]} one draft per check per team per event that triggered
+ */
+function _teamEventIssueDrafts_(responses, events) {
+  /** @type {IssueDraft[]} */
+  const drafts = [];
+
+  for (const event of events.filter((e) => e.include)) {
+    const atEvent = responses.filter((r) => r.fileId === event.fileId);
+
+    /** @type {Map<string, ResponseRecord[]>} */
+    const receivedBy = new Map();
+    for (const r of atEvent) {
+      const key = _teamKey_(r.receiver);
+      receivedBy.set(key, [...(receivedBy.get(key) ?? []), r]);
+    }
+
+    for (const received of receivedBy.values()) {
+      const team = received[0].receiver;
+      const totals = received.map(_responseTotal_);
+      const scoreLines = received.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
+
+      const low = received.filter((r) => _responseTotal_(r) <= ISSUE_THRESHOLDS.lowScoreAtOrBelow);
+      if (low.length >= ISSUE_THRESHOLDS.lowScoreCount) {
+        const lines = low.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
+        drafts.push({
+          category: "twoLowScores",
+          event,
+          team,
+          details: `Number of scores: ${low.length}\n\n${lines.join("\n\n")}`,
+        });
+      }
+
+      const average = totals.reduce((a, b) => a + b, 0) / totals.length;
+      if (average < ISSUE_THRESHOLDS.lowAverageBelow) {
+        const heading = `Average: ${average.toFixed(2)} from ${totals.length} scores`;
+        drafts.push({ category: "lowAverage", event, team, details: `${heading}\n\n${scoreLines.join("\n\n")}` });
+      }
+
+      if (!event.international) {
+        const key = _teamKey_(team);
+        const submitted = atEvent.filter((r) => _teamKey_(r.scorer) === key);
+        /** @type {string[]} */
+        const missing = [];
+        for (const opponent of new Set(received.map((r) => _teamKey_(r.scorer)))) {
+          const from = received.filter((r) => _teamKey_(r.scorer) === opponent);
+          const to = submitted.filter((r) => _teamKey_(r.receiver) === opponent).length;
+          for (let i = to; i < from.length; i++) missing.push(from[0].scorer);
+        }
+        if (missing.length > 0) {
+          const heading = `Received ${received.length}, submitted ${submitted.length}`;
+          drafts.push({
+            category: "notSubmitted",
+            event,
+            team,
+            details: `${heading}\n\nMissing for:\n${missing.join("\n")}`,
+          });
+        }
+      }
+    }
+  }
+  return drafts;
+}
+
+/**
+ * turn drafts into Issues rows
+ * pure, never modifies its arguments
+ * INTERNATIONAL is put above the details for international tournaments
+ *
+ * @param {IssueDraft[]}        drafts  drafts from every check
+ * @param {Map<string, string>} clubOf  team key → club, from the Teams tab
+ * @param {Date}                today   date to record as Date Created
+ * @returns {IssueRecord[]} issues in the order given
+ */
+function _issueRecords_(drafts, clubOf, today) {
+  return drafts.map((draft) => ({
+    issueId: _issueId_(draft.category, draft.event, draft.team),
+    club: clubOf.get(_teamKey_(draft.team)) ?? "",
+    category: ISSUE_CATEGORIES[draft.category].label,
+    team: draft.team,
+    tournaments: draft.event.tournament,
+    details: `${draft.event.international ? "INTERNATIONAL\n\n" : ""}${draft.details}`,
     dateCreated: today,
     status: ISSUE_STATUSES[0],
     committeeMember: "",

@@ -105,8 +105,11 @@ function _importEvents_() {
   );
   SpreadsheetApp.flush();
   _rebuildClubs_();
-  const hits = _responseIssueHits_(responses, updatedEvents);
-  const newIssues = _appendIssues_(_groupIssueHits_(hits, _readTeamClubs_(), new Date()));
+  const drafts = [
+    ..._draftsFromHits_(_responseIssueHits_(responses, updatedEvents)),
+    ..._teamEventIssueDrafts_(responses, updatedEvents),
+  ];
+  const newIssues = _appendIssues_(_issueRecords_(drafts, _readTeamClubs_(), new Date()));
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
   const imported_ = results.size - failed;
