@@ -119,7 +119,3 @@ Conventions:
 - Checks and calculations are pure functions with no Google calls, so they can be tested outside Apps Script
 - Formula columns get a formula on every row (not an ARRAYFORMULA), so tabs can be sorted
 - Every tab has an info row, a header row, then data from row 3 (`INFO_ROW`, `HEADER_ROW`, `DATA_ROW`)
-
-## Legacy
-
-`legacy/` keeps the old merge script (`code.gs`), the R award script (`SOTG.award.code.R`) and the published policy for reference. Data files are git-ignored.
