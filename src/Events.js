@@ -7,9 +7,9 @@ const EVENTS_SHEET = "Events";
  * text for the info row above the Events table
  * what the tab is, what to edit, how it refreshes
  */
-const EVENTS_INFO = "All the found spirit results files in the folder for this category (e.g. University, Club)\n\n"
+const EVENTS_INFO = "All the found spirit results files in the folder for this category (e.g. University, Club)\n"
+  + "Each results file must be in a folder named \"YYYYMMDD Tournament name\", rename the folder to rename the tournament\n\n"
   + "User editable columns:\n"
-  + "- Name Override: set a name for the tournament\n"
   + "- Status: filled on refresh, set to REFRESH to re-import results\n"
   + "- International: is this an international tournament\n"
   + "- Import: Should these results be inluded in spirit award and issue tracking\n\n"
@@ -25,8 +25,8 @@ const EVENT_HEADERS = Object.freeze(
     fileId: "File ID",
     fileName: "File Name",
     path: "Path",
-    defaultName: "Default Name",
-    nameOverride: "Name Override",
+    date: "Date",
+    tournament: "Tournament",
     status: "Status",
     message: "Message",
     international: "International",
@@ -57,8 +57,8 @@ const EVENT_STATUS = Object.freeze(
  * @property {string}    fileId           Drive file ID (the key).
  * @property {string}    fileName         File name.
  * @property {string}    path             Folder path below the category, joined with " / ".
- * @property {string}    defaultName      Tournament name used when there is no override (the folder name).
- * @property {string}    nameOverride     Tournament name typed by a person; "" if none.
+ * @property {Date|null} date             tournament date from the folder name, null if the folder name is invalid
+ * @property {string}    tournament       tournament name from the folder name, "" if the folder name is invalid
  * @property {string}    status           One of EVENT_STATUS.
  * @property {string}    message          Explanation for ERROR / MISSING; "" otherwise.
  * @property {boolean}   international    Ticked for international events.
@@ -102,8 +102,8 @@ function _eventFromRow_(row) {
     fileId: String(cell("fileId")),
     fileName: String(cell("fileName")),
     path: String(cell("path")),
-    defaultName: String(cell("defaultName")),
-    nameOverride: String(cell("nameOverride")).trim(),
+    date: cell("date") instanceof Date ? /** @type {Date} */ (cell("date")) : null,
+    tournament: String(cell("tournament")),
     status: String(cell("status")).trim().toUpperCase(),
     message: String(cell("message")),
     international: cell("international") === true,
@@ -166,6 +166,9 @@ function _writeEvents_(sheet, events) {
   const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
   sheet.getRange(DATA_ROW, column("international"), events.length, 1).setDataValidation(checkbox);
   sheet.getRange(DATA_ROW, column("include"), events.length, 1).setDataValidation(checkbox);
+
+  sheet.getRange(DATA_ROW, column("date"), events.length, 1).setNumberFormat("yyyy-mm-dd");
+  _highlightDuplicateTournaments_(sheet, events.length);
 }
 
 /**
@@ -213,9 +216,8 @@ function _syncEvents_(existing, files) {
     return {
       ...event,
       fileName: file.name,
-      folderId: file.folderId,
       path: file.path.join(" / "),
-      defaultName: file.folderName,
+      ..._folderFields_(file.folderName),
       status: status,
       message: message,
     };
@@ -226,10 +228,8 @@ function _syncEvents_(existing, files) {
     .map((f) => ({
       fileId: f.id,
       fileName: f.name,
-      folderId: f.folderId,
       path: f.path.join(" / "),
-      defaultName: f.folderName,
-      nameOverride: "",
+      ..._folderFields_(f.folderName),
       status: EVENT_STATUS.NEW,
       message: "",
       international: false,
@@ -241,13 +241,74 @@ function _syncEvents_(existing, files) {
 }
 
 /**
- * the tournament name to show: the override if set, otherwise the default name
- *
- * @param {EventRecord} event  the event
- * @returns {string} display name
+ * pattern every event folder name must match
+ * YYYYMMDD, one or more spaces, then the tournament name
  */
-function _tournamentName_(event) {
-  return event.nameOverride || event.defaultName;
+const FOLDER_NAME_PATTERN = /^(\d{4})(\d{2})(\d{2})\s+(.+)$/;
+
+/**
+ * result of reading an event folder name
+ *
+ * @typedef {{ok: true, date: Date, tournament: string} | {ok: false, reason: string}} FolderNameResult
+ */
+
+/**
+ * read the date and tournament name from an event folder name
+ * pure, no google calls
+ * the date must be a real calendar date, e.g. 20260000 is rejected
+ *
+ * @param {string} name  folder name, e.g. "20251101 ELUXIR"
+ * @returns {FolderNameResult} date and tournament, or why the name is invalid
+ */
+function _parseFolderName_(name) {
+  const match = FOLDER_NAME_PATTERN.exec(name.trim());
+  if (!match) {
+    return { ok: false, reason: `folder name "${name}" must be "YYYYMMDD Tournament name"` };
+  }
+  const [, year, month, day, tournament] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  if (date.getFullYear() !== Number(year) || date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day)) {
+    return { ok: false, reason: `folder name "${name}" starts with ${year}${month}${day}, which is not a real date` };
+  }
+  return { ok: true, date: date, tournament: tournament.trim() };
+}
+
+/**
+ * date and tournament columns for an event, from its folder name
+ * both blank when the folder name is invalid
+ *
+ * @param {string} folderName  name of the folder containing the results file
+ * @returns {{date: Date|null, tournament: string}} values for the Date and Tournament columns
+ */
+function _folderFields_(folderName) {
+  const folder = _parseFolderName_(folderName);
+  return folder.ok ? { date: folder.date, tournament: folder.tournament } : { date: null, tournament: "" };
+}
+
+/**
+ * highlight tournament names that appear more than once in red
+ * replaces only rules on the Tournament column, other conditional formatting is kept
+ * matching is case-insensitive, blanks are never highlighted
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the Events tab
+ * @param {number}                             rows   number of event rows
+ */
+function _highlightDuplicateTournaments_(sheet, rows) {
+  const column = EVENT_KEYS.indexOf("tournament") + 1;
+  const letter = _columnLetter_(column);
+  const range = sheet.getRange(DATA_ROW, column, rows, 1);
+  const rule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(
+      `=AND($${letter}${DATA_ROW}<>"", COUNTIF($${letter}$${DATA_ROW}:$${letter}, $${letter}${DATA_ROW})>1)`,
+    )
+    .setBackground("#f4c7c3")
+    .setFontColor("#a50e0e")
+    .setRanges([range])
+    .build();
+  const others = sheet
+    .getConditionalFormatRules()
+    .filter((r) => !r.getRanges().some((rg) => rg.getColumn() === column));
+  sheet.setConditionalFormatRules([...others, rule]);
 }
 
 /**

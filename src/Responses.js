@@ -140,8 +140,7 @@ function _writeResponses_(sheet, responses) {
 
 /**
  * tournament formula for one Responses row
- * the event's Name Override if set, otherwise its Default Name
- * looked up by file id on the Events tab
+ * looks the event up by file id on the Events tab
  *
  * @param {number} row  1-based sheet row the formula is for
  * @returns {string} the formula
@@ -150,8 +149,7 @@ function _tournamentFormula_(row) {
   const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
   /** @param {keyof typeof EVENT_HEADERS} key */
   const events = (key) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-  return `=IFERROR(LET(o, XLOOKUP(${id}, ${events("fileId")}, ${events("nameOverride")}), `
-    + `IF(o<>"", o, XLOOKUP(${id}, ${events("fileId")}, ${events("defaultName")}))), "(unknown event)")`;
+  return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("tournament")}), "(unknown event)")`;
 }
 
 /**

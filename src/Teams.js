@@ -8,7 +8,7 @@ const TEAMS_SHEET = "Teams";
  * what the tab is, what to edit, how it refreshes
  */
 const TEAMS_INFO = "Every team that has given or recieved a spirit score (international clubs excluded)\n\n"
-  + +"Suggested Club name is generated using the selected rules in the Name Rules tab this is the default \"best guess\" at a club\n\n"
+  + "Suggested Club name is generated using the selected rules in the Name Rules tab this is the default \"best guess\" at a club\n\n"
   + "To override the club use the Club Override column\n\n"
   + "This table will be refreshed with the Responses table";
 

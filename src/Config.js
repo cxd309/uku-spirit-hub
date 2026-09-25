@@ -8,7 +8,7 @@ const CONFIG_SHEET = "Config";
  * text for the info row above the Config table
  * what the tab is, what to edit, how it refreshes
  */
-const CONFIG_INFO = "Settings for the Hub\n\n"
+const CONFIG_INFO = `Settings for SpiritHub v${HUB_VERSION}\n\n`
   + "Only edit the values column";
 
 /**

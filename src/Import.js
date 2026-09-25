@@ -24,6 +24,9 @@
  */
 function _importFile_(event, file) {
   try {
+    const folder = _parseFolderName_(file.folderName);
+    if (!folder.ok) return { ok: false, reason: folder.reason };
+
     const found = _findBreakdownSheet_(SpreadsheetApp.openById(file.id));
     if (!found.ok) return { ok: false, reason: found.reason };
 
@@ -32,7 +35,6 @@ function _importFile_(event, file) {
       ok: true,
       responses: responses.map((r) => ({
         fileId: event.fileId,
-        tournament: _tournamentName_(event),
         sourceRow: r.sourceRow,
         scorer: r.scorer,
         receiver: r.receiver,
