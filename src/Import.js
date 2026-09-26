@@ -105,6 +105,8 @@ function _refreshResults_() {
     _writeTeams_(
       teamsSheet,
       _mergeTeams_(_readTeams_(teamsSheet), _teamNamesFromResponses_(responses, internationalIds)),
+      responses,
+      _sortEvents_(updatedEvents),
     ));
   _timed_("rebuild clubs", () => {
     SpreadsheetApp.flush();

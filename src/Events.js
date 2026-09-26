@@ -327,6 +327,15 @@ function _refreshTournaments_() {
   _timed_("write tournaments", () => _writeEvents_(sheet, events));
   _rememberCategory_(category);
 
+  // tournament names come from folder names, so Teams and Clubs pick up any renames
+  const teamsSheet = _getTeamsSheet_();
+  const responses = _readResponses_(_getResponsesSheet_());
+  _timed_("write teams", () => _writeTeams_(teamsSheet, _readTeams_(teamsSheet), responses, events));
+  _timed_("rebuild clubs", () => {
+    SpreadsheetApp.flush();
+    _rebuildClubs_();
+  });
+
   /** @type {Record<string, number>} */
   const counts = {};
   for (const e of events) {

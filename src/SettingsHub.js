@@ -40,7 +40,9 @@ const HUB_SECTION = Object.freeze({
 function _readHubSettings_() {
   const category = _readSettingValues_(HUB_SECTION).get(HUB_SETTINGS.category.label) ?? "";
   if (category === "") {
-    throw new Error(`Set "${HUB_SETTINGS.category.label}" on the ${SETTINGS_SHEET} tab (SpiritHub > SpiritHub Settings)`);
+    throw new Error(
+      `Set "${HUB_SETTINGS.category.label}" on the ${SETTINGS_SHEET} tab (SpiritHub > SpiritHub Settings)`,
+    );
   }
   return { category };
 }

@@ -8,12 +8,10 @@ const CLUBS_SHEET = "Clubs";
  * what the tab is, what to edit, how it refreshes
  */
 const CLUBS_INFO = "Every known club and its teams, generated from Teams tab\n\n"
-  + "DO NOT EDIT this table, it is refreshed every time there is a change in the Teams tab\n\n"
+  + "DO NOT EDIT this table, it is refreshed by Refresh Tournaments, Refresh Results, and whenever a Club Override or Name Rule changes\n\n"
   + "Scores, ranks and the award are on the Club Statistics tab";
 /**
- * clubs tab columns, in order
- * columns listed in CLUB_FORMULAS are formulas
- * the rest hold ClubRecord values
+ * clubs tab columns, in order, all plain values written by the script
  */
 const CLUB_HEADERS = Object.freeze(
   /** @type {const} */ ({
@@ -30,57 +28,14 @@ const CLUB_HEADERS = Object.freeze(
 const CLUB_KEYS = /** @type {(keyof typeof CLUB_HEADERS)[]} */ (Object.keys(CLUB_HEADERS));
 
 /**
- * one club, as stored in js
+ * one row of the Clubs tab
  *
  * @typedef {Object} ClubRecord
- * @property {string} club  club name
+ * @property {string} club       club name
+ * @property {string} teams      its teams, comma separated
+ * @property {string} events     tournaments any of its teams played in, comma separated, in date order
+ * @property {number} teamCount  how many teams
  */
-
-/**
- * references shared by the Clubs formulas for one row
- *
- * @typedef {Object} ClubFormulaRefs
- * @property {string}                                          club       this row's club cell, e.g. $A5
- * @property {function(keyof typeof TEAM_HEADERS): string}     teams      a Teams column below its header
- * @property {function(keyof typeof RESPONSE_HEADERS): string} responses  a Responses column below its header
- */
-
-/**
- * build the references used by the Clubs formulas for one row
- *
- * @param {number} row  1-based sheet row
- * @returns {ClubFormulaRefs} references for that row
- */
-function _clubFormulaRefs_(row) {
-  /** @param {keyof typeof TEAM_HEADERS} key */
-  const teams = (key) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
-  /** @param {keyof typeof RESPONSE_HEADERS} key */
-  const responses = (key) => _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
-  const club = `$${_columnLetter_(CLUB_KEYS.indexOf("club") + 1)}${row}`;
-  return { club, teams, responses };
-}
-
-/**
- * formula columns of the Clubs tab
- * for each, a function building that column's formula for a given sheet row
- *
- * @type {Readonly<Partial<Record<keyof typeof CLUB_HEADERS, function(number): string>>>}
- */
-const CLUB_FORMULAS = Object.freeze({
-  teams: (/** @type {number} */ row) => {
-    const { club, teams } = _clubFormulaRefs_(row);
-    return `=IFERROR(TEXTJOIN(", ", TRUE, FILTER(${teams("team")}, ${teams("club")}=${club})), "")`;
-  },
-  teamCount: (/** @type {number} */ row) => {
-    const { club, teams } = _clubFormulaRefs_(row);
-    return `=COUNTIF(${teams("club")}, ${club})`;
-  },
-  events: (/** @type {number} */ row) => {
-    const { club, responses } = _clubFormulaRefs_(row);
-    return `=IFERROR(TEXTJOIN(", ", TRUE, UNIQUE(FILTER(${responses("tournament")}, `
-      + `(${responses("scorerClub")}=${club})+(${responses("receiverClub")}=${club})))), "")`;
-  },
-});
 
 /**
  * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Clubs tab, created on first use
@@ -112,32 +67,33 @@ function _clubNames_(clubValues) {
 }
 
 /**
- * convert a ClubRecord into a row of values, with formulas in formula columns
+ * every club with its teams and tournaments
+ * pure, never modifies its arguments
+ * club names are matched ignoring case, the first spelling seen is kept
  *
- * @param {ClubRecord} club  the record
- * @param {number}     row   1-based sheet row it will be written to
- * @returns {unknown[]} values in CLUB_KEYS order
+ * @param {{team: string, club: string}[]} teamClubs  every team and its club, in display order
+ * @param {ResponseRecord[]}                responses  all responses
+ * @param {EventRecord[]}                   events     all events, in date order
+ * @returns {ClubRecord[]} one record per club, sorted A–Z
  */
-function _clubToRow_(club, row) {
-  return CLUB_KEYS.map((key) => {
-    const formula = CLUB_FORMULAS[key];
-    return formula ? formula(row) : club[/** @type {keyof ClubRecord} */ (key)];
+function _clubRecords_(teamClubs, responses, events) {
+  const clubKeyOf = new Map(teamClubs.map((t) => [_teamKey_(t.team), t.club.toLowerCase()]));
+  const played = _tournamentsPlayed_(responses, events, (team) => clubKeyOf.get(_teamKey_(team)) ?? "");
+  return _clubNames_(teamClubs.map((t) => t.club)).map((club) => {
+    const key = club.toLowerCase();
+    const teams = teamClubs.filter((t) => t.club.toLowerCase() === key).map((t) => t.team);
+    return { club, teams: teams.join(", "), events: played.get(key)?.names.join(", ") ?? "", teamCount: teams.length };
   });
 }
 
 /**
- * rebuild the Clubs tab from the current Club values on the Teams tab
- * one row per club, sorted A–Z, each with its own formulas
+ * rebuild the Clubs tab from the Teams, Results and Tournaments tabs
+ * one row per club, sorted A–Z, plain values so the text is easy to read
  * does not take the lock, callers are responsible
+ * reads the Teams Club formula results, so call SpreadsheetApp.flush() first after writing Teams
  */
 function _rebuildClubs_() {
-  const teamsSheet = _getTeamsSheet_();
-  const teamRows = teamsSheet.getLastRow() - HEADER_ROW;
-  const clubColumn = TEAM_KEYS.indexOf("club") + 1;
-  const clubValues = teamRows < 1
-    ? []
-    : teamsSheet.getRange(DATA_ROW, clubColumn, teamRows, 1).getValues().map((r) => r[0]);
-
-  const clubs = _clubNames_(clubValues).map((name) => ({ club: name }));
-  _writeTable_(_getClubsSheet_(), clubs.map((c, i) => _clubToRow_(c, i + DATA_ROW)), CLUB_KEYS.length);
+  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
+  const clubs = _clubRecords_(_readTeamClubList_(), _readResponses_(_getResponsesSheet_()), events);
+  _writeTable_(_getClubsSheet_(), clubs.map((c) => CLUB_KEYS.map((key) => c[key])), CLUB_KEYS.length);
 }
