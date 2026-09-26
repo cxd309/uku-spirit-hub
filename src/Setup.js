@@ -5,7 +5,7 @@
  * @returns {string[]} tab names
  */
 function _dataTabNames_() {
-  return [ISSUES_SHEET, EVENTS_SHEET, RESPONSES_SHEET, TEAMS_SHEET, CLUBS_SHEET, CLUB_STATS_SHEET];
+  return [ISSUES_SHEET, EVENTS_SHEET, RESPONSES_SHEET, TEAMS_SHEET, CLUBS_SHEET, CLUB_STATS_SHEET, CLUB_REPORT_SHEET];
 }
 
 /**
@@ -34,6 +34,7 @@ function _showSettings_() {
   _getTeamsSheet_();
   _getClubsSheet_();
   _getClubStatsSheet_();
+  _getClubReportSheet_();
   const settings = _getSettingsSheet_();
 
   const blank = ss.getSheetByName("Sheet1");

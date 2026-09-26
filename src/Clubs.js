@@ -96,4 +96,5 @@ function _rebuildClubs_() {
   const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
   const clubs = _clubRecords_(_readTeamClubList_(), _readResponses_(_getResponsesSheet_()), events);
   _writeTable_(_getClubsSheet_(), clubs.map((c) => CLUB_KEYS.map((key) => c[key])), CLUB_KEYS.length);
+  _setClubReportChoices_(clubs.map((c) => c.club));
 }
