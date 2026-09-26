@@ -24,7 +24,7 @@ const DEFAULT_ISSUE_RULES: Readonly<
     description: "Policy: a category scored any of Value 1 needs a comment",
   },
   dangerousPlay: {
-    value1: "dangerous, danger, reckless, unsafe",
+    value1: "dangerous, danger, reckless, unsafe, intentional, cheat, cheating, abuse, swear, swearing, unwarranted",
     value2: "",
     description: "Policy: a comment contains any of the words in Value 1",
   },
