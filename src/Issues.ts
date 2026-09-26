@@ -462,6 +462,44 @@ function _teamEventIssueDrafts_(
 }
 
 /**
+ * one event's responses, indexed for the score columns
+ */
+interface EventScores {
+  /** receiving team key → every response the team received there, in order */
+  received: Map<string, ResponseRecord[]>;
+  /** "scorer key|receiver key" → every response from that scorer to that receiver there, in order */
+  pairs: Map<string, ResponseRecord[]>;
+}
+
+/**
+ * index every response by event, receiving team and scorer → receiver pair
+ * built once per refresh, so each issue looks up its scores instead of searching every response
+ * pure, never modifies its arguments
+ *
+ * @param responses  all responses
+ * @returns file id → that event's responses, indexed
+ */
+function _eventScores_(responses: ResponseRecord[]): Map<string, EventScores> {
+  const byEvent: Map<string, EventScores> = new Map();
+  for (const r of responses) {
+    let scores = byEvent.get(r.fileId);
+    if (!scores) {
+      scores = { received: new Map(), pairs: new Map() };
+      byEvent.set(r.fileId, scores);
+    }
+    const receiver = _teamKey_(r.receiver);
+    const pair = `${_teamKey_(r.scorer)}|${receiver}`;
+    const received = scores.received.get(receiver);
+    if (received) received.push(r);
+    else scores.received.set(receiver, [r]);
+    const between = scores.pairs.get(pair);
+    if (between) between.push(r);
+    else scores.pairs.set(pair, [r]);
+  }
+  return byEvent;
+}
+
+/**
  * the Received, Given and Tournament Average cells for one draft
  * received and given have one value per flagged response, comma separated
  * tournament average has one value per team that received a flagged score
@@ -474,34 +512,34 @@ function _teamEventIssueDrafts_(
  * tournament average: average received at the tournament by each team that received a flagged score
  *   the flagged responses are left out, except for average issues where the full average is the point
  *
- * @param draft      the draft
- * @param responses  all responses
+ * @param draft   the draft
+ * @param scores  every event's responses, from _eventScores_
  * @returns the three cells
  */
 function _issueScoreColumns_(
   draft: IssueDraft,
-  responses: ResponseRecord[],
+  scores: Map<string, EventScores>,
 ): { received: string; given: string; tournamentAverage: string } {
   if (draft.responses.length === 0) return { received: "", given: "", tournamentAverage: "" };
 
-  const atEvent = responses.filter((r) => r.fileId === draft.event.fileId);
-  const isPair = (r: ResponseRecord, scorer: string, receiver: string) =>
-    _teamKey_(r.scorer) === _teamKey_(scorer) && _teamKey_(r.receiver) === _teamKey_(receiver);
+  const atEvent = scores.get(draft.event.fileId);
+  const between = (scorer: string, receiver: string) =>
+    atEvent?.pairs.get(`${_teamKey_(scorer)}|${_teamKey_(receiver)}`) ?? [];
   const isAverage = draft.category === "lowAverage" || draft.category === "monitoringBreach";
-  const excluded = isAverage ? [] : draft.responses;
+  const excluded: Set<ResponseRecord> = new Set(isAverage ? [] : draft.responses);
 
   const received = draft.responses.map((r) => String(_responseTotal_(r)));
 
   const given = draft.responses.map((r) => {
-    const index = atEvent.filter((x) => isPair(x, r.scorer, r.receiver)).indexOf(r);
-    const reply = atEvent.filter((x) => isPair(x, r.receiver, r.scorer))[index];
+    const index = between(r.scorer, r.receiver).indexOf(r);
+    const reply = between(r.receiver, r.scorer)[index];
     return reply ? String(_responseTotal_(reply)) : "–";
   });
 
   const receivers = [...new Set(draft.responses.map((r) => _teamKey_(r.receiver)))];
   const tournamentAverage = receivers.map((key) => {
-    const totals = atEvent
-      .filter((x) => _teamKey_(x.receiver) === key && !excluded.includes(x))
+    const totals = (atEvent?.received.get(key) ?? [])
+      .filter((x) => !excluded.has(x))
       .map(_responseTotal_);
     return totals.length === 0 ? "–" : (totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(2);
   });
@@ -528,6 +566,7 @@ function _issueRecords_(
   today: Date,
   settings: IssueSettings,
 ): IssueRecord[] {
+  const scores = _eventScores_(responses);
   return drafts.map((draft) => ({
     issueId: _issueId_(draft.category, draft.event, draft.team),
     dateCreated: today,
@@ -537,7 +576,7 @@ function _issueRecords_(
     tournaments: draft.event.tournament,
     tournamentDate: draft.event.date,
     details: `${draft.event.international ? "INTERNATIONAL\n\n" : ""}${draft.details}`,
-    ..._issueScoreColumns_(draft, responses),
+    ..._issueScoreColumns_(draft, scores),
     status: ISSUE_STATUSES[0],
     committeeMember: "",
     notes: "",
@@ -694,21 +733,25 @@ function _appendIssues_(issues: IssueRecord[]): number {
  * @returns a one-line summary
  */
 function _refreshIssues_(): string {
-  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
-  const responses = _sortResponses_(_readResponses_(_getResponsesSheet_()), events);
+  const { events, responses, settings, clubOf } = _timed_("read for issues", () => {
+    const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
+    const responses = _sortResponses_(_readResponses_(_getResponsesSheet_()), events);
+    return { events, responses, settings: _readIssueSettings_(), clubOf: _readTeamClubs_() };
+  });
   if (responses.length === 0) return "No results found: run Refresh Results first";
 
-  const settings = _readIssueSettings_();
-  const drafts = [
-    ..._draftsFromHits_(_responseIssueHits_(responses, events, settings)),
-    ..._teamEventIssueDrafts_(responses, events, settings),
-  ].filter((draft) => settings.enabled[draft.category]);
-  const clubOf = _readTeamClubs_();
-  const today = new Date();
-  const breaches = _clubBreaches_(responses, events, clubOf, settings);
-  const added = _appendIssues_([
-    ..._issueRecords_(drafts, responses, clubOf, today, settings),
-    ..._monitoringIssues_(breaches, responses, clubOf, today, settings),
-  ]);
+  const issues = _timed_("check issues", () => {
+    const drafts = [
+      ..._draftsFromHits_(_responseIssueHits_(responses, events, settings)),
+      ..._teamEventIssueDrafts_(responses, events, settings),
+    ].filter((draft) => settings.enabled[draft.category]);
+    const today = new Date();
+    const breaches = _clubBreaches_(responses, events, clubOf, settings);
+    return [
+      ..._issueRecords_(drafts, responses, clubOf, today, settings),
+      ..._monitoringIssues_(breaches, responses, clubOf, today, settings),
+    ];
+  });
+  const added = _timed_("write issues", () => _appendIssues_(issues));
   return `${added} new issue(s)`;
 }
