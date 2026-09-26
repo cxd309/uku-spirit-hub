@@ -12,6 +12,63 @@ type ImportResult = {
 };
 
 /**
+ * the Sheets advanced service
+ *
+ * @returns the service
+ * @throws {Error} if it is not turned on for this script
+ */
+function _sheetsService_(): GoogleAppsScript.Sheets {
+  if (typeof Sheets === "undefined" || !Sheets) {
+    throw new Error("The Google Sheets API service is not turned on: in the Apps Script editor add it under Services");
+  }
+  return Sheets;
+}
+
+/**
+ * a cell as the Sheets service returns it, turned into the value SpreadsheetApp's getValues would give
+ * numbers, text and ticks as themselves, errors as their text (e.g. "#N/A"), empty cells as ""
+ * pure, no google calls
+ *
+ * @param cell  the cell, undefined when the row stops before it
+ * @returns the value
+ */
+function _cellValue_(cell: GoogleAppsScript.Sheets.Schema.CellData | undefined): unknown {
+  const value = cell?.effectiveValue;
+  if (!value) return "";
+  if (value.numberValue !== undefined) return value.numberValue;
+  if (value.stringValue !== undefined) return value.stringValue;
+  if (value.boolValue !== undefined) return value.boolValue;
+  return cell?.formattedValue ?? "";
+}
+
+/**
+ * every tab of a results file with all its values, in one call to the Sheets service
+ * much faster than opening the file with SpreadsheetApp and reading tab by tab
+ *
+ * the service leaves out empty cells at the end of each row and empty rows at the end of the tab,
+ * rows are padded so every row is as wide as the widest, like getDataRange().getValues()
+ *
+ * @param fileId  Drive file ID of the results file
+ * @returns the tabs in file order
+ */
+function _readResultsTabs_(fileId: string): ResultsTab[] {
+  const book = _sheetsService_().Spreadsheets.get(fileId, {
+    includeGridData: true,
+    fields: "sheets(properties(title),data(rowData(values(effectiveValue,formattedValue))))",
+  });
+  return (book.sheets ?? []).map((sheet) => {
+    const rows = (sheet.data ?? []).flatMap((grid) => grid.rowData ?? []).map((row) =>
+      (row.values ?? []).map(_cellValue_)
+    );
+    const width = Math.max(0, ...rows.map((row) => row.length));
+    return {
+      title: sheet.properties?.title ?? "",
+      values: rows.map((row) => [...row, ...Array(width - row.length).fill("")]),
+    };
+  });
+}
+
+/**
  * read an event's results file into response records
  * uses only the file ID from the Tournaments tab, no folder scan
  *
@@ -37,11 +94,12 @@ function _importFile_(event: EventRecord): ImportResult {
   }
   try {
     // version is read before the contents, so an edit made during the read is picked up next time
-    const version = new Date(DriveApp.getFileById(event.fileId).getLastUpdated().getTime());
-    const found = _findBreakdownSheet_(SpreadsheetApp.openById(event.fileId));
+    const modified = _driveService_().Files.get(event.fileId, { fields: "modifiedTime", supportsAllDrives: true });
+    const version = new Date(modified.modifiedTime ?? 0);
+    const found = _findBreakdownTab_(_readResultsTabs_(event.fileId));
     if (!found.ok) return { ok: false, reason: found.reason };
 
-    const { responses, problems } = _parseBreakdownRows_(found.sheet.getDataRange().getValues(), found.columns);
+    const { responses, problems } = _parseBreakdownRows_(found.tab.values, found.columns);
     return {
       ok: true,
       responses: responses.map((r) => ({

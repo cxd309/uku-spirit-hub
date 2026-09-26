@@ -32,10 +32,20 @@ type BreakdownColumns = Record<keyof typeof BREAKDOWN_HEADERS, number>;
 type HeaderMatch = { ok: true; columns: BreakdownColumns } | { ok: false; reason: string };
 
 /**
+ * one tab of a results file, as read from the file
+ */
+interface ResultsTab {
+  /** tab name */
+  title: string;
+  /** every value on the tab from row 1, each row padded to the same width */
+  values: unknown[][];
+}
+
+/**
  * result of looking for the breakdown tab in a results file
  */
 type BreakdownLookup =
-  | { ok: true; sheet: GoogleAppsScript.Spreadsheet.Sheet; columns: BreakdownColumns }
+  | { ok: true; tab: ResultsTab; columns: BreakdownColumns }
   | { ok: false; reason: string };
 
 /**
@@ -64,26 +74,25 @@ function _matchHeader_(headerRow: unknown[]): HeaderMatch {
 
 /**
  * find the single breakdown tab in a results file
+ * pure, no google calls
  *
- * only row 1 of each tab is read
+ * only row 1 of each tab is checked
  * fails if no tab matches or if more than one does
- * @param book  opened results file
+ * @param tabs  every tab of the results file
  * @returns breakdown tab and its columns, or why it could not be found
  */
-function _findBreakdownSheet_(book: GoogleAppsScript.Spreadsheet.Spreadsheet): BreakdownLookup {
-  const matches: { sheet: GoogleAppsScript.Spreadsheet.Sheet; columns: BreakdownColumns }[] = [];
+function _findBreakdownTab_(tabs: ResultsTab[]): BreakdownLookup {
+  const matches: { tab: ResultsTab; columns: BreakdownColumns }[] = [];
   const swapped: string[] = [];
 
-  for (const sheet of book.getSheets()) {
-    const width = sheet.getLastColumn();
-    if (width === 0) continue;
+  for (const tab of tabs) {
+    if (tab.values.length === 0 || tab.values[0].length === 0) continue;
 
-    const header = sheet.getRange(1, 1, 1, width).getValues()[0];
-    const match = _matchHeader_(header);
+    const match = _matchHeader_(tab.values[0]);
     if (match.ok) {
-      matches.push({ sheet: sheet, columns: match.columns });
+      matches.push({ tab: tab, columns: match.columns });
     } else if (match.reason.startsWith("team columns")) {
-      swapped.push(`tab "${sheet.getName()}": ${match.reason}`);
+      swapped.push(`tab "${tab.title}": ${match.reason}`);
     }
   }
 
@@ -91,9 +100,7 @@ function _findBreakdownSheet_(book: GoogleAppsScript.Spreadsheet.Spreadsheet): B
   if (matches.length > 1) {
     return {
       ok: false,
-      reason: `${matches.length} tabs have breakdown headers: ${
-        matches.map((m) => `"${m.sheet.getName()}"`).join(", ")
-      }`,
+      reason: `${matches.length} tabs have breakdown headers: ${matches.map((m) => `"${m.tab.title}"`).join(", ")}`,
     };
   }
   if (swapped.length > 0) return { ok: false, reason: swapped.join("; ") };
