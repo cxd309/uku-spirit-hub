@@ -65,42 +65,97 @@ function _scanCategory_(category: string): ResultsFile[] {
   if (matches.hasNext()) {
     throw new Error(`More than one "${category}" folder in "${season.getName()}"`);
   }
-  return _scanFolder_(folder, category, []);
+  return _scanFolder_(folder, category);
 }
 
 /**
- * walk a folder recursively and collect every Google Sheet
+ * Drive types the scan looks for
+ */
+const DRIVE_FOLDER_TYPE = "application/vnd.google-apps.folder";
+const DRIVE_SHEET_TYPE = "application/vnd.google-apps.spreadsheet";
+
+/**
+ * how many folders are asked about in one Drive query
+ * keeps each query well under Drive's length limit
+ */
+const DRIVE_PARENTS_PER_QUERY = 40;
+
+/**
+ * the Drive advanced service
+ *
+ * @returns the service
+ * @throws {Error} if it is not turned on for this script
+ */
+function _driveService_(): GoogleAppsScript.Drive {
+  if (typeof Drive === "undefined" || !Drive) {
+    throw new Error("The Drive API service is not turned on: in the Apps Script editor add it under Services");
+  }
+  return Drive;
+}
+
+/**
+ * collect every Google Sheet in a folder and all the folders below it
  *
  * sheets are collected whatever their name, the Tournaments tab marks the badly named ones ERROR
+ * works one level of folders at a time, asking Drive about many folders in one query
+ * so a whole category takes a few calls rather than several per file
+ * shared drives are included
  *
- * @param folder    folder to search
+ * @param folder    the category folder
  * @param category  category the folder belongs to
- * @param path      each folder name on the path from category to folder
  * @returns results files in this folder and everything below it
  */
-function _scanFolder_(folder: GoogleAppsScript.Drive.Folder, category: string, path: string[]): ResultsFile[] {
-  let found = [];
+function _scanFolder_(folder: GoogleAppsScript.Drive.Folder, category: string): ResultsFile[] {
+  const drive = _driveService_();
+  const found: ResultsFile[] = [];
+  const seen: Set<string> = new Set();
+  // folders to look in next: id → its name and the folder names from the category down to it
+  let level: Map<string, { name: string; path: string[] }> = new Map([[folder.getId(), {
+    name: folder.getName(),
+    path: [],
+  }]]);
 
-  const files = folder.getFiles();
-  while (files.hasNext()) {
-    const file = files.next();
-    if (file.getMimeType() !== MimeType.GOOGLE_SHEETS) continue;
-
-    found.push({
-      id: file.getId(),
-      name: file.getName(),
-      folderId: folder.getId(),
-      folderName: folder.getName(),
-      category: category,
-      path: path,
-      lastUpdated: new Date(file.getLastUpdated().getTime()),
-    });
-  }
-
-  const subfolders = folder.getFolders();
-  while (subfolders.hasNext()) {
-    const sub = subfolders.next();
-    found = found.concat(_scanFolder_(sub, category, [...path, sub.getName()]));
+  while (level.size > 0) {
+    const next: Map<string, { name: string; path: string[] }> = new Map();
+    const ids = [...level.keys()];
+    for (let i = 0; i < ids.length; i += DRIVE_PARENTS_PER_QUERY) {
+      const parents = ids.slice(i, i + DRIVE_PARENTS_PER_QUERY).map((id) => `'${id}' in parents`).join(" or ");
+      const query = `(${parents}) and trashed = false `
+        + `and (mimeType = '${DRIVE_SHEET_TYPE}' or mimeType = '${DRIVE_FOLDER_TYPE}')`;
+      let pageToken = "";
+      do {
+        const page = drive.Files.list({
+          q: query,
+          fields: "nextPageToken, files(id, name, mimeType, modifiedTime, parents)",
+          pageSize: 1000,
+          corpora: "allDrives",
+          includeItemsFromAllDrives: true,
+          supportsAllDrives: true,
+          ...(pageToken ? { pageToken } : {}),
+        });
+        for (const file of page.files ?? []) {
+          const parentId = (file.parents ?? []).find((id) => level.has(id));
+          const parent = parentId === undefined ? undefined : level.get(parentId);
+          if (parentId === undefined || !parent || !file.id || !file.name || seen.has(file.id)) continue;
+          seen.add(file.id);
+          if (file.mimeType === DRIVE_FOLDER_TYPE) {
+            next.set(file.id, { name: file.name, path: [...parent.path, file.name] });
+          } else {
+            found.push({
+              id: file.id,
+              name: file.name,
+              folderId: parentId,
+              folderName: parent.name,
+              category: category,
+              path: parent.path,
+              lastUpdated: new Date(file.modifiedTime ?? 0),
+            });
+          }
+        }
+        pageToken = page.nextPageToken ?? "";
+      } while (pageToken);
+    }
+    level = next;
   }
   return found;
 }
