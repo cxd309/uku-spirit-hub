@@ -81,11 +81,29 @@ function _readTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): TeamRecord[] {
   if (rowCount < 1) return [];
   const teamIndex = TEAM_KEYS.indexOf("team");
   const overrideIndex = TEAM_KEYS.indexOf("clubOverride");
+  // only as far as the stored columns, so the Club formula column is never read
   return sheet
-    .getRange(DATA_ROW, 1, rowCount, TEAM_KEYS.length)
+    .getRange(DATA_ROW, 1, rowCount, Math.max(teamIndex, overrideIndex) + 1)
     .getValues()
     .map((row) => ({ team: String(row[teamIndex]).trim(), clubOverride: String(row[overrideIndex]).trim() }))
     .filter((t) => t.team !== "");
+}
+
+/**
+ * every team and its club, worked out the same way as the Club formula on the Teams tab:
+ * the Club Override if there is one, otherwise the Suggested Club
+ * pure, never modifies its arguments
+ * lets Clubs be rebuilt straight away, without waiting for the Teams formulas to calculate
+ *
+ * @param teams    teams in display order
+ * @param regexes  enabled Name Rules, top to bottom
+ * @returns one entry per team, in the order given
+ */
+function _teamClubPairs_(teams: TeamRecord[], regexes: RegExp[]): { team: string; club: string }[] {
+  return teams.map((t) => ({
+    team: t.team,
+    club: (t.clubOverride !== "" ? t.clubOverride : _suggestClub_(t.team, regexes)).trim(),
+  }));
 }
 
 /**
@@ -106,13 +124,14 @@ function _teamToRow_(team: TeamRecord): unknown[] {
  * @param teams      teams to write, in display order
  * @param responses  all responses
  * @param events     all events, in date order
+ * @returns every team written and its club, for _rebuildClubs_
  */
 function _writeTeams_(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
   teams: TeamRecord[],
-  responses: ResponseRecord[],
+  responses: ResponseTeams[],
   events: EventRecord[],
-) {
+): { team: string; club: string }[] {
   const { regexes } = _readNameRules_();
   const played = _tournamentsPlayed_(responses, events, _teamKey_);
   _writeTable_(
@@ -129,6 +148,7 @@ function _writeTeams_(
     TEAM_KEYS.length,
   );
   _fillFormulaColumns_(sheet, TEAM_KEYS, TEAM_FORMULAS, teams.length);
+  return _teamClubPairs_(teams, regexes);
 }
 
 /**
@@ -142,7 +162,7 @@ function _writeTeams_(
  * @returns group → tournament names in date order, and how many
  */
 function _tournamentsPlayed_(
-  responses: ResponseRecord[],
+  responses: ResponseTeams[],
   events: EventRecord[],
   groupOf: (team: string) => string,
 ): Map<string, { names: string[]; count: number }> {

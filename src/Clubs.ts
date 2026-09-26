@@ -80,7 +80,7 @@ function _clubNames_(clubValues: unknown[]): string[] {
  */
 function _clubRecords_(
   teamClubs: { team: string; club: string }[],
-  responses: ResponseRecord[],
+  responses: ResponseTeams[],
   events: EventRecord[],
 ): ClubRecord[] {
   const clubKeyOf = new Map(teamClubs.map((t) => [_teamKey_(t.team), t.club.toLowerCase()]));
@@ -93,14 +93,32 @@ function _clubRecords_(
 }
 
 /**
- * rebuild the Clubs tab from the Teams, Results and Tournaments tabs
+ * rebuild the Clubs tab from data the caller already has
  * one row per club, sorted A–Z, plain values so the text is easy to read
  * does not take the lock, callers are responsible
- * reads the Teams Club formula results, so call SpreadsheetApp.flush() first after writing Teams
+ *
+ * @param teamClubs  every team and its club, in display order, from _writeTeams_ or _teamClubPairs_
+ * @param responses  who played at which tournament
+ * @param events     all events, in date order
  */
-function _rebuildClubs_() {
-  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
-  const clubs = _clubRecords_(_readTeamClubList_(), _readResponses_(_getResponsesSheet_()), events);
+function _rebuildClubs_(
+  teamClubs: { team: string; club: string }[],
+  responses: ResponseTeams[],
+  events: EventRecord[],
+) {
+  const clubs = _clubRecords_(teamClubs, responses, events);
   _writeTable_(_getClubsSheet_(), clubs.map((c) => CLUB_KEYS.map((key) => c[key])), CLUB_KEYS.length);
   _setClubReportChoices_(clubs.map((c) => c.club));
+}
+
+/**
+ * rebuild the Clubs tab from the Teams, Results and Tournaments tabs, for when nothing is in memory (onEdit)
+ * reads only plain value columns and works out each team's club itself,
+ * so it never waits for formulas to calculate
+ * does not take the lock, callers are responsible
+ */
+function _rebuildClubsFromSheet_() {
+  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
+  const teamClubs = _teamClubPairs_(_readTeams_(_getTeamsSheet_()), _readNameRules_().regexes);
+  _rebuildClubs_(teamClubs, _readResponseTeams_(_getResponsesSheet_()), events);
 }

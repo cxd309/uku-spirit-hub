@@ -123,6 +123,31 @@ function _responseToRow_(response: ResponseRecord): unknown[] {
   return RESPONSE_KEYS.map((key) => RESPONSE_FORMULAS[key] ? "" : response[key as keyof ResponseRecord]);
 }
 /**
+ * the parts of a response that say which teams played at which tournament
+ */
+type ResponseTeams = Pick<ResponseRecord, "fileId" | "scorer" | "receiver">;
+
+/**
+ * read only the File ID, Scoring Team and Receiving Team columns of the Responses tab
+ * plain values, so this never waits for the tab's formulas to calculate
+ *
+ * @param sheet  the Responses tab
+ * @returns who played at which tournament, one per response
+ */
+function _readResponseTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): ResponseTeams[] {
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
+  if (rowCount < 1) return [];
+  const column = (key: keyof typeof RESPONSE_HEADERS) =>
+    sheet.getRange(DATA_ROW, RESPONSE_KEYS.indexOf(key) + 1, rowCount, 1).getValues().map((row) => String(row[0]));
+  const fileIds = column("fileId");
+  const scorers = column("scorer");
+  const receivers = column("receiver");
+  return fileIds
+    .map((fileId, i) => ({ fileId, scorer: scorers[i], receiver: receivers[i] }))
+    .filter((r) => r.fileId !== "");
+}
+
+/**
  * @returns the responses tab, created on first use
  */
 function _getResponsesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {

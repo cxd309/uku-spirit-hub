@@ -46,11 +46,8 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(LOCK_WAIT_MS)) return;
   try {
-    if (touchesNameRules) {
-      _refreshSuggestedClubs_();
-      SpreadsheetApp.flush();
-    }
-    _rebuildClubs_();
+    if (touchesNameRules) _refreshSuggestedClubs_();
+    _rebuildClubsFromSheet_();
   } finally {
     lock.releaseLock();
   }

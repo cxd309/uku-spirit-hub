@@ -167,17 +167,15 @@ function _refreshResults_(): string {
 
   const internationalIds = new Set(updatedEvents.filter((e) => e.international).map((e) => e.fileId));
   const teamsSheet = _getTeamsSheet_();
-  _timed_("write teams", () =>
+  const sortedEvents = _sortEvents_(updatedEvents);
+  const teamClubs = _timed_("write teams", () =>
     _writeTeams_(
       teamsSheet,
       _mergeTeams_(_readTeams_(teamsSheet), _teamNamesFromResponses_(responses, internationalIds)),
       responses,
-      _sortEvents_(updatedEvents),
+      sortedEvents,
     ));
-  _timed_("rebuild clubs", () => {
-    SpreadsheetApp.flush();
-    _rebuildClubs_();
-  });
+  _timed_("rebuild clubs", () => _rebuildClubs_(teamClubs, responses, sortedEvents));
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
   return `Imported ${results.size - failed} tournament(s), ${imported.length} response(s)`
