@@ -12,20 +12,63 @@ type ImportResult = {
 };
 
 /**
- * the Sheets advanced service
- *
- * @returns the service
- * @throws {Error} if it is not turned on for this script
+ * a results file fetched from Google: its modified time and every tab, or why it could not be fetched
  */
-function _sheetsService_(): GoogleAppsScript.Sheets {
-  if (typeof Sheets === "undefined" || !Sheets) {
-    throw new Error("The Google Sheets API service is not turned on: in the Apps Script editor add it under Services");
+type FileRead = { ok: true; version: Date; tabs: ResultsTab[] } | { ok: false; reason: string };
+
+/**
+ * what is asked of the Sheets API for a results file: every tab's name and cell values, nothing else
+ */
+const RESULTS_FILE_FIELDS = "sheets(properties(title),data(rowData(values(effectiveValue,formattedValue))))";
+
+/**
+ * how long to wait before retrying requests Google asked to slow down
+ */
+const RETRY_WAIT_MS = 5000;
+
+/**
+ * send GET requests to Google APIs all at once, as the person running the script
+ * requests Google answers with 429 (too many requests) are retried once, after RETRY_WAIT_MS
+ *
+ * @param urls  API urls
+ * @returns each response's status code and parsed body, in the order given
+ */
+function _fetchGoogleJson_(urls: string[]): { code: number; body: unknown }[] {
+  const headers = { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` };
+  const fetch = (list: string[]) =>
+    UrlFetchApp.fetchAll(list.map((url) => ({ url, headers, muteHttpExceptions: true })))
+      .map((response) => ({ code: response.getResponseCode(), text: response.getContentText() }));
+
+  const results = fetch(urls);
+  const retry = results.flatMap((r, i) => (r.code === 429 ? [i] : []));
+  if (retry.length > 0) {
+    Utilities.sleep(RETRY_WAIT_MS);
+    fetch(retry.map((i) => urls[i])).forEach((r, j) => {
+      results[retry[j]] = r;
+    });
   }
-  return Sheets;
+  return results.map((r) => {
+    try {
+      return { code: r.code, body: JSON.parse(r.text) as unknown };
+    } catch (e) {
+      return { code: r.code, body: {} };
+    }
+  });
 }
 
 /**
- * a cell as the Sheets service returns it, turned into the value SpreadsheetApp's getValues would give
+ * the message from a failed Google API response
+ *
+ * @param response  status code and parsed body
+ * @returns Google's error message, or the status code if there is none
+ */
+function _apiError_(response: { code: number; body: unknown }): string {
+  const message = (response.body as { error?: { message?: string } } | null)?.error?.message;
+  return message ?? `HTTP ${response.code}`;
+}
+
+/**
+ * a cell as the Sheets API returns it, turned into the value SpreadsheetApp's getValues would give
  * numbers, text and ticks as themselves, errors as their text (e.g. "#N/A"), empty cells as ""
  * pure, no google calls
  *
@@ -42,20 +85,16 @@ function _cellValue_(cell: GoogleAppsScript.Sheets.Schema.CellData | undefined):
 }
 
 /**
- * every tab of a results file with all its values, in one call to the Sheets service
- * much faster than opening the file with SpreadsheetApp and reading tab by tab
+ * every tab of a results file with all its values, from a Sheets API response
+ * pure, no google calls
  *
- * the service leaves out empty cells at the end of each row and empty rows at the end of the tab,
+ * the API leaves out empty cells at the end of each row and empty rows at the end of the tab,
  * rows are padded so every row is as wide as the widest, like getDataRange().getValues()
  *
- * @param fileId  Drive file ID of the results file
+ * @param book  the spreadsheet, as returned with its grid data
  * @returns the tabs in file order
  */
-function _readResultsTabs_(fileId: string): ResultsTab[] {
-  const book = _sheetsService_().Spreadsheets.get(fileId, {
-    includeGridData: true,
-    fields: "sheets(properties(title),data(rowData(values(effectiveValue,formattedValue))))",
-  });
+function _tabsFromSpreadsheet_(book: GoogleAppsScript.Sheets.Schema.Spreadsheet): ResultsTab[] {
   return (book.sheets ?? []).map((sheet) => {
     const rows = (sheet.data ?? []).flatMap((grid) => grid.rowData ?? []).map((row) =>
       (row.values ?? []).map(_cellValue_)
@@ -69,54 +108,88 @@ function _readResultsTabs_(fileId: string): ResultsTab[] {
 }
 
 /**
- * read an event's results file into response records
- * uses only the file ID from the Tournaments tab, no folder scan
+ * fetch many results files at once: every modified time together, then every file's contents together
+ * much faster than reading the files one after another, where each read is mostly waiting
+ * modified times are read before the contents, so an edit made during the read is picked up next time
  *
- * any error from Google (file deleted, no permission) is caught and returned as a
- * reason, so one bad file cannot stop the whole refresh
- *
- * @param event  the event to import
- * @returns the responses read, or why the file could not be read
+ * @param fileIds  Drive file IDs of the results files
+ * @returns file id → its modified time and tabs, or why it could not be fetched
  */
-function _importFile_(event: EventRecord): ImportResult {
+function _readResultsFiles_(fileIds: string[]): Map<string, FileRead> {
+  if (fileIds.length === 0) return new Map();
+  const modified = _fetchGoogleJson_(
+    fileIds.map((id) =>
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=modifiedTime&supportsAllDrives=true`
+    ),
+  );
+  const books = _fetchGoogleJson_(
+    fileIds.map((id) =>
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}`
+      + `?includeGridData=true&fields=${encodeURIComponent(RESULTS_FILE_FIELDS)}`
+    ),
+  );
+  return new Map(fileIds.map((id, i): [string, FileRead] => {
+    const failed = [modified[i], books[i]].find((r) => r.code !== 200);
+    if (failed) return [id, { ok: false, reason: _apiError_(failed) }];
+    const file = modified[i].body as GoogleAppsScript.Drive_v3.Drive.V3.Schema.File;
+    const book = books[i].body as GoogleAppsScript.Sheets.Schema.Spreadsheet;
+    return [id, { ok: true, version: new Date(file.modifiedTime ?? 0), tabs: _tabsFromSpreadsheet_(book) }];
+  }));
+}
+
+/**
+ * why an event's results file must not be imported, from its folder and file names
+ * pure, no google calls
+ *
+ * @param event  the event
+ * @returns the reason, "" if it can be imported
+ */
+function _importProblem_(event: EventRecord): string {
   if (event.date === null) {
-    return {
-      ok: false,
-      reason: "folder name must be \"YYYYMMDD Tournament name\", fix it then run Refresh Tournaments",
-    };
+    return "folder name must be \"YYYYMMDD Tournament name\", fix it then run Refresh Tournaments";
   }
   if (!event.fileName.toLowerCase().includes(RESULTS_FILE_TEXT.toLowerCase())) {
-    return {
-      ok: false,
-      reason:
-        `file name "${event.fileName}" does not contain "${RESULTS_FILE_TEXT}", fix it then run Refresh Tournaments`,
-    };
+    return `file name "${event.fileName}" does not contain "${RESULTS_FILE_TEXT}", fix it then run Refresh Tournaments`;
   }
-  try {
-    // version is read before the contents, so an edit made during the read is picked up next time
-    const modified = _driveService_().Files.get(event.fileId, { fields: "modifiedTime", supportsAllDrives: true });
-    const version = new Date(modified.modifiedTime ?? 0);
-    const found = _findBreakdownTab_(_readResultsTabs_(event.fileId));
-    if (!found.ok) return { ok: false, reason: found.reason };
+  return "";
+}
 
-    const { responses, problems } = _parseBreakdownRows_(found.tab.values, found.columns);
-    return {
-      ok: true,
-      responses: responses.map((r) => ({
-        fileId: event.fileId,
-        sourceRow: r.sourceRow,
-        scorer: r.scorer,
-        receiver: r.receiver,
-        ...r.scores,
-        comment: r.comment,
-      })),
-      problems: problems,
-      version: version,
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+/**
+ * turn an event's fetched results file into response records
+ * pure, no google calls, the file is fetched beforehand by _readResultsFiles_
+ *
+ * a file that could not be fetched (deleted, no permission) is returned as a reason,
+ * so one bad file cannot stop the whole refresh
+ *
+ * @param event  the event to import
+ * @param read   its fetched file, undefined if it was not fetched
+ * @returns the responses read, or why the file could not be read
+ */
+function _importFile_(event: EventRecord, read: FileRead | undefined): ImportResult {
+  const problem = _importProblem_(event);
+  if (problem !== "") return { ok: false, reason: problem };
+  if (!read || !read.ok) {
+    const message = read ? read.reason : "not fetched";
     return { ok: false, reason: `could not open file (${message}), try Refresh Tournaments first` };
   }
+
+  const found = _findBreakdownTab_(read.tabs);
+  if (!found.ok) return { ok: false, reason: found.reason };
+
+  const { responses, problems } = _parseBreakdownRows_(found.tab.values, found.columns);
+  return {
+    ok: true,
+    responses: responses.map((r) => ({
+      fileId: event.fileId,
+      sourceRow: r.sourceRow,
+      scorer: r.scorer,
+      receiver: r.receiver,
+      ...r.scores,
+      comment: r.comment,
+    })),
+    problems: problems,
+    version: read.version,
+  };
 }
 
 /**
@@ -138,9 +211,10 @@ function _refreshResults_(): string {
   const toImport = events.filter((e) => e.status === EVENT_STATUS.NEW || e.status === EVENT_STATUS.REFRESH);
   if (toImport.length === 0) return "Nothing to refresh: no tournaments are NEW or REFRESH";
 
-  const results: Map<string, ImportResult> = _timed_(
-    "read files",
-    () => new Map(toImport.map((e) => [e.fileId, _importFile_(e)])),
+  const readable = toImport.filter((e) => _importProblem_(e) === "");
+  const reads = _timed_("read files", () => _readResultsFiles_(readable.map((e) => e.fileId)));
+  const results: Map<string, ImportResult> = new Map(
+    toImport.map((e) => [e.fileId, _importFile_(e, reads.get(e.fileId))]),
   );
 
   const updatedEvents = events.map((event) => {
