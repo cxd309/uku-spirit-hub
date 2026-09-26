@@ -82,6 +82,59 @@ function _modelGroups_(
 }
 
 /**
+ * one scorer's groups as flat arrays, so each step of the fit is plain arithmetic
+ */
+interface PackedScorer {
+  /** one entry per tournament, in the order of the scorer's groups */
+  groups: {
+    count: number;
+    sum: number;
+    sumSquares: number;
+    /** club indexes scored at this tournament, in the order first scored */
+    clubs: Int32Array;
+    /** scores given to each of those clubs */
+    counts: Float64Array;
+    /** sum of the totals given to each of those clubs */
+    sums: Float64Array;
+  }[];
+  /** every club index the scorer scored, in the order first scored across its groups */
+  clubs: Int32Array;
+}
+
+/**
+ * turn the model groups into flat arrays, once per fit
+ * pure, never modifies its arguments
+ * keeps every order the same as iterating the groups and their Maps, so the fit gives identical results
+ *
+ * @param groups  scorer → one group per tournament, from _modelGroups_
+ * @returns one packed entry per scorer, in the same order
+ */
+function _packModelGroups_(groups: Map<string, ModelGroup[]>): PackedScorer[] {
+  return [...groups.values()].map((tournaments) => {
+    const clubs: number[] = [];
+    const seen: Set<number> = new Set();
+    const packed = tournaments.map((g) => {
+      const cells = [...g.byClub];
+      for (const [j] of cells) {
+        if (!seen.has(j)) {
+          seen.add(j);
+          clubs.push(j);
+        }
+      }
+      return {
+        count: g.count,
+        sum: g.sum,
+        sumSquares: g.sumSquares,
+        clubs: Int32Array.from(cells.map(([j]) => j)),
+        counts: Float64Array.from(cells.map(([, cell]) => cell.count)),
+        sums: Float64Array.from(cells.map(([, cell]) => cell.sum)),
+      };
+    });
+    return { groups: packed, clubs: Int32Array.from(clubs) };
+  });
+}
+
+/**
  * cholesky factor of a symmetric matrix
  *
  * @param m  the matrix
@@ -189,9 +242,13 @@ function _fitClubModel_(observations: ModelObservation[]): ModelResult {
   const n = observations.length;
   if (n <= p) return { ok: false, reason: `not enough scores, ${n} scores for ${p} clubs` };
   const groups = _modelGroups_(observations, clubIndex);
+  const scorers = _packModelGroups_(groups);
+  // scratch space for one scorer's a values, left all zero between scorers
+  const a = new Float64Array(p);
 
   /**
    * the fit for given relative standard deviations, squared to give the variance ratios
+   * the sums are done in the same order as over the groups themselves, so results are identical
    */
   const fit = (theta: [number, number]) => {
     const t1 = theta[0] ** 2;
@@ -200,30 +257,39 @@ function _fitClubModel_(observations: ModelObservation[]): ModelResult {
     const xvy = new Float64Array(p);
     let yvy = 0;
     let logDetV = 0;
-    for (const tournaments of groups.values()) {
+    for (const scorer of scorers) {
       let s = 0;
       let ay = 0;
-      const a: Map<number, number> = new Map();
-      for (const g of tournaments) {
+      for (const g of scorer.groups) {
         const w = 1 / (1 + t2 * g.count);
         logDetV += Math.log(1 + t2 * g.count);
         s += g.count * w;
         ay += w * g.sum;
         yvy += g.sumSquares - t2 * w * g.sum * g.sum;
-        for (const [j, cell] of g.byClub) {
-          a.set(j, (a.get(j) ?? 0) + w * cell.count);
-          xvy[j] += cell.sum - t2 * w * cell.count * g.sum;
-          xvx[j][j] += cell.count;
-          for (const [k, other] of g.byClub) xvx[j][k] -= t2 * w * cell.count * other.count;
+        for (let x = 0; x < g.clubs.length; x++) {
+          const j = g.clubs[x];
+          const count = g.counts[x];
+          a[j] += w * count;
+          xvy[j] += g.sums[x] - t2 * w * count * g.sum;
+          const row = xvx[j];
+          row[j] += count;
+          for (let y = 0; y < g.clubs.length; y++) row[g.clubs[y]] -= t2 * w * count * g.counts[y];
         }
       }
       const shrink = t1 / (1 + t1 * s);
       logDetV += Math.log(1 + t1 * s);
       yvy -= shrink * ay * ay;
-      for (const [j, aj] of a) {
+      for (let x = 0; x < scorer.clubs.length; x++) {
+        const j = scorer.clubs[x];
+        const aj = a[j];
         xvy[j] -= shrink * aj * ay;
-        for (const [k, ak] of a) xvx[j][k] -= shrink * aj * ak;
+        const row = xvx[j];
+        for (let y = 0; y < scorer.clubs.length; y++) {
+          const k = scorer.clubs[y];
+          row[k] -= shrink * aj * a[k];
+        }
       }
+      for (let x = 0; x < scorer.clubs.length; x++) a[scorer.clubs[x]] = 0;
     }
     const l = _cholesky_(xvx);
     if (!l) return null;
