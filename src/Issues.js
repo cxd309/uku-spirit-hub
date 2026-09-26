@@ -12,7 +12,7 @@ const ISSUES_INFO = "Spirit issues found in the results, one row per issue per t
   + "- Status: NEW, IN PROGRESS or CLOSED\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
-  + "New issues are added by Refresh Results and Refresh Issues, existing rows are never changed, so sort and filter freely";
+  + "New issues are added by Refresh Issues, existing rows are never changed, so sort and filter freely";
 
 /**
  * issues table columns, in order
@@ -50,7 +50,7 @@ const ISSUE_STATUSES = Object.freeze(["NEW", "IN PROGRESS", "CLOSED"]);
 
 /**
  * every issue check
- * code goes into the Issue ID and the Rule column of the Issue Rules tab
+ * code goes into the Issue ID and the Rule column of the Issue Rules settings
  * label goes into the Issue Category column, built from the current settings
  */
 const ISSUE_CATEGORIES = Object.freeze({
@@ -199,7 +199,7 @@ function _withComment_(text, response) {
  *
  * @param {ResponseRecord[]} responses  all responses
  * @param {EventRecord[]}    events     all events
- * @param {IssueSettings}    settings   thresholds from the Issue Rules tab
+ * @param {IssueSettings}    settings   thresholds from the Issue Rules settings
  * @returns {IssueHit[]} one hit per response per check it triggered
  */
 function _responseIssueHits_(responses, events, settings) {
@@ -375,7 +375,7 @@ function _draftsFromHits_(hits) {
  *
  * @param {ResponseRecord[]} responses  all responses, in date order
  * @param {EventRecord[]}    events     all events, in date order
- * @param {IssueSettings}    settings   thresholds from the Issue Rules tab
+ * @param {IssueSettings}    settings   thresholds from the Issue Rules settings
  * @returns {IssueDraft[]} one draft per check per team per event that triggered
  */
 function _teamEventIssueDrafts_(responses, events, settings) {
@@ -527,7 +527,7 @@ function _issueRecords_(drafts, responses, clubOf, today, settings) {
  * @param {ResponseRecord[]}    responses  all responses
  * @param {EventRecord[]}       events     all events, in date order
  * @param {Map<string, string>} clubOf     team key → club, from the Teams tab
- * @param {IssueSettings}       settings   thresholds from the Issue Rules tab
+ * @param {IssueSettings}       settings   thresholds from the Issue Rules settings
  * @returns {Map<string, ClubBreach[]>} club → its breaches in date order, teams without a club are skipped
  */
 function _clubBreaches_(responses, events, clubOf, settings) {
@@ -613,7 +613,7 @@ function _monitoringIssues_(breachesByClub, responses, clubOf, today, settings) 
 function _getIssuesSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(ISSUE_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), ISSUES_SHEET, headers, ISSUES_INFO).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), ISSUES_SHEET, headers, ISSUES_INFO);
 }
 
 /**
@@ -654,15 +654,18 @@ function _appendIssues_(issues) {
 }
 
 /**
- * run every check and add the issues that are not already on the Issues tab
- * reads the clubs from the Teams tab, so Teams must be up to date first
- * reads the thresholds from the Issue Rules tab, disabled checks add nothing
+ * run every check on what is already in the spreadsheet and add the new issues, no files are read
+ * use after Refresh Results, or after changing Include, International, a club override or an issue rule
+ * tabs may have been sorted by hand, so events and responses are put back in date order first
+ * reads the clubs from the Teams tab and the thresholds from the Issue Rules settings, disabled checks add nothing
  *
- * @param {ResponseRecord[]} responses  all responses, in date order
- * @param {EventRecord[]}    events     all events, in date order
- * @returns {number} how many new issues were added
+ * @returns {string} a one-line summary
  */
-function _appendNewIssues_(responses, events) {
+function _refreshIssues_() {
+  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
+  const responses = _sortResponses_(_readResponses_(_getResponsesSheet_()), events);
+  if (responses.length === 0) return "No results found: run Refresh Results first";
+
   const settings = _readIssueSettings_();
   const drafts = [
     ..._draftsFromHits_(_responseIssueHits_(responses, events, settings)),
@@ -671,22 +674,9 @@ function _appendNewIssues_(responses, events) {
   const clubOf = _readTeamClubs_();
   const today = new Date();
   const breaches = _clubBreaches_(responses, events, clubOf, settings);
-  return _appendIssues_([
+  const added = _appendIssues_([
     ..._issueRecords_(drafts, responses, clubOf, today, settings),
     ..._monitoringIssues_(breaches, responses, clubOf, today, settings),
   ]);
-}
-
-/**
- * run every check on what is already in the spreadsheet, no files are read
- * use after changing Include, International, a club override or a threshold
- * tabs may have been sorted by hand, so events and responses are put back in date order first
- *
- * @returns {string} a one-line summary
- */
-function _refreshIssues_() {
-  const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
-  const responses = _sortResponses_(_readResponses_(_getResponsesSheet_()), events);
-  if (responses.length === 0) return "No results found: run Refresh Results first";
-  return `${_appendNewIssues_(responses, events)} new issue(s)`;
+  return `${added} new issue(s)`;
 }

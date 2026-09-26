@@ -1,28 +1,12 @@
 /**
- * name of the Issue Rules tab
- */
-const ISSUE_RULES_SHEET = "Issue Rules";
-
-/**
- * text for the info row above the Issue Rules table
- * what the tab is, what to edit, how it refreshes
- */
-const ISSUE_RULES_INFO = "Settings for each issue check, used to build the Issues tab\n\n"
-  + "User editable columns:\n"
-  + "- Enabled: untick to stop adding new issues of this type\n"
-  + "- Value 1, Value 2: thresholds, the description says what each one means, lists are comma separated\n\n"
-  + "Do not change the Rule column, a missing rule is added back at the bottom with its defaults\n"
-  + "Changes apply from the next refresh, issues already on the Issues tab are not changed";
-
-/**
- * header row of the Issue Rules tab
+ * header row of the Issue Rules table
  */
 const ISSUE_RULE_HEADERS = Object.freeze(
   /** @type {const} */ (["Rule", "Enabled", "Value 1", "Value 2", "Description"]),
 );
 
 /**
- * the row written for each check when it is missing from the tab
+ * the row written for each check when it is missing from the section
  * value 1 and value 2 mean different things per check, the description says what
  * lists are written as comma separated text
  *
@@ -83,7 +67,7 @@ const DEFAULT_ISSUE_RULES = Object.freeze({
 });
 
 /**
- * thresholds and switches for every issue check, read from the Issue Rules tab
+ * thresholds and switches for every issue check, read from the Issue Rules settings
  *
  * @typedef {Object} IssueSettings
  * @property {Record<IssueCategoryKey, boolean>} enabled  which checks add issues
@@ -110,65 +94,54 @@ function _issueCategoryKeys_() {
 }
 
 /**
- * get the Issue Rules tab
- * creating it on first use, and adding a default row for any check that has no row
- * so checks added in later versions appear on their own
+ * the Issue Rules section of the Settings tab
+ * keyed by rule code, so a missing rule is added back with its defaults
+ * and checks added in later versions appear on their own
  *
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Issue Rules tab
+ * @type {SettingsSection}
  */
-function _getIssueRulesSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const { sheet } = _getOrCreateSheet_(ss, ISSUE_RULES_SHEET, ISSUE_RULE_HEADERS, ISSUE_RULES_INFO);
-  const present = new Set(_readIssueRuleRows_(sheet).keys());
-  const missing = _issueCategoryKeys_().filter((key) => !present.has(ISSUE_CATEGORIES[key].code));
-  if (missing.length > 0) {
-    const firstEmpty = Math.max(sheet.getLastRow(), HEADER_ROW) + 1;
-    const lastRow = firstEmpty + missing.length - 1;
-    _fitSheet_(sheet, lastRow, ISSUE_RULE_HEADERS.length);
-    sheet.getRange(firstEmpty, 1, missing.length, ISSUE_RULE_HEADERS.length).setValues(
-      missing.map((key) => {
-        const rule = DEFAULT_ISSUE_RULES[key];
-        return [ISSUE_CATEGORIES[key].code, true, rule.value1, rule.value2, rule.description];
-      }),
-    );
-    sheet
-      .getRange(firstEmpty, ISSUE_RULE_HEADERS.indexOf("Enabled") + 1, missing.length, 1)
-      .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+const ISSUE_RULES_SECTION = Object.freeze({
+  title: "Issue Rules",
+  description: "Settings for each issue check, used by Refresh Issues. "
+    + "Untick Enabled to stop adding new issues of that type. "
+    + "Value 1 and Value 2 are thresholds, the description says what each means, lists are comma separated. "
+    + "Do not change the Rule column. Issues already on the Issues tab are never changed",
+  headers: ISSUE_RULE_HEADERS,
+  keyed: true,
+  defaults: () =>
+    _issueCategoryKeys_().map((key) => {
+      const rule = DEFAULT_ISSUE_RULES[key];
+      return [ISSUE_CATEGORIES[key].code, true, rule.value1, rule.value2, rule.description];
+    }),
+  format: (sheet, firstRow, rowCount) => {
+    _settingsCheckboxes_(sheet, firstRow, rowCount, ISSUE_RULE_HEADERS.indexOf("Enabled") + 1);
     // plain text, so "0, 4" is never read as a number or a date
-    sheet.getRange(firstEmpty, ISSUE_RULE_HEADERS.indexOf("Value 1") + 1, missing.length, 2).setNumberFormat("@");
-    _applyFilter_(sheet, lastRow - HEADER_ROW, ISSUE_RULE_HEADERS.length);
-  }
-  return sheet;
-}
+    sheet.getRange(firstRow, ISSUE_RULE_HEADERS.indexOf("Value 1") + 1, rowCount, 2).setNumberFormat("@");
+  },
+});
 
 /**
- * rows of the Issue Rules tab by rule code
- * rows with a blank Rule are ignored
+ * rows of the Issue Rules table by rule code
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the Issue Rules tab
  * @returns {Map<string, {enabled: boolean, value1: unknown, value2: unknown}>} code → row
  */
-function _readIssueRuleRows_(sheet) {
-  const rowCount = sheet.getLastRow() - HEADER_ROW;
-  if (rowCount < 1) return new Map();
+function _readIssueRuleRows_() {
   return new Map(
-    sheet
-      .getRange(DATA_ROW, 1, rowCount, ISSUE_RULE_HEADERS.length)
-      .getValues()
+    _readSection_(ISSUE_RULES_SECTION)
       .filter((row) => String(row[0]).trim() !== "")
       .map((row) => [String(row[0]).trim(), { enabled: row[1] === true, value1: row[2], value2: row[3] }]),
   );
 }
 
 /**
- * read every check's settings from the Issue Rules tab
+ * read every check's settings from the Issue Rules section of the Settings tab
  * values of disabled checks are not checked, a disabled check never adds issues
  *
  * @returns {IssueSettings} the settings
  * @throws {Error} if an enabled check has a value that cannot be read
  */
 function _readIssueSettings_() {
-  const rows = _readIssueRuleRows_(_getIssueRulesSheet_());
+  const rows = _readIssueRuleRows_();
 
   /** @param {IssueCategoryKey} key */
   const rowOf = (key) => rows.get(ISSUE_CATEGORIES[key].code) ?? { enabled: false, value1: "", value2: "" };
@@ -183,7 +156,7 @@ function _readIssueSettings_() {
     const raw = which === 1 ? row.value1 : row.value2;
     const list = String(raw).split(",").map((item) => item.trim()).filter((item) => item !== "");
     if (row.enabled && list.length === 0) {
-      throw new Error(`${ISSUE_RULES_SHEET}: ${ISSUE_CATEGORIES[key].code} needs Value ${which}`);
+      throw new Error(`Issue Rules: ${ISSUE_CATEGORIES[key].code} needs Value ${which}`);
     }
     return list;
   };
@@ -198,7 +171,7 @@ function _readIssueSettings_() {
       const n = Number(item);
       if (rowOf(key).enabled && !Number.isFinite(n)) {
         throw new Error(
-          `${ISSUE_RULES_SHEET}: ${ISSUE_CATEGORIES[key].code} Value ${which} must be a number, found "${item}"`,
+          `Issue Rules: ${ISSUE_CATEGORIES[key].code} Value ${which} must be a number, found "${item}"`,
         );
       }
       return n;
@@ -212,7 +185,7 @@ function _readIssueSettings_() {
   const number = (key, which) => {
     const list = numbers(key, which);
     if (rowOf(key).enabled && list.length !== 1) {
-      throw new Error(`${ISSUE_RULES_SHEET}: ${ISSUE_CATEGORIES[key].code} Value ${which} must be one number`);
+      throw new Error(`Issue Rules: ${ISSUE_CATEGORIES[key].code} Value ${which} must be one number`);
     }
     return list.length === 0 ? NaN : list[0];
   };

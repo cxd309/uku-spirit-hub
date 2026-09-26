@@ -8,9 +8,9 @@ const TEAMS_SHEET = "Teams";
  * what the tab is, what to edit, how it refreshes
  */
 const TEAMS_INFO = "Every team that has given or recieved a spirit score (international clubs excluded)\n\n"
-  + "Suggested Club name is generated using the selected rules in the Name Rules tab this is the default \"best guess\" at a club\n\n"
+  + "Suggested Club name is generated using the enabled Name Rules on the Settings tab, this is the default \"best guess\" at a club\n\n"
   + "To override the club use the Club Override column\n\n"
-  + "This table will be refreshed with the Responses table";
+  + "This table is refreshed by Refresh Results";
 
 /**
  * teams tab columns, in order
@@ -40,6 +40,7 @@ const TEAM_KEYS = /** @type {(keyof typeof TEAM_HEADERS)[]} */ (Object.keys(TEAM
  * @typedef {Object} TeamRecord
  * @property {string} team          team name, as first seen
  * @property {string} clubOverride  club typed by a person or "" if none
+ * @property {string} [suggestedClub] club suggested by the Name Rules, filled when written
  */
 
 /**
@@ -83,13 +84,6 @@ const TEAM_FORMULAS = Object.freeze({
     const { responses, plays } = _teamFormulaRefs_(row);
     return `=IFERROR(COUNTUNIQUE(FILTER(${responses("fileId")}, ${plays})), 0)`;
   },
-  suggestedClub: (/** @type {number} */ row) => {
-    const { team } = _teamFormulaRefs_(row);
-    const patterns = _nameRuleColumn_("Pattern");
-    const enabled = _nameRuleColumn_("Enabled");
-    return `=IFERROR(REDUCE(${team}, FILTER(${patterns}, ${enabled}=TRUE), `
-      + `LAMBDA(name, pattern, TRIM(REGEXREPLACE(name, pattern, "")))), ${team})`;
-  },
   club: (/** @type {number} */ row) => {
     const { cell } = _teamFormulaRefs_(row);
     return `=IF(${cell("clubOverride")}<>"", ${cell("clubOverride")}, ${cell("suggestedClub")})`;
@@ -102,7 +96,7 @@ const TEAM_FORMULAS = Object.freeze({
 function _getTeamsSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(TEAM_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), TEAMS_SHEET, headers, TEAMS_INFO).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), TEAMS_SHEET, headers, TEAMS_INFO);
 }
 
 /**
@@ -128,7 +122,7 @@ function _readTeams_(sheet) {
  *
  * @param {TeamRecord} team  the record
  * @param {number}     row   1-based sheet row it will be written to
- * @returns {unknown[]} balues in TEAM_KEYS order
+ * @returns {unknown[]} values in TEAM_KEYS order
  */
 function _teamToRow_(team, row) {
   return TEAM_KEYS.map((key) => {
@@ -144,7 +138,27 @@ function _teamToRow_(team, row) {
  * @param {TeamRecord[]}                       teams  teams to write, in display order
  */
 function _writeTeams_(sheet, teams) {
-  _writeTable_(sheet, teams.map((t, i) => _teamToRow_(t, i + DATA_ROW)), TEAM_KEYS.length);
+  const { regexes } = _readNameRules_();
+  _writeTable_(
+    sheet,
+    teams.map((t, i) => _teamToRow_({ ...t, suggestedClub: _suggestClub_(t.team, regexes) }, i + DATA_ROW)),
+    TEAM_KEYS.length,
+  );
+}
+
+/**
+ * work out every Suggested Club again from the current Name Rules
+ * only the Suggested Club column is written
+ */
+function _refreshSuggestedClubs_() {
+  const sheet = _getTeamsSheet_();
+  const rowCount = sheet.getLastRow() - HEADER_ROW;
+  if (rowCount < 1) return;
+  const { regexes } = _readNameRules_();
+  const teams = sheet.getRange(DATA_ROW, TEAM_KEYS.indexOf("team") + 1, rowCount, 1).getValues();
+  sheet
+    .getRange(DATA_ROW, TEAM_KEYS.indexOf("suggestedClub") + 1, rowCount, 1)
+    .setValues(teams.map(([team]) => [_suggestClub_(String(team), regexes)]));
 }
 
 /**

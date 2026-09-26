@@ -88,7 +88,7 @@ const CLUB_FORMULAS = Object.freeze({
 function _getClubsSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(CLUB_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUBS_SHEET, headers, CLUBS_INFO).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUBS_SHEET, headers, CLUBS_INFO);
 }
 
 /**

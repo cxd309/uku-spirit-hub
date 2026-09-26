@@ -85,7 +85,7 @@ function _getEventsSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   /** @type {readonly string[]} */
   const headers = Object.values(EVENT_HEADERS);
-  return _getOrCreateSheet_(ss, EVENTS_SHEET, headers, EVENTS_INFO).sheet;
+  return _getOrCreateSheet_(ss, EVENTS_SHEET, headers, EVENTS_INFO);
 }
 
 /**
@@ -319,9 +319,13 @@ function _highlightDuplicateTournaments_(sheet, rows) {
  */
 function _refreshTournaments_() {
   const sheet = _getEventsSheet_();
-  const files = _timed_("scan drive", () => _scanCategory_(_readConfig_().category));
-  const events = _syncEvents_(_readEvents_(sheet), files);
+  const category = _readHubSettings_().category;
+  const existing = _readEvents_(sheet);
+  _checkCategory_(category, existing.length);
+  const files = _timed_("scan drive", () => _scanCategory_(category));
+  const events = _syncEvents_(existing, files);
   _timed_("write tournaments", () => _writeEvents_(sheet, events));
+  _rememberCategory_(category);
 
   /** @type {Record<string, number>} */
   const counts = {};

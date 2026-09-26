@@ -56,7 +56,7 @@ function _importFile_(event) {
 }
 
 /**
- * import every tournament marked NEW or REFRESH on the Tournaments tab, then refresh issues
+ * import every tournament marked NEW or REFRESH on the Tournaments tab
  * works from the Tournaments tab only, run Refresh Tournaments first to find new or edited files
  *
  * successful imports replace that event's responses and clear its status
@@ -99,7 +99,6 @@ function _refreshResults_() {
   _timed_("write results", () => _writeResponses_(responsesSheet, responses));
   _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
 
-  _getNameRulesSheet_();
   const internationalIds = new Set(updatedEvents.filter((e) => e.international).map((e) => e.fileId));
   const teamsSheet = _getTeamsSheet_();
   _timed_("write teams", () =>
@@ -111,10 +110,8 @@ function _refreshResults_() {
     SpreadsheetApp.flush();
     _rebuildClubs_();
   });
-  const newIssues = _timed_("issues", () => _appendNewIssues_(responses, updatedEvents));
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
   return `Imported ${results.size - failed} tournament(s), ${imported.length} response(s)`
-    + (failed > 0 ? `; ${failed} failed (see Tournaments tab)` : "")
-    + `; ${newIssues} new issue(s)`;
+    + (failed > 0 ? `; ${failed} failed (see Tournaments tab)` : "");
 }

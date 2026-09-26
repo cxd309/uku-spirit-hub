@@ -10,7 +10,7 @@
  * @param {readonly string[]}                        headers  expected header row
  * @param {string}                                   info     text for the info row
  *                                                            line breaks separate points
- * @returns {{sheet: GoogleAppsScript.Spreadsheet.Sheet, created: boolean}} the tab and if created
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} the tab
  * @throws {Error} if the tab exists but its header row differs from `headers`
  */
 function _getOrCreateSheet_(ss, name, headers, info) {
@@ -22,7 +22,7 @@ function _getOrCreateSheet_(ss, name, headers, info) {
         `Tab "${name}" has unexpected headers: expected [${headers.join(", ")}], found [${actual.join(", ")}]`,
       );
     }
-    return { sheet: existing, created: false };
+    return existing;
   }
 
   const sheet = ss.insertSheet(name);
@@ -35,7 +35,7 @@ function _getOrCreateSheet_(ss, name, headers, info) {
     .setVerticalAlignment("top");
   sheet.getRange(HEADER_ROW, 1, 1, headers.length).setValues([[...headers]]).setFontWeight("bold");
   sheet.setFrozenRows(HEADER_ROW);
-  return { sheet: sheet, created: true };
+  return sheet;
 }
 
 /**

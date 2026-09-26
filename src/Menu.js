@@ -6,36 +6,50 @@
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("SpiritHub")
-    .addItem("Setup SpiritHub", "setup")
-    .addSeparator()
     .addItem("Refresh Tournaments", "refreshTournaments")
     .addItem("Refresh Results", "refreshResults")
     .addItem("Refresh Issues", "refreshIssues")
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
+    .addSeparator()
+    .addItem("SpiritHub Settings", "showSettings")
     .addToUi();
 }
 
 /**
- * rebuild the Clubs tab when a person changes something that affects club names
+ * keep Teams and Clubs up to date when a person changes something that affects club names
  * `onEdit` is a reserved name, apps script runs it after every edit by a person
  *
- * only reacts to the Club Override column on Teams and anything on Name Rules
+ * Club Override on Teams: rebuild Clubs
+ * Name Rules on Settings: work out every Suggested Club again, then rebuild Clubs
+ * anything else is ignored
  * skips quietly if another run holds the lock
- *   Refresh Results rebuilds Clubs at the end anyway
+ *   Refresh Results rebuilds Teams and Clubs anyway
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e  the edit event
  */
 function onEdit(e) {
-  const sheetName = e.range.getSheet().getName();
+  const sheet = e.range.getSheet();
+  const sheetName = sheet.getName();
+
   const overrideColumn = TEAM_KEYS.indexOf("clubOverride") + 1;
   const touchesOverride = sheetName === TEAMS_SHEET
     && e.range.getColumn() <= overrideColumn
     && e.range.getLastColumn() >= overrideColumn;
-  if (!touchesOverride && sheetName !== NAME_RULES_SHEET) return;
+
+  const nameRules = sheetName === SETTINGS_SHEET ? _findSection_(_settingsColumnA_(sheet), NAME_RULES_SECTION) : null;
+  const touchesNameRules = nameRules !== null
+    && e.range.getRow() <= nameRules.firstRow + nameRules.rowCount - 1
+    && e.range.getLastRow() >= nameRules.firstRow;
+
+  if (!touchesOverride && !touchesNameRules) return;
 
   const lock = LockService.getDocumentLock();
-  if (!lock.tryLock(1000)) return;
+  if (!lock.tryLock(LOCK_WAIT_MS)) return;
   try {
+    if (touchesNameRules) {
+      _refreshSuggestedClubs_();
+      SpreadsheetApp.flush();
+    }
     _rebuildClubs_();
   } finally {
     lock.releaseLock();
@@ -97,24 +111,37 @@ function _timed_(label, work) {
 }
 
 /**
- * menu: scan the category folder and update the Tournaments tab
+ * run a refresh from the menu
+ * shows every data tab and hides Settings first, then runs the work under the lock
+ *
+ * @param {function(): string} work  the refresh, returning its summary
  */
-function refreshTournaments() {
-  _notify_(_withLock_(_refreshTournaments_));
+function _runRefresh_(work) {
+  _notify_(_withLock_(() => {
+    _showDataTabs_();
+    return work();
+  }));
 }
 
 /**
- * menu: import every tournament marked NEW or REFRESH, then refresh issues
+ * menu: scan the category folder and update the Tournaments tab
+ */
+function refreshTournaments() {
+  _runRefresh_(_refreshTournaments_);
+}
+
+/**
+ * menu: import every tournament marked NEW or REFRESH
  */
 function refreshResults() {
-  _notify_(_withLock_(_refreshResults_));
+  _runRefresh_(_refreshResults_);
 }
 
 /**
  * menu: add any new issues from what is already in the spreadsheet
  */
 function refreshIssues() {
-  _notify_(_withLock_(() => _timed_("issues", _refreshIssues_)));
+  _runRefresh_(() => _timed_("issues", _refreshIssues_));
 }
 
 /**
@@ -122,5 +149,5 @@ function refreshIssues() {
  * only ever run from the menu
  */
 function refreshClubStatistics() {
-  _notify_(_withLock_(_refreshClubStatistics_));
+  _runRefresh_(_refreshClubStatistics_);
 }

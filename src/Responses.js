@@ -125,7 +125,7 @@ function _responseToRow_(response, row) {
 function _getResponsesSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(RESPONSE_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers, RESPONSES_INFO).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers, RESPONSES_INFO);
 }
 
 /**

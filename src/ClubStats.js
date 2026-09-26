@@ -103,7 +103,7 @@ function _getClubStatsSheet_() {
   /** @type {readonly string[]} */
   const headers = Object.values(CLUB_STATS_HEADERS);
   const info = "Spirit statistics for each club\n\nRun \"Refresh Club Statistics\" to calculate";
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUB_STATS_SHEET, headers, info).sheet;
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUB_STATS_SHEET, headers, info);
 }
 
 /**
@@ -267,12 +267,7 @@ function _refreshClubStatistics_() {
   if (responses.length === 0) return "No results found: run Refresh Results first";
 
   const clubOf = _readTeamClubs_();
-  const minimum = Number(_readConfig_().awardMinimumTournaments);
-  if (!Number.isInteger(minimum) || minimum < 0) {
-    throw new Error(
-      `"${CONFIG_SETTINGS.awardMinimumTournaments.label}" on the ${CONFIG_SHEET} tab must be a whole number`,
-    );
-  }
+  const minimum = _readAwardSettings_().minimumTournaments;
 
   const scores = _countedScores_(responses, events, clubOf);
   const countedTotal = scores.filter((s) => s.counts).length;
