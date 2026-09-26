@@ -49,9 +49,10 @@ function _readHubSettings_(): HubSettings {
 /**
  * make the Category value a dropdown of the folders in the season folder
  *
+ * @param sheet  the Settings tab, from _getSettingsSheet_
  * @returns a note for the summary, "" when the dropdown was set
  */
-function _setCategoryChoices_(): string {
+function _setCategoryChoices_(sheet: GoogleAppsScript.Spreadsheet.Sheet): string {
   const names: string[] = [];
   try {
     const folders = _findSeasonFolder_().getFolders();
@@ -61,12 +62,12 @@ function _setCategoryChoices_(): string {
   }
   if (names.length === 0) return "Category list not updated, no folders in the season folder";
 
-  const sheet = _getSettingsSheet_();
-  const location = _findSection_(_settingsColumnA_(sheet), HUB_SECTION);
+  const columnA = _settingsColumnA_(sheet);
+  const location = _findSection_(columnA, HUB_SECTION);
   if (!location || location.rowCount === 0) return "Category list not updated, Hub section not found";
-  const labels = sheet.getRange(location.firstRow, 1, location.rowCount, 1).getValues().map((row) =>
-    String(row[0]).trim()
-  );
+  const labels = columnA
+    .slice(location.firstRow - 1, location.firstRow - 1 + location.rowCount)
+    .map((row) => String(row[0]).trim());
   const index = labels.indexOf(HUB_SETTINGS.category.label);
   if (index < 0) return "Category list not updated, Category row not found";
 

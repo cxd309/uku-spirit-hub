@@ -40,7 +40,7 @@ function _showSettings_(): string {
   const blank = ss.getSheetByName("Sheet1");
   if (blank && blank.getLastRow() === 0 && blank.getLastColumn() === 0) ss.deleteSheet(blank);
 
-  const note = _setCategoryChoices_();
+  const note = _setCategoryChoices_(settings);
 
   settings.showSheet();
   ss.setActiveSheet(settings);

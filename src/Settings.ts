@@ -140,22 +140,26 @@ function _appendSection_(sheet: GoogleAppsScript.Spreadsheet.Sheet, section: Set
  *
  * @param sheet    the Settings tab
  * @param section  the section
+ * @param columnA  column A of the Settings tab as it is now, from row 1
+ * @returns true if anything was written, so column A must be read again
  */
-function _ensureSection_(sheet: GoogleAppsScript.Spreadsheet.Sheet, section: SettingsSection) {
-  const location = _findSection_(_settingsColumnA_(sheet), section);
+function _ensureSection_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  section: SettingsSection,
+  columnA: unknown[][],
+): boolean {
+  const location = _findSection_(columnA, section);
   if (!location) {
     _appendSection_(sheet, section);
-    return;
+    return true;
   }
-  if (!section.keyed) return;
+  if (!section.keyed) return false;
 
   const present = new Set(
-    location.rowCount === 0
-      ? []
-      : sheet.getRange(location.firstRow, 1, location.rowCount, 1).getValues().map((row) => String(row[0]).trim()),
+    columnA.slice(location.firstRow - 1, location.firstRow - 1 + location.rowCount).map((row) => String(row[0]).trim()),
   );
   const missing = section.defaults().filter((row) => !present.has(String(row[0])));
-  if (missing.length === 0) return;
+  if (missing.length === 0) return false;
 
   const after = location.firstRow + location.rowCount - 1;
   sheet.insertRowsAfter(after, missing.length);
@@ -164,6 +168,7 @@ function _ensureSection_(sheet: GoogleAppsScript.Spreadsheet.Sheet, section: Set
     .setValues(missing)
     .setFontWeight("normal");
   section.format(sheet, after + 1, missing.length);
+  return true;
 }
 
 /**
@@ -186,21 +191,69 @@ function _getSettingsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
       .setWrap(true)
       .setVerticalAlignment("top");
   }
-  for (const section of _settingsSections_()) _ensureSection_(sheet, section);
+  // column A is read once, and again only after a section or row has been added
+  let columnA = _settingsColumnA_(sheet);
+  for (const section of _settingsSections_()) {
+    if (_ensureSection_(sheet, section, columnA)) columnA = _settingsColumnA_(sheet);
+  }
   return sheet;
 }
 
 /**
+ * every value on the Settings tab, in one read
+ * the tab is created with every section if it does not exist yet
+ *
+ * @returns one array per sheet row from row 1, all the same width
+ */
+function _readSettingsValues_(): unknown[][] {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTINGS_SHEET) ?? _getSettingsSheet_();
+  return sheet.getDataRange().getValues();
+}
+
+/**
+ * the table rows of a section, from values already read
+ * pure, never modifies its arguments
+ *
+ * @param values   every value on the Settings tab, from _readSettingsValues_
+ * @param section  the section
+ * @returns one array per row, as wide as the section's headers, null if the section is missing
+ */
+function _sectionRows_(values: unknown[][], section: SettingsSection): unknown[][] | null {
+  const location = _findSection_(values, section);
+  if (!location) return null;
+  return values
+    .slice(location.firstRow - 1, location.firstRow - 1 + location.rowCount)
+    .map((row) => Array.from({ length: section.headers.length }, (_, i) => row[i] ?? ""));
+}
+
+/**
+ * whether a section is complete: present, and for keyed sections with every default row
+ * pure, never modifies its arguments
+ *
+ * @param rows     the section's rows from _sectionRows_
+ * @param section  the section
+ * @returns true if nothing needs adding
+ */
+function _isSectionComplete_(rows: unknown[][] | null, section: SettingsSection): boolean {
+  if (!rows) return false;
+  if (!section.keyed) return true;
+  const present = new Set(rows.map((row) => String(row[0]).trim()));
+  return section.defaults().every((row) => present.has(String(row[0])));
+}
+
+/**
  * the table rows of a section
+ * one read of the Settings tab, a missing section or keyed row is added back first (then read again)
+ * so checks and settings added in later versions still appear on their own
  *
  * @param section  the section
  * @returns one array per row, as wide as the section's headers
  */
 function _readSection_(section: SettingsSection): unknown[][] {
-  const sheet = _getSettingsSheet_();
-  const location = _findSection_(_settingsColumnA_(sheet), section);
-  if (!location || location.rowCount === 0) return [];
-  return sheet.getRange(location.firstRow, 1, location.rowCount, section.headers.length).getValues();
+  const rows = _sectionRows_(_readSettingsValues_(), section);
+  if (_isSectionComplete_(rows, section)) return rows ?? [];
+  _getSettingsSheet_();
+  return _sectionRows_(_readSettingsValues_(), section) ?? [];
 }
 
 /**
