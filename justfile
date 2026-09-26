@@ -1,5 +1,5 @@
-# version from src/Consts.js
-version := `grep -oE 'HUB_VERSION = "[^"]+"' src/Consts.js | cut -d'"' -f2`
+# version from src/Consts.ts
+version := `grep -oE 'HUB_VERSION = "[^"]+"' src/Consts.ts | cut -d'"' -f2`
 
 # List available recipes
 default:
@@ -13,9 +13,9 @@ install:
 fmt:
     npx dprint fmt
 
-# Type-check src/ against its JSDoc annotations
+# Type-check src/
 typecheck:
-    npx tsc -p jsconfig.json
+    npx tsc
 
 # Every check that must pass before pushing
 check: fmt typecheck

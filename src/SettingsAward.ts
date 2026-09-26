@@ -12,10 +12,8 @@ const AWARD_SETTINGS = Object.freeze({
 
 /**
  * the Spirit Award section of the Settings tab
- *
- * @type {SettingsSection}
  */
-const AWARD_SECTION = Object.freeze({
+const AWARD_SECTION = Object.freeze<SettingsSection>({
   title: "Spirit Award",
   description: "How clubs qualify for the spirit award on the Club Statistics tab",
   headers: SETTING_HEADERS,
@@ -26,18 +24,19 @@ const AWARD_SECTION = Object.freeze({
 
 /**
  * settings read from the Spirit Award section
- *
- * @typedef {Object} AwardSettings
- * @property {number} minimumTournaments  tournaments a club must enter to qualify
  */
+interface AwardSettings {
+  /** tournaments a club must enter to qualify */
+  minimumTournaments: number;
+}
 
 /**
  * read the Spirit Award section of the Settings tab
  *
- * @returns {AwardSettings} the settings
+ * @returns the settings
  * @throws {Error} if a value is not a whole number
  */
-function _readAwardSettings_() {
+function _readAwardSettings_(): AwardSettings {
   const label = AWARD_SETTINGS.minimumTournaments.label;
   const raw = _readSettingValues_(AWARD_SECTION).get(label) ?? "";
   const minimumTournaments = Number(raw);

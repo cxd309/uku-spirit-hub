@@ -25,9 +25,9 @@ function onOpen() {
  * skips quietly if another run holds the lock
  *   Refresh Results rebuilds Teams and Clubs anyway
  *
- * @param {GoogleAppsScript.Events.SheetsOnEdit} e  the edit event
+ * @param e  the edit event
  */
-function onEdit(e) {
+function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
   const sheet = e.range.getSheet();
   const sheetName = sheet.getName();
 
@@ -64,12 +64,11 @@ const LOCK_WAIT_MS = 1000;
 /**
  * run a function while holding this spreadsheet's script lock
  * so two runs (by same or different people) can never conflict
- * @template T
- * @param {function(): T} work the function to run
- * @returns {T} whatever `work` returns
+ * @param work the function to run
+ * @returns whatever `work` returns
  * @throws {Error} if another run still holds the lock after LOCK_WAIT_MS
  */
-function _withLock_(work) {
+function _withLock_<T>(work: () => T): T {
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(LOCK_WAIT_MS)) {
     throw new Error("Another SpiritHub run is in progress. Please try again in a minute");
@@ -85,9 +84,9 @@ function _withLock_(work) {
  * show a short message in the bottom-right corner of the spreadsheet
  * and log it
  *
- * @param {string} message text to show
+ * @param message text to show
  */
-function _notify_(message) {
+function _notify_(message: string) {
   console.log(message);
   SpreadsheetApp.getActiveSpreadsheet().toast(message, "SpiritHub", 10);
 }
@@ -96,12 +95,11 @@ function _notify_(message) {
  * run a function and log how long it took, to find slow steps
  * shows in the Apps Script Executions log
  *
- * @template T
- * @param {string}      label  name of the step
- * @param {function(): T} work the step
- * @returns {T} whatever `work` returns
+ * @param label  name of the step
+ * @param work   the step
+ * @returns whatever `work` returns
  */
-function _timed_(label, work) {
+function _timed_<T>(label: string, work: () => T): T {
   const start = Date.now();
   try {
     return work();
@@ -114,9 +112,9 @@ function _timed_(label, work) {
  * run a refresh from the menu
  * shows every data tab and hides Settings first, then runs the work under the lock
  *
- * @param {function(): string} work  the refresh, returning its summary
+ * @param work  the refresh, returning its summary
  */
-function _runRefresh_(work) {
+function _runRefresh_(work: () => string) {
   _notify_(_withLock_(() => {
     _showDataTabs_();
     return work();

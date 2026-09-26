@@ -12,10 +12,8 @@ const HUB_SETTINGS = Object.freeze({
 
 /**
  * the Hub section of the Settings tab
- *
- * @type {SettingsSection}
  */
-const HUB_SECTION = Object.freeze({
+const HUB_SECTION = Object.freeze<SettingsSection>({
   title: "Hub",
   description: "Which results this hub reads. Pick the Category once, changing it later would mix two categories",
   headers: SETTING_HEADERS,
@@ -26,18 +24,19 @@ const HUB_SECTION = Object.freeze({
 
 /**
  * settings read from the Hub section
- *
- * @typedef {Object} HubSettings
- * @property {string} category  category folder this hub reads, e.g. University
  */
+interface HubSettings {
+  /** category folder this hub reads, e.g. University */
+  category: string;
+}
 
 /**
  * read the Hub section of the Settings tab
  *
- * @returns {HubSettings} the settings
+ * @returns the settings
  * @throws {Error} if Category is blank
  */
-function _readHubSettings_() {
+function _readHubSettings_(): HubSettings {
   const category = _readSettingValues_(HUB_SECTION).get(HUB_SETTINGS.category.label) ?? "";
   if (category === "") {
     throw new Error(
@@ -50,11 +49,10 @@ function _readHubSettings_() {
 /**
  * make the Category value a dropdown of the folders in the season folder
  *
- * @returns {string} a note for the summary, "" when the dropdown was set
+ * @returns a note for the summary, "" when the dropdown was set
  */
-function _setCategoryChoices_() {
-  /** @type {string[]} */
-  const names = [];
+function _setCategoryChoices_(): string {
+  const names: string[] = [];
   try {
     const folders = _findSeasonFolder_().getFolders();
     while (folders.hasNext()) names.push(folders.next().getName());
@@ -89,11 +87,11 @@ const SCANNED_CATEGORY_PROPERTY = "scannedCategory";
  * stop if the Category has changed since the Tournaments tab was built
  * changing it would mark every tournament MISSING and mix two categories
  *
- * @param {string} category        the Category setting now
- * @param {number} tournamentCount  rows on the Tournaments tab
+ * @param category         the Category setting now
+ * @param tournamentCount  rows on the Tournaments tab
  * @throws {Error} if the category changed and there are tournaments
  */
-function _checkCategory_(category, tournamentCount) {
+function _checkCategory_(category: string, tournamentCount: number) {
   const scanned = PropertiesService.getDocumentProperties().getProperty(SCANNED_CATEGORY_PROPERTY);
   if (scanned && scanned !== category && tournamentCount > 0) {
     throw new Error(
@@ -107,8 +105,8 @@ function _checkCategory_(category, tournamentCount) {
 /**
  * remember the category the Tournaments tab was built from
  *
- * @param {string} category  the Category setting
+ * @param category  the Category setting
  */
-function _rememberCategory_(category) {
+function _rememberCategory_(category: string) {
   PropertiesService.getDocumentProperties().setProperty(SCANNED_CATEGORY_PROPERTY, category);
 }

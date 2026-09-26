@@ -9,7 +9,7 @@ const CLUB_STATS_SHEET = "Club Statistics";
  * values are the header text
  */
 const CLUB_STATS_HEADERS = Object.freeze(
-  /** @type {const} */ ({
+  {
     club: "Club",
     tournamentsEntered: "Tournaments Entered",
     teamEntries: "Team Entries",
@@ -32,13 +32,13 @@ const CLUB_STATS_HEADERS = Object.freeze(
     teamModelRank: "Team Model Rank",
     averageGiven: "Average Given",
     scorerEffect: "Scorer Effect",
-  }),
+  } as const,
 );
 
 /**
  * keys of the Club Statistics tab in column order
  */
-const CLUB_STATS_KEYS = /** @type {(keyof typeof CLUB_STATS_HEADERS)[]} */ (Object.keys(CLUB_STATS_HEADERS));
+const CLUB_STATS_KEYS = Object.keys(CLUB_STATS_HEADERS) as (keyof typeof CLUB_STATS_HEADERS)[];
 
 /**
  * a total at or below this counts towards % 6 or Below
@@ -48,34 +48,39 @@ const CLUB_STATS_LOW_SCORE = 6;
 /**
  * one row of the Club Statistics tab
  * numbers are "" when there is nothing to show
- *
- * @typedef {Record<keyof typeof CLUB_STATS_HEADERS, string|number|boolean>} ClubStatsRow
  */
+type ClubStatsRow = Record<keyof typeof CLUB_STATS_HEADERS, string | number | boolean>;
 
 /**
  * one score counted for club statistics, with both clubs worked out
- *
- * @typedef {Object} CountedScore
- * @property {string} tournament    file id of the tournament
- * @property {string} scorer        scoring team
- * @property {string} scorerClub    scoring club, "" when the team has no club (e.g. international teams)
- * @property {string} receiver      receiving team
- * @property {string} receiverClub  receiving club
- * @property {number} total         total score
- * @property {boolean} counts       true when the clubs differ, only these count towards scores and models
  */
+interface CountedScore {
+  /** file id of the tournament */
+  tournament: string;
+  /** scoring team */
+  scorer: string;
+  /** scoring club, "" when the team has no club (e.g. international teams) */
+  scorerClub: string;
+  /** receiving team */
+  receiver: string;
+  /** receiving club */
+  receiverClub: string;
+  /** total score */
+  total: number;
+  /** true when the clubs differ, only these count towards scores and models */
+  counts: boolean;
+}
 
 /**
  * info row text, with when it was calculated and a summary of both models
  *
- * @param {Date}                          when        when the statistics were calculated
- * @param {number}                        minimum     tournaments needed to qualify
- * @param {Record<string, ModelResult>}   models      each model by name
- * @returns {string} the info text
+ * @param when     when the statistics were calculated
+ * @param minimum  tournaments needed to qualify
+ * @param models   each model by name
+ * @returns the info text
  */
-function _clubStatsInfo_(when, minimum, models) {
-  /** @param {number} variance */
-  const sd = (variance) => Math.sqrt(variance).toFixed(2);
+function _clubStatsInfo_(when: Date, minimum: number, models: Record<string, ModelResult>): string {
+  const sd = (variance: number) => Math.sqrt(variance).toFixed(2);
   const summaries = Object.entries(models).map(([name, model]) =>
     model.ok
       ? `- ${name}: scorer SD ${sd(model.scorerVariance)}, scorer at tournament SD ${
@@ -97,11 +102,10 @@ function _clubStatsInfo_(when, minimum, models) {
 }
 
 /**
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Club Statistics tab, created on first use
+ * @returns the Club Statistics tab, created on first use
  */
-function _getClubStatsSheet_() {
-  /** @type {readonly string[]} */
-  const headers = Object.values(CLUB_STATS_HEADERS);
+function _getClubStatsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
+  const headers: readonly string[] = Object.values(CLUB_STATS_HEADERS);
   const info = "Spirit statistics for each club\n\nRun \"Refresh Club Statistics\" to calculate";
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUB_STATS_SHEET, headers, info);
 }
@@ -111,12 +115,16 @@ function _getClubStatsSheet_() {
  * pure, never modifies its arguments
  * scores between two teams of the same club are kept for tournament counts but do not count, the same as the award
  *
- * @param {ResponseRecord[]}    responses  all responses
- * @param {EventRecord[]}       events     all events
- * @param {Map<string, string>} clubOf     team key → club, from the Teams tab
- * @returns {CountedScore[]} the scores, those with no receiving club dropped
+ * @param responses  all responses
+ * @param events     all events
+ * @param clubOf     team key → club, from the Teams tab
+ * @returns the scores, those with no receiving club dropped
  */
-function _countedScores_(responses, events, clubOf) {
+function _countedScores_(
+  responses: ResponseRecord[],
+  events: EventRecord[],
+  clubOf: Map<string, string>,
+): CountedScore[] {
   const included = new Set(events.filter((e) => e.include).map((e) => e.fileId));
   return responses
     .filter((r) => included.has(r.fileId))
@@ -136,11 +144,19 @@ function _countedScores_(responses, events, clubOf) {
  * summary numbers for a list of totals
  * pure, never modifies its arguments
  *
- * @param {number[]} totals  the totals
- * @returns {{mean: number|"", sd: number|"", median: number|"", min: number|"", max: number|"", lowShare: number|""}}
- *   each "" when there are too few totals
+ * @param totals  the totals
+ * @returns each "" when there are too few totals
  */
-function _summarise_(totals) {
+function _summarise_(
+  totals: number[],
+): {
+  mean: number | "";
+  sd: number | "";
+  median: number | "";
+  min: number | "";
+  max: number | "";
+  lowShare: number | "";
+} {
   const n = totals.length;
   if (n === 0) return { mean: "", sd: "", median: "", min: "", max: "", lowShare: "" };
   const sorted = [...totals].sort((a, b) => a - b);
@@ -156,15 +172,15 @@ function _summarise_(totals) {
  * rank of each qualifying club by a value, highest first, ties share a rank
  * pure, never modifies its arguments
  *
- * @param {ClubStatsRow[]}                       rows  every club's row
- * @param {keyof typeof CLUB_STATS_HEADERS}      key   column to rank by
- * @returns {Map<string, number>} club → rank, qualifying clubs with a value only
+ * @param rows  every club's row
+ * @param key   column to rank by
+ * @returns club → rank, qualifying clubs with a value only
  */
-function _rankClubs_(rows, key) {
+function _rankClubs_(rows: ClubStatsRow[], key: keyof typeof CLUB_STATS_HEADERS): Map<string, number> {
   const ranked = rows.filter((row) => row.qualifies === true && typeof row[key] === "number");
   return new Map(ranked.map((row) => [
     String(row.club),
-    1 + ranked.filter((other) => /** @type {number} */ (other[key]) > /** @type {number} */ (row[key])).length,
+    1 + ranked.filter((other) => (other[key] as number) > (row[key] as number)).length,
   ]));
 }
 
@@ -172,15 +188,18 @@ function _rankClubs_(rows, key) {
  * every club's statistics
  * pure, no google calls, except the two model fits which are also pure
  *
- * @param {string[]}       clubs    every club, in display order
- * @param {CountedScore[]} scores   every score at an included tournament
- * @param {number}         minimum  tournaments needed to qualify
- * @returns {{rows: ClubStatsRow[], models: Record<string, ModelResult>}} one row per club, and both models
+ * @param clubs    every club, in display order
+ * @param scores   every score at an included tournament
+ * @param minimum  tournaments needed to qualify
+ * @returns one row per club, and both models
  */
-function _clubStatistics_(clubs, scores, minimum) {
+function _clubStatistics_(
+  clubs: string[],
+  scores: CountedScore[],
+  minimum: number,
+): { rows: ClubStatsRow[]; models: Record<string, ModelResult> } {
   const counted = scores.filter((s) => s.counts);
-  /** @param {(s: CountedScore) => string} scorer */
-  const observations = (scorer) =>
+  const observations = (scorer: (s: CountedScore) => string) =>
     counted.map((s) => ({ club: s.receiverClub, scorer: scorer(s), tournament: s.tournament, total: s.total }));
   // a scorer with no club, e.g. an international team, is its own group
   const clubModel = _fitClubModel_(
@@ -188,14 +207,12 @@ function _clubStatistics_(clubs, scores, minimum) {
   );
   const teamModel = _fitClubModel_(observations((s) => `team:${_teamKey_(s.scorer)}`));
 
-  /** @type {ClubStatsRow[]} */
-  const rows = clubs.map((club) => {
+  const rows: ClubStatsRow[] = clubs.map((club) => {
     const received = counted.filter((s) => s.receiverClub === club);
     const given = counted.filter((s) => s.scorerClub === club);
     const played = scores.filter((s) => s.receiverClub === club || s.scorerClub === club);
     // one entry per team per tournament, whichever side of the score the team is on
-    /** @type {Set<string>} */
-    const teamEntries = new Set();
+    const teamEntries: Set<string> = new Set();
     for (const s of played) {
       if (s.receiverClub === club) teamEntries.add(`${s.tournament}|${_teamKey_(s.receiver)}`);
       if (s.scorerClub === club) teamEntries.add(`${s.tournament}|${_teamKey_(s.scorer)}`);
@@ -245,13 +262,12 @@ function _clubStatistics_(clubs, scores, minimum) {
  * formula for a CI cell, from the Responses, Mean and SD cells on its row
  * uses the t distribution, the same as R's group.CI
  *
- * @param {number} row   1-based sheet row
- * @param {1|-1}   sign  +1 for the upper limit, -1 for the lower
- * @returns {string} the formula
+ * @param row   1-based sheet row
+ * @param sign  +1 for the upper limit, -1 for the lower
+ * @returns the formula
  */
-function _clubStatsCiFormula_(row, sign) {
-  /** @param {keyof typeof CLUB_STATS_HEADERS} key */
-  const cell = (key) => `$${_columnLetter_(CLUB_STATS_KEYS.indexOf(key) + 1)}${row}`;
+function _clubStatsCiFormula_(row: number, sign: 1 | -1): string {
+  const cell = (key: keyof typeof CLUB_STATS_HEADERS) => `$${_columnLetter_(CLUB_STATS_KEYS.indexOf(key) + 1)}${row}`;
   const n = cell("responses");
   return `=IF(${n}>1, ${cell("mean")} ${sign > 0 ? "+" : "-"} T.INV.2T(0.05, ${n}-1)*${cell("sd")}/SQRT(${n}), "")`;
 }
@@ -259,9 +275,9 @@ function _clubStatsCiFormula_(row, sign) {
 /**
  * recalculate the Club Statistics tab from the spreadsheet, no files are read
  *
- * @returns {string} a one-line summary
+ * @returns a one-line summary
  */
-function _refreshClubStatistics_() {
+function _refreshClubStatistics_(): string {
   const events = _readEvents_(_getEventsSheet_());
   const responses = _readResponses_(_getResponsesSheet_());
   if (responses.length === 0) return "No results found: run Refresh Results first";
@@ -298,9 +314,8 @@ function _refreshClubStatistics_() {
     .setVerticalAlignment("top");
 
   if (rows.length > 0) {
-    /** @type {[keyof typeof CLUB_STATS_HEADERS, string][]} */
     // full values are stored, decimals are shown to 2 decimal places
-    const formats = [
+    const formats: [keyof typeof CLUB_STATS_HEADERS, string][] = [
       ["mean", "0.00"],
       ["sd", "0.00"],
       ["median", "0.0"],

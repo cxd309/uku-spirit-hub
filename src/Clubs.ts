@@ -14,35 +14,38 @@ const CLUBS_INFO = "Every known club and its teams, generated from Teams tab\n\n
  * clubs tab columns, in order, all plain values written by the script
  */
 const CLUB_HEADERS = Object.freeze(
-  /** @type {const} */ ({
+  {
     club: "Club",
     teams: "Teams",
     events: "Tournaments",
     teamCount: "Team Count",
-  }),
+  } as const,
 );
 
 /**
  * keys of the Clubs tab in column order
  */
-const CLUB_KEYS = /** @type {(keyof typeof CLUB_HEADERS)[]} */ (Object.keys(CLUB_HEADERS));
+const CLUB_KEYS = Object.keys(CLUB_HEADERS) as (keyof typeof CLUB_HEADERS)[];
 
 /**
  * one row of the Clubs tab
- *
- * @typedef {Object} ClubRecord
- * @property {string} club       club name
- * @property {string} teams      its teams, comma separated
- * @property {string} events     tournaments any of its teams played in, comma separated, in date order
- * @property {number} teamCount  how many teams
  */
+interface ClubRecord {
+  /** club name */
+  club: string;
+  /** its teams, comma separated */
+  teams: string;
+  /** tournaments any of its teams played in, comma separated, in date order */
+  events: string;
+  /** how many teams */
+  teamCount: number;
+}
 
 /**
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Clubs tab, created on first use
+ * @returns the Clubs tab, created on first use
  */
-function _getClubsSheet_() {
-  /** @type {readonly string[]} */
-  const headers = Object.values(CLUB_HEADERS);
+function _getClubsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
+  const headers: readonly string[] = Object.values(CLUB_HEADERS);
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), CLUBS_SHEET, headers, CLUBS_INFO);
 }
 
@@ -52,12 +55,11 @@ function _getClubsSheet_() {
  * blanks ignored
  * matching is case-insensitive, first spelling seen is kept
  *
- * @param {unknown[]} clubValues  values of the Teams Club column
- * @returns {string[]} club names
+ * @param clubValues  values of the Teams Club column
+ * @returns club names
  */
-function _clubNames_(clubValues) {
-  /** @type {Map<string, string>} */
-  const byKey = new Map();
+function _clubNames_(clubValues: unknown[]): string[] {
+  const byKey: Map<string, string> = new Map();
   for (const value of clubValues) {
     const name = String(value).trim();
     const key = name.toLowerCase();
@@ -71,12 +73,16 @@ function _clubNames_(clubValues) {
  * pure, never modifies its arguments
  * club names are matched ignoring case, the first spelling seen is kept
  *
- * @param {{team: string, club: string}[]} teamClubs  every team and its club, in display order
- * @param {ResponseRecord[]}                responses  all responses
- * @param {EventRecord[]}                   events     all events, in date order
- * @returns {ClubRecord[]} one record per club, sorted A–Z
+ * @param teamClubs  every team and its club, in display order
+ * @param responses  all responses
+ * @param events     all events, in date order
+ * @returns one record per club, sorted A–Z
  */
-function _clubRecords_(teamClubs, responses, events) {
+function _clubRecords_(
+  teamClubs: { team: string; club: string }[],
+  responses: ResponseRecord[],
+  events: EventRecord[],
+): ClubRecord[] {
   const clubKeyOf = new Map(teamClubs.map((t) => [_teamKey_(t.team), t.club.toLowerCase()]));
   const played = _tournamentsPlayed_(responses, events, (team) => clubKeyOf.get(_teamKey_(team)) ?? "");
   return _clubNames_(teamClubs.map((t) => t.club)).map((club) => {

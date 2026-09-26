@@ -21,7 +21,7 @@ const EVENTS_INFO = "All the found spirit results files in the folder for this c
  * values are the header text
  */
 const EVENT_HEADERS = Object.freeze(
-  /** @type {const} */ ({
+  {
     fileId: "File ID",
     fileName: "File Name",
     path: "Path",
@@ -32,7 +32,7 @@ const EVENT_HEADERS = Object.freeze(
     international: "International",
     include: "Include",
     importedVersion: "Imported Version",
-  }),
+  } as const,
 );
 
 /**
@@ -40,36 +40,46 @@ const EVENT_HEADERS = Object.freeze(
  * OK is shown as a blank cell
  */
 const EVENT_STATUS = Object.freeze(
-  /** @type {const} */ ({
+  {
     NEW: "NEW",
     EDITED: "EDITED",
     REFRESH: "REFRESH",
     ERROR: "ERROR",
     MISSING: "MISSING",
     OK: "",
-  }),
+  } as const,
 );
 
 /**
  * One row of the Events tab.
- *
- * @typedef {Object} EventRecord
- * @property {string}    fileId           Drive file ID (the key).
- * @property {string}    fileName         File name.
- * @property {string}    path             Folder path below the category, joined with " / ".
- * @property {Date|null} date             tournament date from the folder name, null if the folder name is invalid
- * @property {string}    tournament       tournament name from the folder name, "" if the folder name is invalid
- * @property {string}    status           One of EVENT_STATUS.
- * @property {string}    message          Explanation for ERROR / MISSING; "" otherwise.
- * @property {boolean}   international    Ticked for international events.
- * @property {boolean}   include          Ticked to include the event in calculations.
- * @property {Date|null} importedVersion  File's last-modified time when last imported; null if never imported.
  */
+interface EventRecord {
+  /** Drive file ID (the key). */
+  fileId: string;
+  /** File name. */
+  fileName: string;
+  /** Folder path below the category, joined with " / ". */
+  path: string;
+  /** tournament date from the folder name, null if the folder name is invalid */
+  date: Date | null;
+  /** tournament name from the folder name, "" if the folder name is invalid */
+  tournament: string;
+  /** One of EVENT_STATUS. */
+  status: string;
+  /** Explanation for ERROR / MISSING; "" otherwise. */
+  message: string;
+  /** Ticked for international events. */
+  international: boolean;
+  /** Ticked to include the event in calculations. */
+  include: boolean;
+  /** File's last-modified time when last imported; null if never imported. */
+  importedVersion: Date | null;
+}
 
 /**
  * keys of EventRecord in column order
  */
-const EVENT_KEYS = /** @type {(keyof typeof EVENT_HEADERS)[]} */ (Object.keys(EVENT_HEADERS));
+const EVENT_KEYS = Object.keys(EVENT_HEADERS) as (keyof typeof EVENT_HEADERS)[];
 
 /**
  * changes smaller than this are ignored when comparing modified times
@@ -79,30 +89,28 @@ const VERSION_TOLERANCE_MS = 1000;
 /**
  * get the events tab, creating it with header row on first use.
  *
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} The Events tab.
+ * @returns The Events tab.
  */
-function _getEventsSheet_() {
+function _getEventsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  /** @type {readonly string[]} */
-  const headers = Object.values(EVENT_HEADERS);
+  const headers: readonly string[] = Object.values(EVENT_HEADERS);
   return _getOrCreateSheet_(ss, EVENTS_SHEET, headers, EVENTS_INFO);
 }
 
 /**
  * convert one row of Events tab values into an EventRecord
  *
- * @param {unknown[]} row  values of one data row, in EVENT_KEYS order
- * @returns {EventRecord} the record
+ * @param row  values of one data row, in EVENT_KEYS order
+ * @returns the record
  */
-function _eventFromRow_(row) {
-  /** @param {keyof typeof EVENT_HEADERS} key */
-  const cell = (key) => row[EVENT_KEYS.indexOf(key)];
+function _eventFromRow_(row: unknown[]): EventRecord {
+  const cell = (key: keyof typeof EVENT_HEADERS) => row[EVENT_KEYS.indexOf(key)];
   const imported = cell("importedVersion");
   return {
     fileId: String(cell("fileId")),
     fileName: String(cell("fileName")),
     path: String(cell("path")),
-    date: cell("date") instanceof Date ? /** @type {Date} */ (cell("date")) : null,
+    date: cell("date") instanceof Date ? cell("date") as Date : null,
     tournament: String(cell("tournament")),
     status: String(cell("status")).trim().toUpperCase(),
     message: String(cell("message")),
@@ -115,10 +123,10 @@ function _eventFromRow_(row) {
 /**
  * convert an EventRecord into a row of values for the Events tab
  *
- * @param {EventRecord} event  the record
- * @returns {unknown[]} values in EVENT_KEYS order
+ * @param event  the record
+ * @returns values in EVENT_KEYS order
  */
-function _eventToRow_(event) {
+function _eventToRow_(event: EventRecord): unknown[] {
   return EVENT_KEYS.map((key) => {
     const value = event[key];
     return value === null ? "" : value;
@@ -128,10 +136,10 @@ function _eventToRow_(event) {
 /**
  * read every data row of the Events tab
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the events tab
- * @returns {EventRecord[]} one record per data row
+ * @param sheet  the events tab
+ * @returns one record per data row
  */
-function _readEvents_(sheet) {
+function _readEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet): EventRecord[] {
   const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   return sheet
@@ -148,15 +156,14 @@ function _readEvents_(sheet) {
  * Validation is only applied to rows that hold an event: tick boxes store FALSE,
  * so applying them to empty rows would make those rows look like data.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet   The Events tab.
- * @param {EventRecord[]}                      events  Records to write, in display order.
+ * @param sheet   The Events tab.
+ * @param events  Records to write, in display order.
  */
-function _writeEvents_(sheet, events) {
+function _writeEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet, events: EventRecord[]) {
   _writeTable_(sheet, events.map(_eventToRow_), EVENT_KEYS.length);
   if (events.length === 0) return;
 
-  /** @param {keyof typeof EVENT_HEADERS} key */
-  const column = (key) => EVENT_KEYS.indexOf(key) + 1;
+  const column = (key: keyof typeof EVENT_HEADERS) => EVENT_KEYS.indexOf(key) + 1;
 
   const statuses = Object.values(EVENT_STATUS).filter((s) => s !== "");
   const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statuses, true).build();
@@ -173,11 +180,11 @@ function _writeEvents_(sheet, events) {
 /**
  * whether a file has changed since it was last imported
  *
- * @param {Date|null} importedVersion  modified time recorded at import, null if never imported
- * @param {Date}      lastUpdated      file's current modified time
- * @returns {boolean} if the file is newer than the imported version
+ * @param importedVersion  modified time recorded at import, null if never imported
+ * @param lastUpdated      file's current modified time
+ * @returns if the file is newer than the imported version
  */
-function _isChangedSince_(importedVersion, lastUpdated) {
+function _isChangedSince_(importedVersion: Date | null, lastUpdated: Date): boolean {
   return importedVersion !== null && lastUpdated.getTime() > importedVersion.getTime() + VERSION_TOLERANCE_MS;
 }
 
@@ -188,11 +195,11 @@ function _isChangedSince_(importedVersion, lastUpdated) {
  * new files are appended as NEW
  * files no longer found are marked MISSING
  *
- * @param {EventRecord[]} existing  current rows of the Events tab
- * @param {ResultsFile[]} files    results files found by the scan
- * @returns {EventRecord[]} updated list of events
+ * @param existing  current rows of the Events tab
+ * @param files     results files found by the scan
+ * @returns updated list of events
  */
-function _syncEvents_(existing, files) {
+function _syncEvents_(existing: EventRecord[], files: ResultsFile[]): EventRecord[] {
   const fileById = new Map(files.map((f) => [f.id, f]));
   const knownIds = new Set(existing.map((e) => e.fileId));
 
@@ -203,9 +210,14 @@ function _syncEvents_(existing, files) {
     }
 
     const changed = _isChangedSince_(event.importedVersion, file.lastUpdated);
+    const problem = _fileProblem_(file.name, file.folderName);
     let status = event.status;
     let message = event.message;
-    if (status === EVENT_STATUS.MISSING) {
+    if (problem !== "") {
+      status = EVENT_STATUS.ERROR;
+      message = problem;
+    } else if (status === EVENT_STATUS.MISSING || (status === EVENT_STATUS.ERROR && _isFileProblem_(message))) {
+      // the file is back, or its name has been fixed
       status = event.importedVersion === null ? EVENT_STATUS.NEW : changed ? EVENT_STATUS.EDITED : EVENT_STATUS.OK;
       message = "";
     } else if (status === EVENT_STATUS.OK && changed) {
@@ -229,8 +241,8 @@ function _syncEvents_(existing, files) {
       fileName: f.name,
       path: f.path.join(" / "),
       ..._folderFields_(f.folderName),
-      status: EVENT_STATUS.NEW,
-      message: "",
+      status: _fileProblem_(f.name, f.folderName) === "" ? EVENT_STATUS.NEW : EVENT_STATUS.ERROR,
+      message: _fileProblem_(f.name, f.folderName),
       international: false,
       include: true,
       importedVersion: null,
@@ -247,19 +259,18 @@ const FOLDER_NAME_PATTERN = /^(\d{4})(\d{2})(\d{2})\s+(.+)$/;
 
 /**
  * result of reading an event folder name
- *
- * @typedef {{ok: true, date: Date, tournament: string} | {ok: false, reason: string}} FolderNameResult
  */
+type FolderNameResult = { ok: true; date: Date; tournament: string } | { ok: false; reason: string };
 
 /**
  * read the date and tournament name from an event folder name
  * pure, no google calls
  * the date must be a real calendar date, e.g. 20260000 is rejected
  *
- * @param {string} name  folder name, e.g. "20251101 ELUXIR"
- * @returns {FolderNameResult} date and tournament, or why the name is invalid
+ * @param name  folder name, e.g. "20251101 ELUXIR"
+ * @returns date and tournament, or why the name is invalid
  */
-function _parseFolderName_(name) {
+function _parseFolderName_(name: string): FolderNameResult {
   const match = FOLDER_NAME_PATTERN.exec(name.trim());
   if (!match) {
     return { ok: false, reason: `folder name "${name}" must be "YYYYMMDD Tournament name"` };
@@ -273,32 +284,62 @@ function _parseFolderName_(name) {
 }
 
 /**
+ * why a file found by the scan cannot be imported, from its file and folder names
+ * pure, no google calls
+ * every reason starts with "file name" or "folder name", see _isFileProblem_
+ *
+ * @param fileName    name of the file
+ * @param folderName  name of the folder containing the file
+ * @returns the reason, "" if the names are fine
+ */
+function _fileProblem_(fileName: string, folderName: string): string {
+  if (!fileName.toLowerCase().includes(RESULTS_FILE_TEXT.toLowerCase())) {
+    return `file name "${fileName}" does not contain "${RESULTS_FILE_TEXT}"`;
+  }
+  const folder = _parseFolderName_(folderName);
+  return folder.ok ? "" : folder.reason;
+}
+
+/**
+ * whether a Message was written because of a bad file or folder name
+ * these are cleared by the next Refresh Tournaments once the name is fixed
+ * other errors (e.g. a failed import) stay until a person sets REFRESH
+ *
+ * @param message  the Message cell
+ * @returns true if it came from _fileProblem_ or the folder name check on import
+ */
+function _isFileProblem_(message: string): boolean {
+  return message.startsWith("file name ") || message.startsWith("folder name ");
+}
+
+/**
  * date and tournament columns for an event, from its folder name
  * both blank when the folder name is invalid
  *
- * @param {string} folderName  name of the folder containing the results file
- * @returns {{date: Date|null, tournament: string}} values for the Date and Tournament columns
+ * @param folderName  name of the folder containing the results file
+ * @returns values for the Date and Tournament columns
  */
-function _folderFields_(folderName) {
+function _folderFields_(folderName: string): { date: Date | null; tournament: string } {
   const folder = _parseFolderName_(folderName);
   return folder.ok ? { date: folder.date, tournament: folder.tournament } : { date: null, tournament: "" };
 }
 
 /**
  * highlight tournament names that appear more than once in red
+ * blank names are highlighted too: the folder name could not be read, so the tournament cannot be imported
  * replaces only rules on the Tournament column, other conditional formatting is kept
- * matching is case-insensitive, blanks are never highlighted
+ * matching is case-insensitive, only event rows are covered so empty rows below the table are never highlighted
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the Events tab
- * @param {number}                             rows   number of event rows
+ * @param sheet  the Events tab
+ * @param rows   number of event rows
  */
-function _highlightDuplicateTournaments_(sheet, rows) {
+function _highlightDuplicateTournaments_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: number) {
   const column = EVENT_KEYS.indexOf("tournament") + 1;
   const letter = _columnLetter_(column);
   const range = sheet.getRange(DATA_ROW, column, rows, 1);
   const rule = SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied(
-      `=AND($${letter}${DATA_ROW}<>"", COUNTIF($${letter}$${DATA_ROW}:$${letter}, $${letter}${DATA_ROW})>1)`,
+      `=OR($${letter}${DATA_ROW}="", COUNTIF($${letter}$${DATA_ROW}:$${letter}, $${letter}${DATA_ROW})>1)`,
     )
     .setBackground("#f4c7c3")
     .setFontColor("#a50e0e")
@@ -315,9 +356,9 @@ function _highlightDuplicateTournaments_(sheet, rows) {
  *
  * does not import any responses, Refresh Results does that
  *
- * @returns {string} a one-line summary of the Events tab
+ * @returns a one-line summary of the Events tab
  */
-function _refreshTournaments_() {
+function _refreshTournaments_(): string {
   const sheet = _getEventsSheet_();
   const category = _readHubSettings_().category;
   const existing = _readEvents_(sheet);
@@ -336,8 +377,7 @@ function _refreshTournaments_() {
     _rebuildClubs_();
   });
 
-  /** @type {Record<string, number>} */
-  const counts = {};
+  const counts: Record<string, number> = {};
   for (const e of events) {
     const label = e.status || "up to date";
     counts[label] = (counts[label] || 0) + 1;
@@ -351,10 +391,10 @@ function _refreshTournaments_() {
  * then by tournament and file name, so events on the same day have a fixed order
  * pure, returns a new array
  *
- * @param {EventRecord[]} events  events in any order
- * @returns {EventRecord[]} events in date order
+ * @param events  events in any order
+ * @returns events in date order
  */
-function _sortEvents_(events) {
+function _sortEvents_(events: EventRecord[]): EventRecord[] {
   return [...events].sort((a, b) =>
     _compareDates_(a.date, b.date)
     || a.tournament.localeCompare(b.tournament)

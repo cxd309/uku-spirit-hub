@@ -1,16 +1,15 @@
 /**
  * Outcome of importing one results file.
- *
- * @typedef {{
- *  ok: true,
- *  responses: ResponseRecord[],
- *  problems: RowProblem[],
- *  version: Date
- * } | {
- *  ok: false,
- *  reason: string
- * }} ImportResult
  */
+type ImportResult = {
+  ok: true;
+  responses: ResponseRecord[];
+  problems: RowProblem[];
+  version: Date;
+} | {
+  ok: false;
+  reason: string;
+};
 
 /**
  * read an event's results file into response records
@@ -19,14 +18,21 @@
  * any error from Google (file deleted, no permission) is caught and returned as a
  * reason, so one bad file cannot stop the whole refresh
  *
- * @param {EventRecord} event  the event to import
- * @returns {ImportResult} the responses read, or why the file could not be read
+ * @param event  the event to import
+ * @returns the responses read, or why the file could not be read
  */
-function _importFile_(event) {
+function _importFile_(event: EventRecord): ImportResult {
   if (event.date === null) {
     return {
       ok: false,
       reason: "folder name must be \"YYYYMMDD Tournament name\", fix it then run Refresh Tournaments",
+    };
+  }
+  if (!event.fileName.toLowerCase().includes(RESULTS_FILE_TEXT.toLowerCase())) {
+    return {
+      ok: false,
+      reason:
+        `file name "${event.fileName}" does not contain "${RESULTS_FILE_TEXT}", fix it then run Refresh Tournaments`,
     };
   }
   try {
@@ -63,9 +69,9 @@ function _importFile_(event) {
  * failed imports mark the event ERROR and keep its previous responses
  * responses are written before Tournaments, so an interrupted run is simply repeated
  *
- * @returns {string} a one-line summary of the refresh
+ * @returns a one-line summary of the refresh
  */
-function _refreshResults_() {
+function _refreshResults_(): string {
   const eventsSheet = _getEventsSheet_();
   const responsesSheet = _getResponsesSheet_();
   const events = _readEvents_(eventsSheet);
@@ -74,8 +80,10 @@ function _refreshResults_() {
   const toImport = events.filter((e) => e.status === EVENT_STATUS.NEW || e.status === EVENT_STATUS.REFRESH);
   if (toImport.length === 0) return "Nothing to refresh: no tournaments are NEW or REFRESH";
 
-  /** @type {Map<string, ImportResult>} */
-  const results = _timed_("read files", () => new Map(toImport.map((e) => [e.fileId, _importFile_(e)])));
+  const results: Map<string, ImportResult> = _timed_(
+    "read files",
+    () => new Map(toImport.map((e) => [e.fileId, _importFile_(e)])),
+  );
 
   const updatedEvents = events.map((event) => {
     const result = results.get(event.fileId);

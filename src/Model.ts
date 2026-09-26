@@ -12,57 +12,66 @@
 
 /**
  * one score for the model
- *
- * @typedef {Object} ModelObservation
- * @property {string} club        receiving club
- * @property {string} scorer      scorer group, a club or a team
- * @property {string} tournament  tournament id
- * @property {number} total       total score
  */
+interface ModelObservation {
+  /** receiving club */
+  club: string;
+  /** scorer group, a club or a team */
+  scorer: string;
+  /** tournament id */
+  tournament: string;
+  /** total score */
+  total: number;
+}
 
 /**
  * a fitted model, or why it could not be fitted
- *
- * @typedef {{
- *   ok: true,
- *   clubs: Map<string, {mean: number, se: number}>,
- *   scorerEffects: Map<string, number>,
- *   residualVariance: number,
- *   scorerVariance: number,
- *   scorerAtTournamentVariance: number
- * } | {
- *   ok: false,
- *   reason: string
- * }} ModelResult
  */
+type ModelResult = {
+  ok: true;
+  clubs: Map<string, { mean: number; se: number }>;
+  scorerEffects: Map<string, number>;
+  residualVariance: number;
+  scorerVariance: number;
+  scorerAtTournamentVariance: number;
+} | {
+  ok: false;
+  reason: string;
+};
 
 /**
  * the scores one scorer gave at one tournament
- *
- * @typedef {Object} ModelGroup
- * @property {number} count           how many scores
- * @property {number} sum             sum of the totals
- * @property {number} sumSquares      sum of the squared totals
- * @property {Map<number, {count: number, sum: number}>} byClub  club index -> scores given to that club
  */
+interface ModelGroup {
+  /** how many scores */
+  count: number;
+  /** sum of the totals */
+  sum: number;
+  /** sum of the squared totals */
+  sumSquares: number;
+  /** club index -> scores given to that club */
+  byClub: Map<number, { count: number; sum: number }>;
+}
 
 /**
  * group the observations by scorer, then by tournament
  * pure, never modifies its arguments
  *
- * @param {ModelObservation[]}  observations  the scores
- * @param {Map<string, number>} clubIndex     club → column
- * @returns {Map<string, ModelGroup[]>} scorer → one group per tournament
+ * @param observations  the scores
+ * @param clubIndex     club → column
+ * @returns scorer → one group per tournament
  */
-function _modelGroups_(observations, clubIndex) {
-  /** @type {Map<string, Map<string, ModelGroup>>} */
-  const byScorer = new Map();
+function _modelGroups_(
+  observations: ModelObservation[],
+  clubIndex: Map<string, number>,
+): Map<string, ModelGroup[]> {
+  const byScorer: Map<string, Map<string, ModelGroup>> = new Map();
   for (const o of observations) {
     const tournaments = byScorer.get(o.scorer) ?? new Map();
     byScorer.set(o.scorer, tournaments);
     const group = tournaments.get(o.tournament) ?? { count: 0, sum: 0, sumSquares: 0, byClub: new Map() };
     tournaments.set(o.tournament, group);
-    const j = /** @type {number} */ (clubIndex.get(o.club));
+    const j = clubIndex.get(o.club) as number;
     const cell = group.byClub.get(j) ?? { count: 0, sum: 0 };
     group.byClub.set(j, { count: cell.count + 1, sum: cell.sum + o.total });
     group.count++;
@@ -75,10 +84,10 @@ function _modelGroups_(observations, clubIndex) {
 /**
  * cholesky factor of a symmetric matrix
  *
- * @param {Float64Array[]} m  the matrix
- * @returns {Float64Array[]|null} lower triangle L with L Lᵀ = m, null if m is not positive definite
+ * @param m  the matrix
+ * @returns lower triangle L with L Lᵀ = m, null if m is not positive definite
  */
-function _cholesky_(m) {
+function _cholesky_(m: Float64Array[]): Float64Array[] | null {
   const size = m.length;
   const l = Array.from({ length: size }, () => new Float64Array(size));
   for (let i = 0; i < size; i++) {
@@ -99,11 +108,11 @@ function _cholesky_(m) {
 /**
  * solve L Lᵀ x = v
  *
- * @param {Float64Array[]}         l  cholesky factor
- * @param {ArrayLike<number>}      v  right hand side
- * @returns {Float64Array} x
+ * @param l  cholesky factor
+ * @param v  right hand side
+ * @returns x
  */
-function _choleskySolve_(l, v) {
+function _choleskySolve_(l: Float64Array[], v: ArrayLike<number>): Float64Array {
   const size = l.length;
   const z = new Float64Array(size);
   for (let i = 0; i < size; i++) {
@@ -123,15 +132,14 @@ function _choleskySolve_(l, v) {
 /**
  * minimise a function of two numbers with the nelder-mead method
  *
- * @param {function([number, number]): number} f      function to minimise
- * @param {[number, number]}                   start  starting point
- * @returns {[number, number]} the minimum found
+ * @param f      function to minimise
+ * @param start  starting point
+ * @returns the minimum found
  */
-function _nelderMead2_(f, start) {
-  /** @param {[number, number]} x */
-  const point = (x) => ({ x, value: f(x) });
+function _nelderMead2_(f: (x: [number, number]) => number, start: [number, number]): [number, number] {
+  const point = (x: [number, number]) => ({ x, value: f(x) });
   let simplex = [start, [start[0] + 0.5, start[1]], [start[0], start[1] + 0.5]].map(
-    (x) => point(/** @type {[number, number]} */ (x)),
+    (x) => point(x as [number, number]),
   );
   for (let i = 0; i < 2000; i++) {
     simplex.sort((a, b) => a.value - b.value);
@@ -140,8 +148,8 @@ function _nelderMead2_(f, start) {
     if (worst.value - best.value < 1e-10 && size < 1e-8) break;
 
     const centre = [(best.x[0] + middle.x[0]) / 2, (best.x[1] + middle.x[1]) / 2];
-    /** @param {number} k */
-    const along = (k) => point([centre[0] + k * (worst.x[0] - centre[0]), centre[1] + k * (worst.x[1] - centre[1])]);
+    const along = (k: number) =>
+      point([centre[0] + k * (worst.x[0] - centre[0]), centre[1] + k * (worst.x[1] - centre[1])]);
     const reflected = along(-1);
     if (reflected.value < best.value) {
       const expanded = along(-2);
@@ -171,10 +179,10 @@ function _nelderMead2_(f, start) {
  *   across the scorer, s = sum of n w over its groups, and the scorer part shrinks by t1 / (1 + t1 s)
  * the club means are then generalised least squares, and REML picks t1 and t2
  *
- * @param {ModelObservation[]} observations  the scores
- * @returns {ModelResult} club means with standard errors, or why the fit failed
+ * @param observations  the scores
+ * @returns club means with standard errors, or why the fit failed
  */
-function _fitClubModel_(observations) {
+function _fitClubModel_(observations: ModelObservation[]): ModelResult {
   const clubs = [...new Set(observations.map((o) => o.club))].sort();
   const clubIndex = new Map(clubs.map((club, i) => [club, i]));
   const p = clubs.length;
@@ -184,9 +192,8 @@ function _fitClubModel_(observations) {
 
   /**
    * the fit for given relative standard deviations, squared to give the variance ratios
-   * @param {[number, number]} theta
    */
-  const fit = (theta) => {
+  const fit = (theta: [number, number]) => {
     const t1 = theta[0] ** 2;
     const t2 = theta[1] ** 2;
     const xvx = Array.from({ length: p }, () => new Float64Array(p));
@@ -196,8 +203,7 @@ function _fitClubModel_(observations) {
     for (const tournaments of groups.values()) {
       let s = 0;
       let ay = 0;
-      /** @type {Map<number, number>} */
-      const a = new Map();
+      const a: Map<number, number> = new Map();
       for (const g of tournaments) {
         const w = 1 / (1 + t2 * g.count);
         logDetV += Math.log(1 + t2 * g.count);

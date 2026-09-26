@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    // Type-check .js files using JSDoc annotations
-    "checkJs": true,
     "strict": true,
+    // type-check only, scripts/build.mjs produces the Apps Script file
     "noEmit": true,
+    // only types that can be blanked out, so the build can strip them without compiling
+    "erasableSyntaxOnly": true,
 
     // Apps Script runs modern JavaScript (V8) with no browser:
     // leaving out "DOM" removes the browser globals, including the deprecated MimeType
@@ -11,5 +12,5 @@
     "lib": ["ES2022"],
     "types": ["google-apps-script"]
   },
-  "include": ["src/**/*.js"]
+  "include": ["src/**/*.ts"]
 }

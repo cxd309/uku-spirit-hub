@@ -4,7 +4,7 @@
  * example shows the rule's effect
  * rules apply top to bottom when Enabled is ticked
  */
-const NAME_RULE_HEADERS = Object.freeze(/** @type {const} */ (["Rule", "Pattern", "Example", "Enabled"]));
+const NAME_RULE_HEADERS = Object.freeze(["Rule", "Pattern", "Example", "Enabled"] as const);
 
 /**
  * rules written when the section is first created
@@ -24,10 +24,8 @@ const DEFAULT_NAME_RULES = Object.freeze([
 /**
  * the Name Rules section of the Settings tab
  * not keyed, so a default rule that is deleted stays deleted
- *
- * @type {SettingsSection}
  */
-const NAME_RULES_SECTION = Object.freeze({
+const NAME_RULES_SECTION = Object.freeze<SettingsSection>({
   title: "Name Rules",
   description: "Text patterns removed from the end of team names to suggest a club, applied top to bottom. "
     + "Tick Enabled to use a rule, or add rows for new rules, each with a name in the Rule column. "
@@ -43,13 +41,11 @@ const NAME_RULES_SECTION = Object.freeze({
  * the enabled Name Rules as regular expressions, top to bottom
  * patterns use the same syntax as a Sheets REGEXREPLACE, a leading (?i) ignores case
  *
- * @returns {{regexes: RegExp[], invalid: string[]}} the rules, and names of rules whose pattern is not valid
+ * @returns the rules, and names of rules whose pattern is not valid
  */
-function _readNameRules_() {
-  /** @type {RegExp[]} */
-  const regexes = [];
-  /** @type {string[]} */
-  const invalid = [];
+function _readNameRules_(): { regexes: RegExp[]; invalid: string[] } {
+  const regexes: RegExp[] = [];
+  const invalid: string[] = [];
   for (const [rule, pattern, , enabled] of _readSection_(NAME_RULES_SECTION)) {
     const text = String(pattern).trim();
     if (enabled !== true || text === "") continue;
@@ -68,11 +64,11 @@ function _readNameRules_() {
  * pure, the same as the old REGEXREPLACE formula
  * falls back to the team name if the rules would leave nothing
  *
- * @param {string}   team     team name
- * @param {RegExp[]} regexes  enabled rules, top to bottom
- * @returns {string} suggested club
+ * @param team     team name
+ * @param regexes  enabled rules, top to bottom
+ * @returns suggested club
  */
-function _suggestClub_(team, regexes) {
+function _suggestClub_(team: string, regexes: RegExp[]): string {
   const club = regexes.reduce((name, regex) => name.replace(regex, "").replace(/ +/g, " ").trim(), team);
   return club === "" ? team : club;
 }

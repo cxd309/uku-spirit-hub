@@ -5,15 +5,20 @@
  * if the tab exists, its header row must match `headers` exactly
  * code and sheet cannot silently disagree
  *
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss       spreadsheet to examine
- * @param {string}                                   name     tab name
- * @param {readonly string[]}                        headers  expected header row
- * @param {string}                                   info     text for the info row
- *                                                            line breaks separate points
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the tab
+ * @param ss       spreadsheet to examine
+ * @param name     tab name
+ * @param headers  expected header row
+ * @param info     text for the info row
+ *                 line breaks separate points
+ * @returns the tab
  * @throws {Error} if the tab exists but its header row differs from `headers`
  */
-function _getOrCreateSheet_(ss, name, headers, info) {
+function _getOrCreateSheet_(
+  ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+  name: string,
+  headers: readonly string[],
+  info: string,
+): GoogleAppsScript.Spreadsheet.Sheet {
   const existing = ss.getSheetByName(name);
   if (existing) {
     const actual = existing.getRange(HEADER_ROW, 1, 1, headers.length).getValues()[0].map(String);
@@ -45,11 +50,11 @@ function _getOrCreateSheet_(ss, name, headers, info) {
  * always keeps at least one row below any frozen rows, because Sheets does not
  * allow deleting every unfrozen row.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet    tab to resize
- * @param {number}                             rows     total rows wanted, including the info and header rows
- * @param {number}                             columns  total columns wanted
+ * @param sheet    tab to resize
+ * @param rows     total rows wanted, including the info and header rows
+ * @param columns  total columns wanted
  */
-function _fitSheet_(sheet, rows, columns) {
+function _fitSheet_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: number, columns: number) {
   const wantRows = Math.max(rows, sheet.getFrozenRows() + 1);
   const maxRows = sheet.getMaxRows();
   if (maxRows < wantRows) {
@@ -69,10 +74,10 @@ function _fitSheet_(sheet, rows, columns) {
 /**
  * convert a 1-based column number to its letter(s), e.g. 1 → "A", 28 → "AB"
  *
- * @param {number} column  1-based column number
- * @returns {string} column letters
+ * @param column  1-based column number
+ * @returns column letters
  */
-function _columnLetter_(column) {
+function _columnLetter_(column: number): string {
   let letters = "";
   let n = column;
   while (n > 0) {
@@ -88,11 +93,11 @@ function _columnLetter_(column) {
  * e.g. 'Teams'!$A$3:$A
  * use when the header text must not be counted as data
  *
- * @param {string} sheetName  tab name
- * @param {number} column     1-based column number
- * @returns {string} the reference, for use inside formulas
+ * @param sheetName  tab name
+ * @param column     1-based column number
+ * @returns the reference, for use inside formulas
  */
-function _columnBelowHeader_(sheetName, column) {
+function _columnBelowHeader_(sheetName: string, column: number): string {
   const letter = _columnLetter_(column);
   return `'${sheetName}'!$${letter}$${DATA_ROW}:$${letter}`;
 }
@@ -101,11 +106,11 @@ function _columnBelowHeader_(sheetName, column) {
  * compare two dates for sorting, oldest first
  * null (invalid folder name) sorts last
  *
- * @param {Date|null} a  first date
- * @param {Date|null} b  second date
- * @returns {number} negative if a comes first, positive if b comes first, 0 if equal
+ * @param a  first date
+ * @param b  second date
+ * @returns negative if a comes first, positive if b comes first, 0 if equal
  */
-function _compareDates_(a, b) {
+function _compareDates_(a: Date | null, b: Date | null): number {
   if (a === null || b === null) return (a === null ? 1 : 0) - (b === null ? 1 : 0);
   return a.getTime() - b.getTime();
 }
@@ -113,11 +118,11 @@ function _compareDates_(a, b) {
 /**
  * write rows below the header, resize the tab to fit, and put a filter on the table
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet    tab to write
- * @param {unknown[][]}                        rows     data rows, formulas included
- * @param {number}                             columns  number of columns in the table
+ * @param sheet    tab to write
+ * @param rows     data rows, formulas included
+ * @param columns  number of columns in the table
  */
-function _writeTable_(sheet, rows, columns) {
+function _writeTable_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: unknown[][], columns: number) {
   _fitSheet_(sheet, HEADER_ROW + rows.length, columns);
   if (rows.length > 0) sheet.getRange(DATA_ROW, 1, rows.length, columns).setValues(rows);
   _applyFilter_(sheet, rows.length, columns);
@@ -127,11 +132,11 @@ function _writeTable_(sheet, rows, columns) {
  * put a fresh filter over the header row and data rows
  * any existing filter is removed first, so people's filter settings are reset on each write
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet     tab to filter
- * @param {number}                             dataRows  number of data rows
- * @param {number}                             columns   number of columns in the table
+ * @param sheet     tab to filter
+ * @param dataRows  number of data rows
+ * @param columns   number of columns in the table
  */
-function _applyFilter_(sheet, dataRows, columns) {
+function _applyFilter_(sheet: GoogleAppsScript.Spreadsheet.Sheet, dataRows: number, columns: number) {
   sheet.getFilter()?.remove();
   sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
 }
@@ -139,10 +144,10 @@ function _applyFilter_(sheet, dataRows, columns) {
 /**
  * date as yyyy-mm-dd, using the date's own calendar day
  *
- * @param {Date} date  the date
- * @returns {string} e.g. "2025-11-01"
+ * @param date  the date
+ * @returns e.g. "2025-11-01"
  */
-function _isoDate_(date) {
-  const pad = (/** @type {number} */ n) => String(n).padStart(2, "0");
+function _isoDate_(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }

@@ -46,13 +46,13 @@ const CLUB_REPORT_TOTAL_COLOUR = "#2a78d6";
 /**
  * formula counting the club's counted scores that match one condition
  *
- * @param {keyof typeof RESPONSE_HEADERS} column  Results column to test
- * @param {string}                        value   cell holding the value to match
- * @returns {string} the formula
+ * @param column  Results column to test
+ * @param value   cell holding the value to match
+ * @returns the formula
  */
-function _clubReportCount_(column, value) {
-  /** @param {keyof typeof RESPONSE_HEADERS} key */
-  const results = (key) => _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
+function _clubReportCount_(column: keyof typeof RESPONSE_HEADERS, value: string): string {
+  const results = (key: keyof typeof RESPONSE_HEADERS) =>
+    _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
   const club = `$B$${CLUB_REPORT_ROWS.club}`;
   return `=COUNTIFS(${results("receiverClub")}, ${club}, ${results("countsForAward")}, TRUE, ${
     results(column)
@@ -62,16 +62,15 @@ function _clubReportCount_(column, value) {
 /**
  * summary formulas, one per CLUB_REPORT_SUMMARY line
  *
- * @returns {string[]} the formulas
+ * @returns the formulas
  */
-function _clubReportSummaryFormulas_() {
+function _clubReportSummaryFormulas_(): string[] {
   const club = `$B$${CLUB_REPORT_ROWS.club}`;
-  /** @param {keyof typeof CLUB_HEADERS} key */
-  const clubs = (key) => _columnBelowHeader_(CLUBS_SHEET, CLUB_KEYS.indexOf(key) + 1);
-  /** @param {keyof typeof CLUB_STATS_HEADERS} key */
-  const stats = (key) => _columnBelowHeader_(CLUB_STATS_SHEET, CLUB_STATS_KEYS.indexOf(key) + 1);
-  /** @param {keyof typeof RESPONSE_HEADERS} key */
-  const results = (key) => _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
+  const clubs = (key: keyof typeof CLUB_HEADERS) => _columnBelowHeader_(CLUBS_SHEET, CLUB_KEYS.indexOf(key) + 1);
+  const stats = (key: keyof typeof CLUB_STATS_HEADERS) =>
+    _columnBelowHeader_(CLUB_STATS_SHEET, CLUB_STATS_KEYS.indexOf(key) + 1);
+  const results = (key: keyof typeof RESPONSE_HEADERS) =>
+    _columnBelowHeader_(RESPONSES_SHEET, RESPONSE_KEYS.indexOf(key) + 1);
   return [
     `=IFERROR(XLOOKUP(${club}, ${clubs("club")}, ${clubs("teams")}), "")`,
     `=IFERROR(XLOOKUP(${club}, ${clubs("club")}, ${clubs("events")}), "")`,
@@ -85,9 +84,9 @@ function _clubReportSummaryFormulas_() {
  * build the Club Report tab: the club picker, summary, two tables of counts and their charts
  * everything is formulas, so picking another club needs no script
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  a new, empty tab
+ * @param sheet  a new, empty tab
  */
-function _buildClubReport_(sheet) {
+function _buildClubReport_(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
   const rows = CLUB_REPORT_ROWS;
   if (sheet.getMaxColumns() > CLUB_REPORT_WIDTH) {
     sheet.deleteColumns(CLUB_REPORT_WIDTH + 1, sheet.getMaxColumns() - CLUB_REPORT_WIDTH);
@@ -166,9 +165,9 @@ function _buildClubReport_(sheet) {
  * get the Club Report tab, building it on first use
  * an existing tab is left exactly as it is, so a club picked by a person stays picked
  *
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Club Report tab
+ * @returns the Club Report tab
  */
-function _getClubReportSheet_() {
+function _getClubReportSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const existing = ss.getSheetByName(CLUB_REPORT_SHEET);
   if (existing) return existing;
@@ -182,9 +181,9 @@ function _getClubReportSheet_() {
  * make the Club cell a dropdown of every club
  * called whenever Clubs is rebuilt, does nothing until the tab exists
  *
- * @param {string[]} clubs  club names, in display order
+ * @param clubs  club names, in display order
  */
-function _setClubReportChoices_(clubs) {
+function _setClubReportChoices_(clubs: string[]) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CLUB_REPORT_SHEET);
   if (!sheet) return;
   const cell = sheet.getRange(CLUB_REPORT_ROWS.club, 2);

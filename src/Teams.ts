@@ -18,64 +18,65 @@ const TEAMS_INFO = "Every team that has given or recieved a spirit score (intern
  * the rest hold TeamRecord values written by the script
  */
 const TEAM_HEADERS = Object.freeze(
-  /** @type {const} */ ({
+  {
     team: "Team",
     suggestedClub: "Suggested Club",
     clubOverride: "Club Override",
     club: "Club",
     events: "Tournaments",
     eventCount: "Event Count",
-  }),
+  } as const,
 );
 
 /**
  * keys of the Teams tab in column order
  */
-const TEAM_KEYS = /** @type {(keyof typeof TEAM_HEADERS)[]} */ (Object.keys(TEAM_HEADERS));
+const TEAM_KEYS = Object.keys(TEAM_HEADERS) as (keyof typeof TEAM_HEADERS)[];
 
 /**
  * one team, as stored in js
  * its name and any club typed by a person
- *
- * @typedef {Object} TeamRecord
- * @property {string} team          team name, as first seen
- * @property {string} clubOverride  club typed by a person or "" if none
- * @property {string} [suggestedClub] club suggested by the Name Rules, filled when written
- * @property {string} [events]        tournaments played, comma separated, filled when written
- * @property {number} [eventCount]    how many tournaments played, filled when written
  */
+interface TeamRecord {
+  /** team name, as first seen */
+  team: string;
+  /** club typed by a person or "" if none */
+  clubOverride: string;
+  /** club suggested by the Name Rules, filled when written */
+  suggestedClub?: string;
+  /** tournaments played, comma separated, filled when written */
+  events?: string;
+  /** how many tournaments played, filled when written */
+  eventCount?: number;
+}
 
 /**
  * formula columns of the Teams tab
  * Club is a formula so it follows a Club Override straight away
  * for each, a function building that column's formula for a given sheet row
- *
- * @type {Readonly<Partial<Record<keyof typeof TEAM_HEADERS, function(number): string>>>}
  */
-const TEAM_FORMULAS = Object.freeze({
-  club: (/** @type {number} */ row) => {
-    /** @param {keyof typeof TEAM_HEADERS} key */
-    const cell = (key) => `$${_columnLetter_(TEAM_KEYS.indexOf(key) + 1)}${row}`;
+const TEAM_FORMULAS: Readonly<Partial<Record<keyof typeof TEAM_HEADERS, (row: number) => string>>> = Object.freeze({
+  club: (row: number) => {
+    const cell = (key: keyof typeof TEAM_HEADERS) => `$${_columnLetter_(TEAM_KEYS.indexOf(key) + 1)}${row}`;
     return `=IF(${cell("clubOverride")}<>"", ${cell("clubOverride")}, ${cell("suggestedClub")})`;
   },
 });
 
 /**
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Teams tab, created on first use
+ * @returns the Teams tab, created on first use
  */
-function _getTeamsSheet_() {
-  /** @type {readonly string[]} */
-  const headers = Object.values(TEAM_HEADERS);
+function _getTeamsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
+  const headers: readonly string[] = Object.values(TEAM_HEADERS);
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), TEAMS_SHEET, headers, TEAMS_INFO);
 }
 
 /**
  * read the stored columns (Team, Club Override) of every row on the Teams tab
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the Teams tab
- * @returns {TeamRecord[]} every team on the tab
+ * @param sheet  the Teams tab
+ * @returns every team on the tab
  */
-function _readTeams_(sheet) {
+function _readTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): TeamRecord[] {
   const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   const teamIndex = TEAM_KEYS.indexOf("team");
@@ -90,14 +91,14 @@ function _readTeams_(sheet) {
 /**
  * convert a TeamRecord into a row of values, with formulas in formula columns
  *
- * @param {TeamRecord} team  the record
- * @param {number}     row   1-based sheet row it will be written to
- * @returns {unknown[]} values in TEAM_KEYS order
+ * @param team  the record
+ * @param row   1-based sheet row it will be written to
+ * @returns values in TEAM_KEYS order
  */
-function _teamToRow_(team, row) {
+function _teamToRow_(team: TeamRecord, row: number): unknown[] {
   return TEAM_KEYS.map((key) => {
     const formula = TEAM_FORMULAS[key];
-    return formula ? formula(row) : team[/** @type {keyof TeamRecord} */ (key)];
+    return formula ? formula(row) : team[key as keyof TeamRecord];
   });
 }
 
@@ -105,12 +106,17 @@ function _teamToRow_(team, row) {
  * write the team list, resizing the tab to fit
  * works out each team's suggested club and tournaments on the way
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet      the Teams tab
- * @param {TeamRecord[]}                       teams      teams to write, in display order
- * @param {ResponseRecord[]}                   responses  all responses
- * @param {EventRecord[]}                      events     all events, in date order
+ * @param sheet      the Teams tab
+ * @param teams      teams to write, in display order
+ * @param responses  all responses
+ * @param events     all events, in date order
  */
-function _writeTeams_(sheet, teams, responses, events) {
+function _writeTeams_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  teams: TeamRecord[],
+  responses: ResponseRecord[],
+  events: EventRecord[],
+) {
   const { regexes } = _readNameRules_();
   const played = _tournamentsPlayed_(responses, events, _teamKey_);
   _writeTable_(
@@ -133,14 +139,17 @@ function _writeTeams_(sheet, teams, responses, events) {
  * pure, never modifies its arguments
  * a team plays in a tournament when it gives or receives a score there
  *
- * @param {ResponseRecord[]}         responses  all responses
- * @param {EventRecord[]}            events     all events, in date order
- * @param {function(string): string} groupOf    team name → group key, e.g. the team or its club, "" to leave it out
- * @returns {Map<string, {names: string[], count: number}>} group → tournament names in date order, and how many
+ * @param responses  all responses
+ * @param events     all events, in date order
+ * @param groupOf    team name → group key, e.g. the team or its club, "" to leave it out
+ * @returns group → tournament names in date order, and how many
  */
-function _tournamentsPlayed_(responses, events, groupOf) {
-  /** @type {Map<string, Set<string>>} */
-  const idsByGroup = new Map();
+function _tournamentsPlayed_(
+  responses: ResponseRecord[],
+  events: EventRecord[],
+  groupOf: (team: string) => string,
+): Map<string, { names: string[]; count: number }> {
+  const idsByGroup: Map<string, Set<string>> = new Map();
   for (const r of responses) {
     for (const team of [r.scorer, r.receiver]) {
       const group = groupOf(team);
@@ -171,10 +180,10 @@ function _refreshSuggestedClubs_() {
 /**
  * key used to match team names, case-insensitive
  *
- * @param {string} name  tidied team name
- * @returns {string} match key
+ * @param name  tidied team name
+ * @returns match key
  */
-function _teamKey_(name) {
+function _teamKey_(name: string): string {
   return name.toLowerCase();
 }
 
@@ -184,13 +193,12 @@ function _teamKey_(name) {
  * only the receiving (UK) team counts at international events
  * first spelling seen is kept
  *
- * @param {ResponseRecord[]} responses         all responses
- * @param {Set<string>}      internationalIds  file ids of international events
- * @returns {string[]} team names in order of first appearance
+ * @param responses         all responses
+ * @param internationalIds  file ids of international events
+ * @returns team names in order of first appearance
  */
-function _teamNamesFromResponses_(responses, internationalIds) {
-  /** @type {Map<string, string>} */
-  const byKey = new Map();
+function _teamNamesFromResponses_(responses: ResponseRecord[], internationalIds: Set<string>): string[] {
+  const byKey: Map<string, string> = new Map();
   for (const r of responses) {
     const names = internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver];
     for (const name of names) {
@@ -208,11 +216,11 @@ function _teamNamesFromResponses_(responses, internationalIds) {
  * teams no longer in any response are dropped unless they have a club override
  * sorted A–Z
  *
- * @param {TeamRecord[]} existing  current rows of the Teams tab
- * @param {string[]}     names     team names from the responses
- * @returns {TeamRecord[]} the new team list
+ * @param existing  current rows of the Teams tab
+ * @param names     team names from the responses
+ * @returns the new team list
  */
-function _mergeTeams_(existing, names) {
+function _mergeTeams_(existing: TeamRecord[], names: string[]): TeamRecord[] {
   const overrideByKey = new Map(existing.map((t) => [_teamKey_(t.team), t.clubOverride]));
   const currentKeys = new Set(names.map(_teamKey_));
 
@@ -226,9 +234,9 @@ function _mergeTeams_(existing, names) {
  * every team and its club, read from the Teams tab in display order
  * reads formula results, so call SpreadsheetApp.flush() first after writing Teams
  *
- * @returns {{team: string, club: string}[]} one entry per team
+ * @returns one entry per team
  */
-function _readTeamClubList_() {
+function _readTeamClubList_(): { team: string; club: string }[] {
   const sheet = _getTeamsSheet_();
   const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
@@ -245,8 +253,8 @@ function _readTeamClubList_() {
  * club for every team, read from the Club column on the Teams tab
  * reads formula results, so call SpreadsheetApp.flush() first after writing Teams
  *
- * @returns {Map<string, string>} team key → club
+ * @returns team key → club
  */
-function _readTeamClubs_() {
+function _readTeamClubs_(): Map<string, string> {
   return new Map(_readTeamClubList_().map((t) => [_teamKey_(t.team), t.club]));
 }

@@ -18,7 +18,7 @@ const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
  * columns listed in RESPONSE_FORMULAS are formulas, the rest hold ResponseRecord values
  */
 const RESPONSE_HEADERS = Object.freeze(
-  /** @type {const} */ ({
+  {
     fileId: "File ID",
     sourceRow: "Source Row",
     scorer: "Scoring Team",
@@ -35,32 +35,30 @@ const RESPONSE_HEADERS = Object.freeze(
     communication: "Communication",
     total: "Total",
     comment: "Comment",
-  }),
+  } as const,
 );
 
 /**
  * formula columns of the Responses tab:
  * for each, a function building that column's formula for a given sheet row
  * every row gets its own formula, so sorting or filtering the tab never breaks them
- *
- * @type {Readonly<Partial<Record<keyof typeof RESPONSE_HEADERS, function(number): string>>>}
  */
-const RESPONSE_FORMULAS = Object.freeze({
-  scorerClub: (/** @type {number} */ row) => _responseClubFormula_(row, "scorer"),
-  receiverClub: (/** @type {number} */ row) => _responseClubFormula_(row, "receiver"),
+const RESPONSE_FORMULAS: Readonly<
+  Partial<Record<keyof typeof RESPONSE_HEADERS, (row: number) => string>>
+> = Object.freeze({
+  scorerClub: (row: number) => _responseClubFormula_(row, "scorer"),
+  receiverClub: (row: number) => _responseClubFormula_(row, "receiver"),
   tournament: _tournamentFormula_,
-  included: (/** @type {number} */ row) => {
+  included: (row: number) => {
     const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
-    /** @param {keyof typeof EVENT_HEADERS} key */
-    const events = (key) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
+    const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
     return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("include")}), FALSE)`;
   },
-  countsForAward: (/** @type {number} */ row) => {
-    /** @param {keyof typeof RESPONSE_HEADERS} key */
-    const cell = (key) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
+  countsForAward: (row: number) => {
+    const cell = (key: keyof typeof RESPONSE_HEADERS) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
     return `=AND(${cell("included")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
   },
-  total: (/** @type {number} */ row) => {
+  total: (row: number) => {
     const cells = SCORE_KEYS.map((key) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`);
     return `=${cells.join("+")}`;
   },
@@ -69,31 +67,40 @@ const RESPONSE_FORMULAS = Object.freeze({
 /**
  * keys of ResponseRecord in column order
  */
-const RESPONSE_KEYS = /** @type {(keyof typeof RESPONSE_HEADERS)[]} */ (Object.keys(RESPONSE_HEADERS));
+const RESPONSE_KEYS = Object.keys(RESPONSE_HEADERS) as (keyof typeof RESPONSE_HEADERS)[];
 
 /**
  * one row of the responses tab aone team's scores for one opponent at one event
- *
- * @typedef {Object} ResponseRecord
- * @property {string} fileId          file ID of the event (links to the Events tab)
- * @property {number} sourceRow       row in the source breakdown tab
- * @property {string} scorer          team giving the score
- * @property {string} receiver        team receiving the score
- * @property {number} rules           rules Knowledge and Use, 0–4
- * @property {number} fouls           fouls and Body Contact, 0–4
- * @property {number} fairMindedness  fair-Mindedness, 0–4
- * @property {number} attitude        positive Attitude and Self-Control, 0–4
- * @property {number} communication   communication, 0–4
- * @property {string} comment         comment; "" if none
  */
+interface ResponseRecord {
+  /** file ID of the event (links to the Events tab) */
+  fileId: string;
+  /** row in the source breakdown tab */
+  sourceRow: number;
+  /** team giving the score */
+  scorer: string;
+  /** team receiving the score */
+  receiver: string;
+  /** rules Knowledge and Use, 0–4 */
+  rules: number;
+  /** fouls and Body Contact, 0–4 */
+  fouls: number;
+  /** fair-Mindedness, 0–4 */
+  fairMindedness: number;
+  /** positive Attitude and Self-Control, 0–4 */
+  attitude: number;
+  /** communication, 0–4 */
+  communication: number;
+  /** comment; "" if none */
+  comment: string;
+}
 
 /**
- * @param {unknown[]} row  values of one data row, in RESPONSE_KEYS order
- * @returns {ResponseRecord} the record
+ * @param row  values of one data row, in RESPONSE_KEYS order
+ * @returns the record
  */
-function _responseFromRow_(row) {
-  /** @param {keyof typeof RESPONSE_HEADERS} key */
-  const cell = (key) => row[RESPONSE_KEYS.indexOf(key)];
+function _responseFromRow_(row: unknown[]): ResponseRecord {
+  const cell = (key: keyof typeof RESPONSE_HEADERS) => row[RESPONSE_KEYS.indexOf(key)];
   return {
     fileId: String(cell("fileId")),
     sourceRow: Number(cell("sourceRow")),
@@ -109,30 +116,29 @@ function _responseFromRow_(row) {
 }
 
 /**
- * @param {ResponseRecord}  response  the record
- * @param {number}          row       1-based sheet row it will be written to
- * @returns {unknown[]} values in RESPONSE_KEYS order
+ * @param response  the record
+ * @param row       1-based sheet row it will be written to
+ * @returns values in RESPONSE_KEYS order
  */
-function _responseToRow_(response, row) {
+function _responseToRow_(response: ResponseRecord, row: number): unknown[] {
   return RESPONSE_KEYS.map((key) => {
     const formula = RESPONSE_FORMULAS[key];
-    return formula ? formula(row) : response[/** @type {keyof ResponseRecord} */ (key)];
+    return formula ? formula(row) : response[key as keyof ResponseRecord];
   });
 }
 /**
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the responses tab, created on first use
+ * @returns the responses tab, created on first use
  */
-function _getResponsesSheet_() {
-  /** @type {readonly string[]} */
-  const headers = Object.values(RESPONSE_HEADERS);
+function _getResponsesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
+  const headers: readonly string[] = Object.values(RESPONSE_HEADERS);
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers, RESPONSES_INFO);
 }
 
 /**
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the Responses tab
- * @returns {ResponseRecord[]} every response on the tab
+ * @param sheet  the Responses tab
+ * @returns every response on the tab
  */
-function _readResponses_(sheet) {
+function _readResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet): ResponseRecord[] {
   const rowCount = sheet.getLastRow() - HEADER_ROW;
   if (rowCount < 1) return [];
   return sheet
@@ -145,10 +151,10 @@ function _readResponses_(sheet) {
 /**
  * replace the contents of the Responses tab, resizing it to fit
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet      the Responses tab
- * @param {ResponseRecord[]}                   responses  all responses, in display order
+ * @param sheet      the Responses tab
+ * @param responses  all responses, in display order
  */
-function _writeResponses_(sheet, responses) {
+function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: ResponseRecord[]) {
   _writeTable_(sheet, responses.map((r, i) => _responseToRow_(r, i + DATA_ROW)), RESPONSE_KEYS.length);
 }
 
@@ -156,13 +162,12 @@ function _writeResponses_(sheet, responses) {
  * tournament formula for one Responses row
  * looks the event up by file id on the Events tab
  *
- * @param {number} row  1-based sheet row the formula is for
- * @returns {string} the formula
+ * @param row  1-based sheet row the formula is for
+ * @returns the formula
  */
-function _tournamentFormula_(row) {
+function _tournamentFormula_(row: number): string {
   const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
-  /** @param {keyof typeof EVENT_HEADERS} key */
-  const events = (key) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
+  const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
   return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("tournament")}), "(unknown event)")`;
 }
 
@@ -172,14 +177,13 @@ function _tournamentFormula_(row) {
  * blank if the team is not on the Teams tab
  *   e.g. foreign teams at international events
  *
- * @param {number}                 row   1-based sheet row the formula is for
- * @param {"scorer" | "receiver"}  side  which team on the row
- * @returns {string} the formula
+ * @param row   1-based sheet row the formula is for
+ * @param side  which team on the row
+ * @returns the formula
  */
-function _responseClubFormula_(row, side) {
+function _responseClubFormula_(row: number, side: "scorer" | "receiver"): string {
   const team = `$${_columnLetter_(RESPONSE_KEYS.indexOf(side) + 1)}${row}`;
-  /** @param {keyof typeof TEAM_HEADERS} key */
-  const teams = (key) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
+  const teams = (key: keyof typeof TEAM_HEADERS) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
   return `=IFERROR(XLOOKUP(${team}, ${teams("team")}, ${teams("club")}), "")`;
 }
 
@@ -188,11 +192,11 @@ function _responseClubFormula_(row, side) {
  * then by tournament, event, and source row, so each event's responses stay in their original order
  * pure, returns a new array
  *
- * @param {ResponseRecord[]} responses  responses in any order
- * @param {EventRecord[]}    events     events, used to find each response's date and tournament
- * @returns {ResponseRecord[]} responses in date order
+ * @param responses  responses in any order
+ * @param events     events, used to find each response's date and tournament
+ * @returns responses in date order
  */
-function _sortResponses_(responses, events) {
+function _sortResponses_(responses: ResponseRecord[], events: EventRecord[]): ResponseRecord[] {
   const eventById = new Map(events.map((e) => [e.fileId, e]));
   return [...responses].sort((a, b) => {
     const ea = eventById.get(a.fileId);

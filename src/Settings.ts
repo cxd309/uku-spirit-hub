@@ -19,57 +19,70 @@ const SETTINGS_INFO = `Settings for SpiritHub v${HUB_VERSION}\n\n`
 /**
  * header row of a table of single settings, like Hub and Spirit Award
  */
-const SETTING_HEADERS = Object.freeze(/** @type {const} */ (["Setting", "Value", "Description"]));
+const SETTING_HEADERS = Object.freeze(["Setting", "Value", "Description"] as const);
 
 /**
  * one setting in a table of single settings
  * `label` is the text in the Setting column, description explains it on the tab
- *
- * @typedef {Object} SettingDefinition
- * @property {string} label        text in the Setting column
- * @property {string} default      value written when the row is created
- * @property {string} description  shown in the Description column
  */
+interface SettingDefinition {
+  /** text in the Setting column */
+  label: string;
+  /** value written when the row is created */
+  default: string;
+  /** shown in the Description column */
+  description: string;
+}
 
 /**
  * one section of the Settings tab: a title, a description and a table
- *
- * @typedef {Object} SettingsSection
- * @property {string}            title        text in column A that marks the section, unique on the tab
- * @property {string}            description  shown under the title
- * @property {readonly string[]} headers      the table's header row
- * @property {boolean}           keyed        rows are named by their first column, missing ones are added back
- * @property {function(): unknown[][]} defaults  rows written when the section is created
- * @property {function(GoogleAppsScript.Spreadsheet.Sheet, number, number): void} format
- *   formats rows once written, given the tab, the first row and the row count
  */
+interface SettingsSection {
+  /** text in column A that marks the section, unique on the tab */
+  title: string;
+  /** shown under the title */
+  description: string;
+  /** the table's header row */
+  headers: readonly string[];
+  /** rows are named by their first column, missing ones are added back */
+  keyed: boolean;
+  /** rows written when the section is created */
+  defaults: () => unknown[][];
+  /**
+   * formats rows once written, given the tab, the first row and the row count
+   */
+  format: (sheet: GoogleAppsScript.Spreadsheet.Sheet, firstRow: number, rowCount: number) => void;
+}
 
 /**
  * where a section's table is on the tab
- *
- * @typedef {Object} SectionLocation
- * @property {number} titleRow  row of the title, 1-based
- * @property {number} firstRow  first table row below the header, 1-based
- * @property {number} rowCount  how many table rows, may be 0
  */
+interface SectionLocation {
+  /** row of the title, 1-based */
+  titleRow: number;
+  /** first table row below the header, 1-based */
+  firstRow: number;
+  /** how many table rows, may be 0 */
+  rowCount: number;
+}
 
 /**
  * every section, in the order they appear
  * a function so every section constant has loaded before it is read
  *
- * @returns {SettingsSection[]} the sections
+ * @returns the sections
  */
-function _settingsSections_() {
+function _settingsSections_(): SettingsSection[] {
   return [HUB_SECTION, AWARD_SECTION, NAME_RULES_SECTION, ISSUE_RULES_SECTION];
 }
 
 /**
  * column A of the Settings tab, from row 1
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet  the Settings tab
- * @returns {unknown[][]} one single-value row per sheet row
+ * @param sheet  the Settings tab
+ * @returns one single-value row per sheet row
  */
-function _settingsColumnA_(sheet) {
+function _settingsColumnA_(sheet: GoogleAppsScript.Spreadsheet.Sheet): unknown[][] {
   return sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
 }
 
@@ -79,14 +92,13 @@ function _settingsColumnA_(sheet) {
  * the table starts below the title, description and header rows
  * and ends at the first blank row or the next section's title
  *
- * @param {unknown[][]}     columnA  column A of the Settings tab, from row 1
- * @param {SettingsSection} section  the section
- * @returns {SectionLocation|null} where the table is, null if the title is missing
+ * @param columnA  column A of the Settings tab, from row 1
+ * @param section  the section
+ * @returns where the table is, null if the title is missing
  */
-function _findSection_(columnA, section) {
+function _findSection_(columnA: unknown[][], section: SettingsSection): SectionLocation | null {
   const titles = new Set(_settingsSections_().map((s) => s.title));
-  /** @param {number} i */
-  const text = (i) => String(columnA[i][0]).trim();
+  const text = (i: number) => String(columnA[i][0]).trim();
   const titleIndex = columnA.findIndex((_, i) => text(i) === section.title);
   if (titleIndex < 0) return null;
 
@@ -99,10 +111,10 @@ function _findSection_(columnA, section) {
 /**
  * write a section with its default rows below everything else on the tab
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet    the Settings tab
- * @param {SettingsSection}                    section  the section
+ * @param sheet    the Settings tab
+ * @param section  the section
  */
-function _appendSection_(sheet, section) {
+function _appendSection_(sheet: GoogleAppsScript.Spreadsheet.Sheet, section: SettingsSection) {
   const titleRow = Math.max(sheet.getLastRow(), INFO_ROW) + 2;
   const rows = section.defaults();
   const lastRow = titleRow + 2 + rows.length;
@@ -126,10 +138,10 @@ function _appendSection_(sheet, section) {
  * make sure a section exists, and for keyed sections that every default row does
  * missing sections go at the bottom, missing rows at the end of their table
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet    the Settings tab
- * @param {SettingsSection}                    section  the section
+ * @param sheet    the Settings tab
+ * @param section  the section
  */
-function _ensureSection_(sheet, section) {
+function _ensureSection_(sheet: GoogleAppsScript.Spreadsheet.Sheet, section: SettingsSection) {
   const location = _findSection_(_settingsColumnA_(sheet), section);
   if (!location) {
     _appendSection_(sheet, section);
@@ -157,9 +169,9 @@ function _ensureSection_(sheet, section) {
 /**
  * get the Settings tab, creating it and any missing section or keyed row on the way
  *
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} the Settings tab
+ * @returns the Settings tab
  */
-function _getSettingsSheet_() {
+function _getSettingsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SETTINGS_SHEET);
   if (!sheet) {
@@ -181,10 +193,10 @@ function _getSettingsSheet_() {
 /**
  * the table rows of a section
  *
- * @param {SettingsSection} section  the section
- * @returns {unknown[][]} one array per row, as wide as the section's headers
+ * @param section  the section
+ * @returns one array per row, as wide as the section's headers
  */
-function _readSection_(section) {
+function _readSection_(section: SettingsSection): unknown[][] {
   const sheet = _getSettingsSheet_();
   const location = _findSection_(_settingsColumnA_(sheet), section);
   if (!location || location.rowCount === 0) return [];
@@ -194,12 +206,17 @@ function _readSection_(section) {
 /**
  * tick boxes in one column of newly written rows
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet     the Settings tab
- * @param {number}                             firstRow  first row
- * @param {number}                             rowCount  how many rows
- * @param {number}                             column    1-based column
+ * @param sheet     the Settings tab
+ * @param firstRow  first row
+ * @param rowCount  how many rows
+ * @param column    1-based column
  */
-function _settingsCheckboxes_(sheet, firstRow, rowCount, column) {
+function _settingsCheckboxes_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  firstRow: number,
+  rowCount: number,
+  column: number,
+) {
   sheet
     .getRange(firstRow, column, rowCount, 1)
     .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
@@ -208,19 +225,19 @@ function _settingsCheckboxes_(sheet, firstRow, rowCount, column) {
 /**
  * default rows for a table of single settings
  *
- * @param {Readonly<Record<string, SettingDefinition>>} settings  the settings, in display order
- * @returns {unknown[][]} one row per setting
+ * @param settings  the settings, in display order
+ * @returns one row per setting
  */
-function _settingRows_(settings) {
+function _settingRows_(settings: Readonly<Record<string, SettingDefinition>>): unknown[][] {
   return Object.values(settings).map((s) => [s.label, s.default, s.description]);
 }
 
 /**
  * the values in a table of single settings
  *
- * @param {SettingsSection} section  the section
- * @returns {Map<string, string>} setting label → value, both trimmed
+ * @param section  the section
+ * @returns setting label → value, both trimmed
  */
-function _readSettingValues_(section) {
+function _readSettingValues_(section: SettingsSection): Map<string, string> {
   return new Map(_readSection_(section).map((row) => [String(row[0]).trim(), String(row[1]).trim()]));
 }

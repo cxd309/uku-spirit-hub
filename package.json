@@ -2,12 +2,13 @@
   "name": "uku-spirit-hub",
   "private": true,
   "scripts": {
-    "typecheck": "tsc -p jsconfig.json"
+    "typecheck": "tsc"
   },
   "devDependencies": {
     "@google/clasp": "^3.4.1",
     "@types/google-apps-script": "^2.0.13",
     "dprint": "^0.57.4",
+    "ts-blank-space": "^0.9.0",
     "typescript": "^5.9.0"
   }
 }

@@ -18,27 +18,25 @@ const BREAKDOWN_HEADERS = Object.freeze({
  * keys of the five spirit score columns in form order
  */
 const SCORE_KEYS = Object.freeze(
-  /** @type{const} */ (["rules", "fouls", "fairMindedness", "attitude", "communication"]),
+  ["rules", "fouls", "fairMindedness", "attitude", "communication"] as const,
 );
 
 /**
  * 0-based column index of each breakdown column, keyed like BREAKDOWN_HEADERS
- *
- * @typedef {Record<keyof typeof BREAKDOWN_HEADERS, number>} BreakdownColumns
  */
+type BreakdownColumns = Record<keyof typeof BREAKDOWN_HEADERS, number>;
 
 /**
  * result of checking one header row
- *
- * @typedef {{ok: true, columns: BreakdownColumns} | {ok: false, reason: string}} HeaderMatch
  */
+type HeaderMatch = { ok: true; columns: BreakdownColumns } | { ok: false; reason: string };
 
 /**
  * result of looking for the breakdown tab in a results file
- *
- * @typedef {{ok:true, sheet: GoogleAppsScript.Spreadsheet.Sheet, columns: BreakdownColumns}
- * | {ok:false, reason:string}} BreakdownLookup
  */
+type BreakdownLookup =
+  | { ok: true; sheet: GoogleAppsScript.Spreadsheet.Sheet; columns: BreakdownColumns }
+  | { ok: false; reason: string };
 
 /**
  * check whether a header row is a breakdown header, and where each column is
@@ -46,15 +44,14 @@ const SCORE_KEYS = Object.freeze(
  * each header in BREAKDOWN_HEADERS must appear exatly (cells are trimmed, extra columns ignored)
  * the team columns must be in the form: "Your Team Name" -> "Opponent Team Name"
  *
- * @param {unknown[]}     headerRow values of row 1
- * @returns {HeaderMatch} column positions, or why the row is not a breakdown header
+ * @param headerRow values of row 1
+ * @returns column positions, or why the row is not a breakdown header
  */
-function _matchHeader_(headerRow) {
+function _matchHeader_(headerRow: unknown[]): HeaderMatch {
   const cells = headerRow.map((cell) => String(cell).trim());
-  const keys = /** @type {(keyof typeof BREAKDOWN_HEADERS)[]} */ (Object.keys(BREAKDOWN_HEADERS));
+  const keys = Object.keys(BREAKDOWN_HEADERS) as (keyof typeof BREAKDOWN_HEADERS)[];
 
-  /** @type {Partial<BreakdownColumns>} */
-  const columns = {};
+  const columns: Partial<BreakdownColumns> = {};
   for (const key of keys) {
     const index = cells.indexOf(BREAKDOWN_HEADERS[key]);
     if (index === -1) {
@@ -62,7 +59,7 @@ function _matchHeader_(headerRow) {
     }
     columns[key] = index;
   }
-  return { ok: true, columns: /** @type {BreakdownColumns} */ (columns) };
+  return { ok: true, columns: columns as BreakdownColumns };
 }
 
 /**
@@ -70,14 +67,12 @@ function _matchHeader_(headerRow) {
  *
  * only row 1 of each tab is read
  * fails if no tab matches or if more than one does
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} book  opened results file
- * @returns {BreakdownLookup} breakdown tab and its columns, or why it could not be found
+ * @param book  opened results file
+ * @returns breakdown tab and its columns, or why it could not be found
  */
-function _findBreakdownSheet_(book) {
-  /** @type {{sheet: GoogleAppsScript.Spreadsheet.Sheet, columns: BreakdownColumns}[]} */
-  const matches = [];
-  /** @type {string[]} */
-  const swapped = [];
+function _findBreakdownSheet_(book: GoogleAppsScript.Spreadsheet.Spreadsheet): BreakdownLookup {
+  const matches: { sheet: GoogleAppsScript.Spreadsheet.Sheet; columns: BreakdownColumns }[] = [];
+  const swapped: string[] = [];
 
   for (const sheet of book.getSheets()) {
     const width = sheet.getLastColumn();
@@ -107,36 +102,42 @@ function _findBreakdownSheet_(book) {
 
 /**
  * the five category scores for one game, each a whole number 0–4
- *
- * @typedef {Record<typeof SCORE_KEYS[number], number>} SpiritScores
  */
+type SpiritScores = Record<typeof SCORE_KEYS[number], number>;
 
 /**
  * one usable row from a breakdown tab
- *
- * @typedef {Object} SpiritResponse
- * @property {number}      sourceRow  1-based row number in the breakdown tab
- * @property {string}      scorer     team giving the score ("Your Team Name")
- * @property {string}      receiver   team receiving the score ("Opponent Team Name")
- * @property {SpiritScores} scores    the five category scores
- * @property {string}      comment    spirit comment, "" if blank
  */
+interface SpiritResponse {
+  /** 1-based row number in the breakdown tab */
+  sourceRow: number;
+  /** team giving the score ("Your Team Name") */
+  scorer: string;
+  /** team receiving the score ("Opponent Team Name") */
+  receiver: string;
+  /** the five category scores */
+  scores: SpiritScores;
+  /** spirit comment, "" if blank */
+  comment: string;
+}
 
 /**
  * a row that could not be read, and why
- *
- * @typedef {Object} RowProblem
- * @property {number} sourceRow  1-based row number in the breakdown tab
- * @property {string} reason     what is wrong with the row
  */
+interface RowProblem {
+  /** 1-based row number in the breakdown tab */
+  sourceRow: number;
+  /** what is wrong with the row */
+  reason: string;
+}
 
 /**
  * whether a cell holds a valid spirit score: a whole number from 0 to 4
  *
- * @param {unknown} value cell value
- * @return {boolean} true if valid
+ * @param value cell value
+ * @return true if valid
  */
-function _isValidScore_(value) {
+function _isValidScore_(value: unknown): boolean {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4;
 }
 
@@ -147,15 +148,16 @@ function _isValidScore_(value) {
  * completely blank rows are skipped
  * rows with a missing team name or an invalid score are returned as problems instead of responses
  *
- * @param {unknown[][]}      values   all values of the breakdown tab, including the header row
- * @param {BreakdownColumns} columns  column positions from _matchHeader_
- * @returns {{responses: SpiritResponse[], problems: RowProblem[]}} usable rows and unusable rows
+ * @param values   all values of the breakdown tab, including the header row
+ * @param columns  column positions from _matchHeader_
+ * @returns usable rows and unusable rows
  */
-function _parseBreakdownRows_(values, columns) {
-  /** @type {SpiritResponse[]} */
-  const responses = [];
-  /** @type {RowProblem[]} */
-  const problems = [];
+function _parseBreakdownRows_(
+  values: unknown[][],
+  columns: BreakdownColumns,
+): { responses: SpiritResponse[]; problems: RowProblem[] } {
+  const responses: SpiritResponse[] = [];
+  const problems: RowProblem[] = [];
 
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
@@ -167,8 +169,7 @@ function _parseBreakdownRows_(values, columns) {
     const isBlank = !scorer && !receiver && !comment && SCORE_KEYS.every((k) => row[columns[k]] === "");
     if (isBlank) continue;
 
-    /** @type {string[]} */
-    const reasons = [];
+    const reasons: string[] = [];
     if (!scorer) reasons.push(`missing ${BREAKDOWN_HEADERS.yourTeam}`);
     if (!receiver) reasons.push(`missing ${BREAKDOWN_HEADERS.opponentTeam}`);
     const badScores = SCORE_KEYS.filter((k) => !_isValidScore_(row[columns[k]]));
@@ -208,9 +209,9 @@ function _parseBreakdownRows_(values, columns) {
  * runs of whitespace -> single space
  * trimmed
  *
- * @param {unknown} value  cell value
- * @returns {string} the tidied name
+ * @param value  cell value
+ * @returns the tidied name
  */
-function _tidyTeamName_(value) {
+function _tidyTeamName_(value: unknown): string {
   return String(value).replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, " ").trim();
 }

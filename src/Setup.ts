@@ -2,9 +2,9 @@
  * every data tab, in the order they appear
  * a function so every tab name constant has loaded before it is read
  *
- * @returns {string[]} tab names
+ * @returns tab names
  */
-function _dataTabNames_() {
+function _dataTabNames_(): string[] {
   return [ISSUES_SHEET, EVENTS_SHEET, RESPONSES_SHEET, TEAMS_SHEET, CLUBS_SHEET, CLUB_STATS_SHEET, CLUB_REPORT_SHEET];
 }
 
@@ -22,9 +22,9 @@ function showSettings() {
  * tabs that already exist keep their contents
  * removes the empty default "Sheet1" once the hub tabs exist
  *
- * @returns {string} one-line summary
+ * @returns one-line summary
  */
-function _showSettings_() {
+function _showSettings_(): string {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const before = new Set(ss.getSheets().map((s) => s.getName()));
 

@@ -93,7 +93,7 @@ Counts scores from included tournaments between different clubs (inter-club scor
 A club qualifies for the award once it has entered the Config tab's minimum number of tournaments (default 3), and ranks are among qualifying clubs.
 
 - **Mean, SD, median, min, max, % 6 or below, 95% CI** of the scores each club received. The CI uses the t distribution, as was used in R script `group.CI`.
-- **Club Model / Team Model**: the R script mixed model, `lmer(total ~ club + (1 | scorer/tournament))`, fitted by REML in `src/Model.js`. It adjusts each club's mean for scorers who give higher or lower scores than others. It is fitted twice, with scorers grouped by club (as in R) and by team. Checked against statsmodels' REML fit: means and scorer effects agree to 4d.p.
+- **Club Model / Team Model**: the R script mixed model, `lmer(total ~ club + (1 | scorer/tournament))`, fitted by REML in `src/Model.ts`. It adjusts each club's mean for scorers who give higher or lower scores than others. It is fitted twice, with scorers grouped by club (as in R) and by team. Checked against statsmodels' REML fit: means and scorer effects agree to 4d.p.
 - **Average Given** and **Scorer Effect**: how a club scores others.
 
 ## Development
@@ -101,17 +101,21 @@ A club qualifies for the award once it has entered the Config tab's minimum numb
 Needs Node.js and [just](https://github.com/casey/just).
 
 ```
-just install     # install TypeScript, Apps Script types, dprint and clasp
+just install     # install TypeScript, Apps Script types, dprint, clasp and ts-blank-space
 just login       # log in to Google for clasp, once
 just check       # format and type check
 just push        # check, build and push to Apps Script
 ```
 
-- `src/` contains all the source code in seperate files. Everything uses JSDoc for typehinting.
-- `just build` joins all `.js` files in `src/` into a single file `dist/SpiritHub-<version>.js`
+- `src/` contains all the source code in seperate files, written in TypeScript.
+- `just build` strips the types from all `.ts` files in `src/` and joins them into a single JavaScript file `dist/SpiritHub-<version>.js`
+  - Types are removed rather than compiled (using `ts-blank-space`), so the code comes out as written, then dprint tidies the spacing
+  - Comments are left out of the build, they live in `src/`. Only the version header and a `// ---- File.ts ----` marker per file are added
+  - Only TypeScript that can be removed this way is allowed (`erasableSyntaxOnly` in `tsconfig.json`): no `enum`, `namespace` or constructor parameter properties
+  - Files are plain scripts sharing one global scope, as in Apps Script: never add `import` or `export`
   - This is the code pushed by `just push`
   - The idea here is that someone can easily copy this script into a sheet without having to set up all the development environment. They can copy straight from a GitHub release version.
-- The version is controlled by `HUB_VERSION` in `src/Consts.js`.
+- The version is controlled by `HUB_VERSION` in `src/Consts.ts`.
 
 Conventions:
 
