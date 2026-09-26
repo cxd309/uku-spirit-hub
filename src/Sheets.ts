@@ -129,6 +129,29 @@ function _writeTable_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: unknown[]
 }
 
 /**
+ * put a formula in every data row of each formula column, one call per column
+ * each formula is built for the first data row and Sheets copies it down, adjusting relative row references
+ * like a fill-down, so every row still has its own formula (safe to sort) without sending one formula per cell
+ *
+ * @param sheet     tab to fill, already written by _writeTable_
+ * @param keys      the table's column keys, in column order
+ * @param formulas  formula builder for each formula column, given a 1-based sheet row
+ * @param rows      number of data rows
+ */
+function _fillFormulaColumns_<K extends string>(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  keys: readonly K[],
+  formulas: Readonly<Partial<Record<K, (row: number) => string>>>,
+  rows: number,
+) {
+  if (rows === 0) return;
+  keys.forEach((key, i) => {
+    const formula = formulas[key];
+    if (formula) sheet.getRange(DATA_ROW, i + 1, rows, 1).setFormula(formula(DATA_ROW));
+  });
+}
+
+/**
  * put a fresh filter over the header row and data rows
  * any existing filter is removed first, so people's filter settings are reset on each write
  *

@@ -89,17 +89,13 @@ function _readTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): TeamRecord[] {
 }
 
 /**
- * convert a TeamRecord into a row of values, with formulas in formula columns
+ * convert a TeamRecord into a row of values
  *
  * @param team  the record
- * @param row   1-based sheet row it will be written to
- * @returns values in TEAM_KEYS order
+ * @returns values in TEAM_KEYS order, "" in formula columns (filled by _fillFormulaColumns_)
  */
-function _teamToRow_(team: TeamRecord, row: number): unknown[] {
-  return TEAM_KEYS.map((key) => {
-    const formula = TEAM_FORMULAS[key];
-    return formula ? formula(row) : team[key as keyof TeamRecord];
-  });
+function _teamToRow_(team: TeamRecord): unknown[] {
+  return TEAM_KEYS.map((key) => TEAM_FORMULAS[key] ? "" : team[key as keyof TeamRecord]);
 }
 
 /**
@@ -121,17 +117,18 @@ function _writeTeams_(
   const played = _tournamentsPlayed_(responses, events, _teamKey_);
   _writeTable_(
     sheet,
-    teams.map((t, i) => {
+    teams.map((t) => {
       const tournaments = played.get(_teamKey_(t.team));
       return _teamToRow_({
         ...t,
         suggestedClub: _suggestClub_(t.team, regexes),
         events: tournaments?.names.join(", ") ?? "",
         eventCount: tournaments?.count ?? 0,
-      }, i + DATA_ROW);
+      });
     }),
     TEAM_KEYS.length,
   );
+  _fillFormulaColumns_(sheet, TEAM_KEYS, TEAM_FORMULAS, teams.length);
 }
 
 /**

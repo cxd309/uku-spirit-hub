@@ -117,14 +117,10 @@ function _responseFromRow_(row: unknown[]): ResponseRecord {
 
 /**
  * @param response  the record
- * @param row       1-based sheet row it will be written to
- * @returns values in RESPONSE_KEYS order
+ * @returns values in RESPONSE_KEYS order, "" in formula columns (filled by _fillFormulaColumns_)
  */
-function _responseToRow_(response: ResponseRecord, row: number): unknown[] {
-  return RESPONSE_KEYS.map((key) => {
-    const formula = RESPONSE_FORMULAS[key];
-    return formula ? formula(row) : response[key as keyof ResponseRecord];
-  });
+function _responseToRow_(response: ResponseRecord): unknown[] {
+  return RESPONSE_KEYS.map((key) => RESPONSE_FORMULAS[key] ? "" : response[key as keyof ResponseRecord]);
 }
 /**
  * @returns the responses tab, created on first use
@@ -150,12 +146,14 @@ function _readResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet): ResponseRec
 
 /**
  * replace the contents of the Responses tab, resizing it to fit
+ * values are written first, then each formula column is filled in one call
  *
  * @param sheet      the Responses tab
  * @param responses  all responses, in display order
  */
 function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: ResponseRecord[]) {
-  _writeTable_(sheet, responses.map((r, i) => _responseToRow_(r, i + DATA_ROW)), RESPONSE_KEYS.length);
+  _timed_("results values", () => _writeTable_(sheet, responses.map(_responseToRow_), RESPONSE_KEYS.length));
+  _timed_("results formulas", () => _fillFormulaColumns_(sheet, RESPONSE_KEYS, RESPONSE_FORMULAS, responses.length));
 }
 
 /**
