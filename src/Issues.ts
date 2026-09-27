@@ -66,6 +66,14 @@ const ISSUE_CATEGORIES = Object.freeze({
     code: "DANGEROUS-PLAY",
     label: (s: IssueSettings) => "Dangerous play mentioned",
   },
+  cheating: {
+    code: "CHEATING",
+    label: (s: IssueSettings) => "Cheating mentioned",
+  },
+  harassment: {
+    code: "HARASSMENT",
+    label: (s: IssueSettings) => "Harassment mentioned",
+  },
   notSubmitted: {
     code: "NOT-SUBMITTED",
     label: (s: IssueSettings) => "Spirit scores not submitted",
@@ -96,6 +104,28 @@ const ISSUE_CATEGORIES = Object.freeze({
     label: (s: IssueSettings) => `Averaged below ${s.monitoringAverageBelow} again while on monitoring`,
   },
 });
+
+/**
+ * checks raised by words in a comment, each with its own word list in the Issue Rules settings
+ * the issue is for the receiving team and its Details quote the comment
+ * a comment matching more than one list raises one issue per check
+ */
+const COMMENT_KEYWORD_CHECKS = Object.freeze(["dangerousPlay", "cheating", "harassment"] as const);
+
+/**
+ * a pattern matching any of the words, as whole words, ignoring case
+ * pure, no google calls
+ * works for words ending in punctuation too
+ *
+ * @param words  the words
+ * @returns the pattern, null when there are no words
+ */
+function _keywordPattern_(words: string[]): RegExp | null {
+  if (words.length === 0) return null;
+  const escaped = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // whole words only, not part of a longer word
+  return new RegExp(`(?<!\\w)(${escaped.join("|")})(?!\\w)`, "i");
+}
 
 /**
  * key of one issue check, e.g. "lowAverage"
@@ -228,9 +258,10 @@ function _responseIssueHits_(
   settings: IssueSettings,
 ): IssueHit[] {
   const eventById = new Map(events.map((e) => [e.fileId, e]));
-  const escaped = settings.dangerousPlayKeywords.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  // whole words only, not part of a longer word, works for keywords ending in punctuation too
-  const keywords = escaped.length === 0 ? null : new RegExp(`(?<!\\w)(${escaped.join("|")})(?!\\w)`, "i");
+  const commentChecks = COMMENT_KEYWORD_CHECKS.map((category) => ({
+    category,
+    pattern: _keywordPattern_(settings.commentKeywords[category]),
+  }));
   const hits: IssueHit[] = [];
 
   for (const r of responses) {
@@ -286,15 +317,18 @@ function _responseIssueHits_(
           response: r,
         });
       }
-    } else if (keywords && keywords.test(r.comment)) {
-      hits.push({
-        category: "dangerousPlay",
-        event,
-        team: r.receiver,
-        other: r.scorer,
-        text: r.comment,
-        response: r,
-      });
+    } else {
+      for (const check of commentChecks) {
+        if (!check.pattern || !check.pattern.test(r.comment)) continue;
+        hits.push({
+          category: check.category,
+          event,
+          team: r.receiver,
+          other: r.scorer,
+          text: r.comment,
+          response: r,
+        });
+      }
     }
   }
   return hits;
@@ -311,7 +345,7 @@ function _responseIssueHits_(
  */
 function _issueDetails_(hits: IssueHit[]): string {
   const first = hits[0];
-  const isComment = first.category === "dangerousPlay";
+  const isComment = (COMMENT_KEYWORD_CHECKS as readonly string[]).includes(first.category);
   const count = `Number of ${isComment ? "comments" : "scores"}: ${hits.length}`;
   const blocks = hits.map((hit) => {
     const received = _teamKey_(hit.team) === _teamKey_(hit.response.receiver);

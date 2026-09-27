@@ -112,6 +112,8 @@ Each refresh runs every enabled check and adds issues that are not already on th
 | TOTAL-NO-COMMENT    | Total above 14 or below 6 needs a comment        | Scoring team             |
 | CATEGORY-NO-COMMENT | A category scored 0 or 4 needs a comment         | Scoring team             |
 | DANGEROUS-PLAY      | Comment mentions dangerous play                  | Receiving team           |
+| CHEATING            | Comment mentions cheating                        | Receiving team           |
+| HARASSMENT          | Comment mentions harassment or abuse             | Receiving team           |
 | NOT-SUBMITTED       | Fewer scores given to an opponent than received  | Team that did not submit |
 | LOW-SCORES          | 2 or more scores of 6 or below at a tournament   | Receiving team           |
 | LOW-AVERAGE         | Average below 8 at a tournament                  | Receiving team           |

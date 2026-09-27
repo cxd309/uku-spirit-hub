@@ -24,9 +24,19 @@ const DEFAULT_ISSUE_RULES: Readonly<
     description: "Policy: a category scored any of Value 1 needs a comment",
   },
   dangerousPlay: {
-    value1: "dangerous, danger, reckless, unsafe, intentional, cheat, cheating, abuse, swear, swearing, unwarranted",
+    value1: "dangerous, danger, reckless, unsafe",
     value2: "",
-    description: "Policy: a comment contains any of the words in Value 1",
+    description: "Policy: a comment mentions dangerous play, any of the words in Value 1",
+  },
+  cheating: {
+    value1: "cheat, cheating, intentional",
+    value2: "",
+    description: "A comment mentions cheating, any of the words in Value 1",
+  },
+  harassment: {
+    value1: "abuse, abusive, swear, swearing, unwarranted, harass, harassment, insult, insulting",
+    value2: "",
+    description: "A comment mentions harassment or abuse, any of the words in Value 1",
   },
   notSubmitted: {
     value1: "",
@@ -78,8 +88,8 @@ interface IssueSettings {
   commentTotalBelow: number;
   /** category scores that need a comment */
   commentCategoryScores: number[];
-  /** words that flag a comment */
-  dangerousPlayKeywords: string[];
+  /** words that flag a comment, for each comment keyword check */
+  commentKeywords: Record<typeof COMMENT_KEYWORD_CHECKS[number], string[]>;
   /** a total at or below this is a low score */
   lowScoreAtOrBelow: number;
   /** this many low scores at a tournament is an issue */
@@ -200,7 +210,11 @@ function _readIssueSettings_(): IssueSettings {
     commentTotalAbove: number("totalWithoutComment", 1),
     commentTotalBelow: number("totalWithoutComment", 2),
     commentCategoryScores: numbers("categoryWithoutComment", 1),
-    dangerousPlayKeywords: items("dangerousPlay", 1),
+    commentKeywords: {
+      dangerousPlay: items("dangerousPlay", 1),
+      cheating: items("cheating", 1),
+      harassment: items("harassment", 1),
+    },
     lowScoreAtOrBelow: number("twoLowScores", 1),
     lowScoreCount: number("twoLowScores", 2),
     lowAverageBelow: number("lowAverage", 1),
