@@ -53,10 +53,9 @@ function _readHubSettings_(): HubSettings {
  * @returns a note for the summary, "" when the dropdown was set
  */
 function _setCategoryChoices_(sheet: GoogleAppsScript.Spreadsheet.Sheet): string {
-  const names: string[] = [];
+  let names: string[] = [];
   try {
-    const folders = _findSeasonFolder_().getFolders();
-    while (folders.hasNext()) names.push(folders.next().getName());
+    names = _childFolders_(_findSeasonFolder_().id).map((f) => f.name);
   } catch (e) {
     return "Category list not updated, the hub is not inside a season folder";
   }

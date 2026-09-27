@@ -26,13 +26,44 @@ The hub reads results from Google Drive, laid out as:
 
 ## Setting up a hub
 
-1. Create a Google Sheet inside the season folder.
-2. Add the code, either with `just push` (see [Development](#development)) or by pasting the latest `dist/SpiritHub-<version>.js` from a GitHub release into **Extensions > Apps Script**.
-3. Turn on two advanced services. With `just push` this is automatic, `src/appsscript.json` lists them. When pasting, in the Apps Script editor click **+** next to **Services** and add:
-   - **Drive API** (used to scan the category folder)
-   - **Google Sheets API** (switches on the Sheets API used to read the results files)
-4. Reload the sheet, then run **SpiritHub > SpiritHub Settings** and pick the **Category**.
-5. The first run asks for permission to see Drive files, edit spreadsheets and "connect to an external service". The last one is used to read all the results files at once from Google's own Sheets and Drive APIs.
+### If using the online editor
+
+1. Create a Google Sheet inside the season folder (e.g. 2025-26)
+2. Open the Apps Script Editor from the top menu **Extensions > Apps Script**
+3. Select **Settings** in the left hand menu and tick _"Show 'appsscript.json' manifest file in editor"_
+4. Return to the **Editor** page from the left hand menu
+5. Copy the contents of `appsscript.json` and `SpiritHub-<version>.js` into the editor, replacing what is there
+6. Close the editor tab and refresh the Hub sheet
+7. Run setup with the top menu **SpiritHub > SpiritHub Settings**. The first time, Google asks you to approve the hub's permissions:
+   1. **Authorisation required** appears: click **Review permissions** (sometimes **OK**)
+   2. Choose your Google account
+   3. **Google hasn't verified this app** appears. This is expected, the hub is a private script, not a published app. Click **Advanced** (bottom left), then **Go to SpiritHub (unsafe)**
+   4. The permission list appears. Tick **Select all** and click **Continue**. The hub asks for:
+      - view and edit this spreadsheet only
+      - see your Google Sheets, to read the results files (never to change them)
+      - see information about your Google Drive files (names, folders and dates, not their contents), to find the results files
+      - connect to an external service, to read all the results files at once from Google's own Drive and Sheets APIs
+   5. The menu item does not carry on after approving: click **SpiritHub > SpiritHub Settings** again
+
+   You only do this once per person. It happens again only when a new version of the hub asks for different permissions.
+8. Wait until it stops saying Running Script
+9. Select a Category of tournaments for this hub from the dropdown in cell **B6** (e.g. University, Club)
+10. Check the other settings to see if everything looks about right
+11. Gather tournaments, from the top menu click **SpiritHub > Refresh Tournaments**
+12. Gather results, from the top menu click **SpiritHub > Refresh Results**
+13. Look in the _Teams_ and _Clubs_ tabs, if you want to adjust a team's assigned club then type it in the _Club Override_ column
+14. Automatically raise issues from results, from the top menu click **SpiritHub > Refresh Issues**
+15. Generate statistics for determining Spirit Award Winner, from the top menu click **SpiritHub > Refresh Club Statistics**
+16. If you want to adjust any of the settings for how the hub functions, from the top menu click **SpiritHub > SpiritHub Settings**, this will hide all tabs except settings, select any other menu items to hide settings and unhide all content tabs
+
+### If using the clasp CLI
+
+1. Create a Google Sheet inside the season folder (e.g. 2025-26)
+2. Open the Apps Script Editor from the top menu **Extensions > Apps Script**
+3. Select **Settings** in the left hand menu and copy the Script ID
+4. Copy the script ID into `.clasp.json`
+5. Run `just push` which will format, build and push the current code to the sheet
+6. Continue from step 6 in the above instruction
 
 ## Using the hub
 
@@ -119,7 +150,7 @@ just push        # check, build and push to Apps Script
 ```
 
 - `src/` contains all the source code in seperate files, written in TypeScript.
-- `src/appsscript.json` is the Apps Script manifest, pushed as it is. It turns on the Drive and Sheets advanced services, so change services there rather than in the editor, where the next push would undo them.
+- `src/appsscript.json` is the Apps Script manifest, pushed as it is. It turns on the Drive and Sheets advanced services and lists the permissions (`oauthScopes`), so change them there rather than in the editor, where the next push would undo them. Because the permissions are listed, Apps Script no longer works them out from the code: new code that needs another permission fails with "You do not have permission to call …" until the scope is added here
 - `just build` strips the types from all `.ts` files in `src/` and joins them into a single JavaScript file `dist/SpiritHub-<version>.js`
   - Types are removed rather than compiled (using `ts-blank-space`), so the code comes out as written, then dprint tidies the spacing
   - Comments are left out of the build, they live in `src/`. Only the version header and a `// ---- File.ts ----` marker per file are added

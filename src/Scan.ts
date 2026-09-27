@@ -26,21 +26,64 @@ interface ResultsFile {
 }
 
 /**
+ * a Drive folder, as the scan needs it
+ */
+interface DriveFolder {
+  /** Drive folder ID */
+  id: string;
+  /** folder name */
+  name: string;
+}
+
+/**
  * find the season folder: the Drive folder containing this hub spreadsheet
+ * uses the Drive service rather than DriveApp, so the hub only needs to see Drive file information, not contents
  *
  * the hub must sit directly inside the season folder (e.g. '2025-26/')
  *
  * @returns the season folder
  * @throws {Error} if the hub spreadsheet is not inside a folder
  */
-function _findSeasonFolder_(): GoogleAppsScript.Drive.Folder {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const file = DriveApp.getFileById(ss.getId());
-  const parents = file.getParents();
-  if (!parents.hasNext()) {
+function _findSeasonFolder_(): DriveFolder {
+  const drive = _driveService_();
+  const hub = drive.Files.get(SpreadsheetApp.getActiveSpreadsheet().getId(), {
+    fields: "parents",
+    supportsAllDrives: true,
+  });
+  const parentId = hub.parents?.[0];
+  if (!parentId) {
     throw new Error("Hub spreadsheet is not inside a folder");
   }
-  return parents.next();
+  const parent = drive.Files.get(parentId, { fields: "id, name", supportsAllDrives: true });
+  return { id: parentId, name: parent.name ?? "" };
+}
+
+/**
+ * the folders directly inside a folder, not trashed
+ *
+ * @param folderId  Drive ID of the folder
+ * @returns its folders, in the order Drive lists them
+ */
+function _childFolders_(folderId: string): DriveFolder[] {
+  const drive = _driveService_();
+  const folders: DriveFolder[] = [];
+  let pageToken = "";
+  do {
+    const page = drive.Files.list({
+      q: `'${folderId}' in parents and trashed = false and mimeType = '${DRIVE_FOLDER_TYPE}'`,
+      fields: "nextPageToken, files(id, name)",
+      pageSize: 1000,
+      corpora: "allDrives",
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+      ...(pageToken ? { pageToken } : {}),
+    });
+    for (const file of page.files ?? []) {
+      if (file.id && file.name !== undefined) folders.push({ id: file.id, name: file.name });
+    }
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
+  return folders;
 }
 
 /**
@@ -54,18 +97,16 @@ function _findSeasonFolder_(): GoogleAppsScript.Drive.Folder {
  */
 function _scanCategory_(category: string): ResultsFile[] {
   const season = _findSeasonFolder_();
-  const matches = season.getFoldersByName(category);
-  if (!matches.hasNext()) {
-    const available: string[] = [];
-    const folders = season.getFolders();
-    while (folders.hasNext()) available.push(folders.next().getName());
-    throw new Error(`No "${category}" folder in "${season.getName()}". Available: ${available.join(", ")}`);
+  const folders = _childFolders_(season.id);
+  const matches = folders.filter((f) => f.name === category);
+  if (matches.length === 0) {
+    const available = folders.map((f) => f.name);
+    throw new Error(`No "${category}" folder in "${season.name}". Available: ${available.join(", ")}`);
   }
-  const folder = matches.next();
-  if (matches.hasNext()) {
-    throw new Error(`More than one "${category}" folder in "${season.getName()}"`);
+  if (matches.length > 1) {
+    throw new Error(`More than one "${category}" folder in "${season.name}"`);
   }
-  return _scanFolder_(folder, category);
+  return _scanFolder_(matches[0], category);
 }
 
 /**
@@ -105,15 +146,12 @@ function _driveService_(): GoogleAppsScript.Drive {
  * @param category  category the folder belongs to
  * @returns results files in this folder and everything below it
  */
-function _scanFolder_(folder: GoogleAppsScript.Drive.Folder, category: string): ResultsFile[] {
+function _scanFolder_(folder: DriveFolder, category: string): ResultsFile[] {
   const drive = _driveService_();
   const found: ResultsFile[] = [];
   const seen: Set<string> = new Set();
   // folders to look in next: id → its name and the folder names from the category down to it
-  let level: Map<string, { name: string; path: string[] }> = new Map([[folder.getId(), {
-    name: folder.getName(),
-    path: [],
-  }]]);
+  let level: Map<string, { name: string; path: string[] }> = new Map([[folder.id, { name: folder.name, path: [] }]]);
 
   while (level.size > 0) {
     const next: Map<string, { name: string; path: string[] }> = new Map();
