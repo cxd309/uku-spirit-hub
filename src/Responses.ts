@@ -19,15 +19,16 @@ const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
  */
 const RESPONSE_HEADERS = Object.freeze(
   {
+    date: "Date",
     fileId: "File ID",
+    tournament: "Tournament",
     sourceRow: "Source Row",
+    included: "Included",
+    countsForAward: "Counts for Award",
     scorer: "Scoring Team",
     scorerClub: "Scoring Club",
     receiver: "Receiving Team",
     receiverClub: "Receiving Club",
-    tournament: "Tournament",
-    included: "Included",
-    countsForAward: "Counts for Award",
     rules: "Rules",
     fouls: "Fouls",
     fairMindedness: "Fair-Mindedness",
@@ -46,6 +47,11 @@ const RESPONSE_HEADERS = Object.freeze(
 const RESPONSE_FORMULAS: Readonly<
   Partial<Record<keyof typeof RESPONSE_HEADERS, (row: number) => string>>
 > = Object.freeze({
+  date: (row: number) => {
+    const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
+    const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
+    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("date")}), "")`;
+  },
   scorerClub: (row: number) => _responseClubFormula_(row, "scorer"),
   receiverClub: (row: number) => _responseClubFormula_(row, "receiver"),
   tournament: _tournamentFormula_,
@@ -179,6 +185,9 @@ function _readResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet): ResponseRec
 function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: ResponseRecord[]) {
   _timed_("results values", () => _writeTable_(sheet, responses.map(_responseToRow_), RESPONSE_KEYS.length));
   _timed_("results formulas", () => _fillFormulaColumns_(sheet, RESPONSE_KEYS, RESPONSE_FORMULAS, responses.length));
+  if (responses.length > 0) {
+    sheet.getRange(DATA_ROW, RESPONSE_KEYS.indexOf("date") + 1, responses.length, 1).setNumberFormat("yyyy-mm-dd");
+  }
 }
 
 /**
