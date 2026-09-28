@@ -259,6 +259,19 @@ function _clubStatistics_(
 }
 
 /**
+ * club rows in rank order, best first
+ * clubs without a rank (not qualifying) go last, and ties keep their A–Z order
+ * pure, returns a new array
+ *
+ * @param rows  every club's row, A–Z
+ * @returns the rows in rank order
+ */
+function _sortByRank_(rows: ClubStatsRow[]): ClubStatsRow[] {
+  const rankOf = (row: ClubStatsRow) => (typeof row.rank === "number" ? row.rank : Number.MAX_SAFE_INTEGER);
+  return [...rows].sort((a, b) => rankOf(a) - rankOf(b));
+}
+
+/**
  * formula for a CI cell, from the Responses, Mean and SD cells on its row
  * uses the t distribution, the same as R's group.CI
  *
@@ -287,10 +300,11 @@ function _refreshClubStatistics_(): string {
 
   const scores = _countedScores_(responses, events, clubOf);
   const countedTotal = scores.filter((s) => s.counts).length;
-  const { rows, models } = _timed_(
+  const { rows: clubRows, models } = _timed_(
     "club statistics",
     () => _clubStatistics_(_clubNames_([...clubOf.values()]), scores, minimum),
   );
+  const rows = _sortByRank_(clubRows);
 
   const sheet = _getClubStatsSheet_();
   _writeTable_(
