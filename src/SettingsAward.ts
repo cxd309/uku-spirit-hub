@@ -5,7 +5,7 @@
 const AWARD_SETTINGS = Object.freeze({
   minimumTournaments: {
     label: "Award Minimum Tournaments",
-    default: "3",
+    default: "4",
     description: "Minimum number of tournaments a club must enter to qualify for the spirit award",
   },
 });
