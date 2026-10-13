@@ -21,6 +21,9 @@ function onOpen() {
  *
  * Club Override on Teams: rebuild Clubs
  * Name Rules on Settings: work out every Suggested Club again, then rebuild Clubs
+ * International on Tournaments: rebuild Teams and Clubs, scoring teams at international events are left out
+ * Club on Club Report: pick the club's first team, then fit the totals charts to their tournaments
+ * Team on Club Report: fit the totals charts to their tournaments
  * anything else is ignored
  * skips quietly if another run holds the lock
  *   Refresh Results rebuilds Teams and Clubs anyway
@@ -41,13 +44,37 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
     && e.range.getRow() <= nameRules.firstRow + nameRules.rowCount - 1
     && e.range.getLastRow() >= nameRules.firstRow;
 
-  if (!touchesOverride && !touchesNameRules) return;
+  const internationalColumn = EVENT_KEYS.indexOf("international") + 1;
+  const touchesInternational = sheetName === EVENTS_SHEET
+    && e.range.getRow() >= DATA_ROW
+    && e.range.getColumn() <= internationalColumn
+    && e.range.getLastColumn() >= internationalColumn;
+
+  const touchesReportCell = (row: number) =>
+    sheetName === CLUB_REPORT_SHEET
+    && e.range.getRow() <= row
+    && e.range.getLastRow() >= row
+    && e.range.getColumn() <= 2
+    && e.range.getLastColumn() >= 2;
+  const touchesReportClub = touchesReportCell(CLUB_REPORT_ROWS.club);
+  const touchesReportTeam = touchesReportCell(CLUB_REPORT_ROWS.team);
+
+  if (!touchesOverride && !touchesNameRules && !touchesInternational && !touchesReportClub && !touchesReportTeam) {
+    return;
+  }
 
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(LOCK_WAIT_MS)) return;
   try {
-    if (touchesNameRules) _refreshSuggestedClubs_();
-    _rebuildClubsFromSheet_();
+    if (touchesReportClub || touchesReportTeam) {
+      _fitClubReportCharts_(touchesReportClub);
+    } else if (touchesInternational) {
+      const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
+      _rebuildTeamsAndClubs_(_readResponseTeams_(_getResponsesSheet_()), events);
+    } else {
+      if (touchesNameRules) _refreshSuggestedClubs_();
+      _rebuildClubsFromSheet_();
+    }
   } finally {
     lock.releaseLock();
   }

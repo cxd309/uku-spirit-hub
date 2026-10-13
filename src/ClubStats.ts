@@ -91,7 +91,7 @@ function _clubStatsInfo_(when: Date, minimum: number, models: Record<string, Mod
   return `Spirit statistics for each club, calculated ${
     Utilities.formatDate(when, Session.getScriptTimeZone(), "d MMM yyyy HH:mm")
   }\n\n`
-    + "Counted: scores at included tournaments, between different clubs\n"
+    + "Counted: scores at tournaments ticked for Spirit Award, between different clubs\n"
     + `Qualifies: entered at least ${minimum} tournaments, ranks are among qualifying clubs\n`
     + "CI: 95% confidence interval of the mean\n"
     + "Models: mean adjusted for scorers who give higher or lower scores, as in the old R script, "
@@ -111,7 +111,7 @@ function _getClubStatsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
 }
 
 /**
- * every score at an included tournament, with both clubs worked out
+ * every score at a tournament included in the spirit award, with both clubs worked out
  * pure, never modifies its arguments
  * scores between two teams of the same club are kept for tournament counts but do not count, the same as the award
  *
@@ -125,7 +125,7 @@ function _countedScores_(
   events: EventRecord[],
   clubOf: Map<string, string>,
 ): CountedScore[] {
-  const included = new Set(events.filter((e) => e.include).map((e) => e.fileId));
+  const included = new Set(events.filter((e) => e.spiritAward).map((e) => e.fileId));
   return responses
     .filter((r) => included.has(r.fileId))
     .map((r) => ({

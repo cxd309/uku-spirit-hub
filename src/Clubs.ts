@@ -109,6 +109,7 @@ function _rebuildClubs_(
   const clubs = _clubRecords_(teamClubs, responses, events);
   _writeTable_(_getClubsSheet_(), clubs.map((c) => CLUB_KEYS.map((key) => c[key])), CLUB_KEYS.length);
   _setClubReportChoices_(clubs.map((c) => c.club));
+  _timed_("fit club report", () => _fitClubReportCharts_());
 }
 
 /**

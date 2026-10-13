@@ -7,10 +7,11 @@ const TEAMS_SHEET = "Teams";
  * text for the info row above the Teams table
  * what the tab is, what to edit, how it refreshes
  */
-const TEAMS_INFO = "Every team that has given or recieved a spirit score (international clubs excluded)\n\n"
+const TEAMS_INFO = "Every team that has given or recieved a spirit score\n"
+  + "Teams scoring at tournaments ticked International are left out, only the receiving UK teams are listed\n\n"
   + "Suggested Club name is generated using the enabled Name Rules on the Settings tab, this is the default \"best guess\" at a club\n\n"
   + "To override the club use the Club Override column\n\n"
-  + "This table is refreshed by Refresh Tournaments and Refresh Results";
+  + "This table is refreshed by Refresh Tournaments, Refresh Results, and whenever International is ticked or unticked";
 
 /**
  * teams tab columns, in order
@@ -155,6 +156,7 @@ function _writeTeams_(
  * the tournaments each group of teams played in
  * pure, never modifies its arguments
  * a team plays in a tournament when it gives or receives a score there
+ *   only receiving counts at international events, the scoring teams there are not UK teams
  *
  * @param responses  all responses
  * @param events     all events, in date order
@@ -166,9 +168,10 @@ function _tournamentsPlayed_(
   events: EventRecord[],
   groupOf: (team: string) => string,
 ): Map<string, { names: string[]; count: number }> {
+  const internationalIds = _internationalIds_(events);
   const idsByGroup: Map<string, Set<string>> = new Map();
   for (const r of responses) {
-    for (const team of [r.scorer, r.receiver]) {
+    for (const team of internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver]) {
       const group = groupOf(team);
       if (group !== "") idsByGroup.set(group, (idsByGroup.get(group) ?? new Set()).add(r.fileId));
     }
@@ -177,6 +180,31 @@ function _tournamentsPlayed_(
     const names = events.filter((e) => ids.has(e.fileId) && e.tournament !== "").map((e) => e.tournament);
     return [group, { names: [...new Set(names)], count: ids.size }];
   }));
+}
+
+/**
+ * file ids of the events ticked International
+ *
+ * @param events  all events
+ * @returns their file ids
+ */
+function _internationalIds_(events: EventRecord[]): Set<string> {
+  return new Set(events.filter((e) => e.international).map((e) => e.fileId));
+}
+
+/**
+ * bring Teams and Clubs up to date with the responses and the International ticks
+ * teams no longer in any response are dropped unless they have a club override
+ * does not take the lock, callers are responsible
+ *
+ * @param responses  who played at which tournament
+ * @param events     all events, in date order
+ */
+function _rebuildTeamsAndClubs_(responses: ResponseTeams[], events: EventRecord[]) {
+  const sheet = _getTeamsSheet_();
+  const teams = _mergeTeams_(_readTeams_(sheet), _teamNamesFromResponses_(responses, _internationalIds_(events)));
+  const teamClubs = _timed_("write teams", () => _writeTeams_(sheet, teams, responses, events));
+  _timed_("rebuild clubs", () => _rebuildClubs_(teamClubs, responses, events));
 }
 
 /**
@@ -214,7 +242,7 @@ function _teamKey_(name: string): string {
  * @param internationalIds  file ids of international events
  * @returns team names in order of first appearance
  */
-function _teamNamesFromResponses_(responses: ResponseRecord[], internationalIds: Set<string>): string[] {
+function _teamNamesFromResponses_(responses: ResponseTeams[], internationalIds: Set<string>): string[] {
   const byKey: Map<string, string> = new Map();
   for (const r of responses) {
     const names = internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver];

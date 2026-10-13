@@ -9,6 +9,7 @@ const RESPONSES_SHEET = "Results";
  */
 const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
   + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
+  + "Report Team is the Receiving Team without trailing brackets, e.g. Birmingham 1 (WW4) is Birmingham 1, for the Club Report\n\n"
   + "To Refresh run \"Refresh Results\"";
 
 /**
@@ -23,7 +24,7 @@ const RESPONSE_HEADERS = Object.freeze(
     fileId: "File ID",
     tournament: "Tournament",
     sourceRow: "Source Row",
-    included: "Included",
+    spiritAward: "Spirit Award",
     countsForAward: "Counts for Award",
     scorer: "Scoring Team",
     scorerClub: "Scoring Club",
@@ -36,8 +37,16 @@ const RESPONSE_HEADERS = Object.freeze(
     communication: "Communication",
     total: "Total",
     comment: "Comment",
+    reportTeam: "Report Team",
   } as const,
 );
+
+/**
+ * trailing bracket groups removed from a receiving team for its Report Team
+ * e.g. Birmingham 1 (WW4) and Birmingham 1 (WW2) (3) are both Birmingham 1
+ * the same syntax as a Sheets REGEXREPLACE
+ */
+const REPORT_TEAM_PATTERN = "(\\s*\\([^)]*\\))+$";
 
 /**
  * formula columns of the Responses tab:
@@ -55,14 +64,18 @@ const RESPONSE_FORMULAS: Readonly<
   scorerClub: (row: number) => _responseClubFormula_(row, "scorer"),
   receiverClub: (row: number) => _responseClubFormula_(row, "receiver"),
   tournament: _tournamentFormula_,
-  included: (row: number) => {
+  spiritAward: (row: number) => {
     const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
     const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("include")}), FALSE)`;
+    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("spiritAward")}), FALSE)`;
   },
   countsForAward: (row: number) => {
     const cell = (key: keyof typeof RESPONSE_HEADERS) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
-    return `=AND(${cell("included")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
+    return `=AND(${cell("spiritAward")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
+  },
+  reportTeam: (row: number) => {
+    const receiver = `$${_columnLetter_(RESPONSE_KEYS.indexOf("receiver") + 1)}${row}`;
+    return `=TRIM(REGEXREPLACE(${receiver}&"", "${REPORT_TEAM_PATTERN}", ""))`;
   },
   total: (row: number) => {
     const cells = SCORE_KEYS.map((key) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`);
@@ -158,7 +171,35 @@ function _readResponseTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): Respons
  */
 function _getResponsesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const headers: readonly string[] = Object.values(RESPONSE_HEADERS);
+  const existing = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESPONSES_SHEET);
+  if (existing) _upgradeResponsesSheet_(existing);
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers, RESPONSES_INFO);
+}
+
+/**
+ * bring a Results tab from before 0.12 up to the current columns
+ * the Included column is renamed Spirit Award, it already looks up the same Tournaments column
+ * the Report Team column is added at the end and filled
+ * does nothing to a tab that is already current
+ *
+ * @param sheet  the Responses tab
+ */
+function _upgradeResponsesSheet_(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
+  const spiritAward = RESPONSE_KEYS.indexOf("spiritAward") + 1;
+  const reportTeam = RESPONSE_KEYS.indexOf("reportTeam") + 1;
+  const headers = sheet.getRange(HEADER_ROW, 1, 1, Math.min(sheet.getMaxColumns(), reportTeam)).getValues()[0];
+  if (headers[spiritAward - 1] === "Included") {
+    sheet.getRange(HEADER_ROW, spiritAward).setValue(RESPONSE_HEADERS.spiritAward);
+  }
+  if (headers.length === reportTeam - 1 && headers[reportTeam - 2] === RESPONSE_HEADERS.comment) {
+    sheet.insertColumnAfter(reportTeam - 1);
+    sheet.getRange(HEADER_ROW, reportTeam).setValue(RESPONSE_HEADERS.reportTeam).setFontWeight("bold");
+    const rows = sheet.getLastRow() - HEADER_ROW;
+    if (rows > 0) {
+      sheet.getRange(DATA_ROW, reportTeam, rows, 1).setFormula(RESPONSE_FORMULAS.reportTeam!(DATA_ROW));
+    }
+    _applyFilter_(sheet, Math.max(rows, 0), RESPONSE_KEYS.length);
+  }
 }
 
 /**

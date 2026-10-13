@@ -11,8 +11,10 @@ const EVENTS_INFO = "All the found spirit results files in the folder for this c
   + "Each results file must be in a folder named \"YYYYMMDD Tournament name\", rename the folder to rename the tournament\n\n"
   + "User editable columns:\n"
   + "- Status: filled on refresh, set to REFRESH to re-import results\n"
-  + "- International: is this an international tournament\n"
-  + "- Include: should these results be included in the spirit award and issue tracking\n\n"
+  + "- International: is this an international tournament, only the receiving teams are UK teams\n"
+  + "  scoring teams are left off Teams and Clubs, and missing spirit scores are not checked\n"
+  + "- Spirit Award: should these results be included in the spirit award calculations\n"
+  + "- Issues: should these results be included in issue tracking\n\n"
   + "To find new or edited files run \"Refresh Tournaments\", to import them run \"Refresh Results\"";
 
 /**
@@ -30,7 +32,8 @@ const EVENT_HEADERS = Object.freeze(
     status: "Status",
     message: "Message",
     international: "International",
-    include: "Include",
+    spiritAward: "Spirit Award",
+    issues: "Issues",
     importedVersion: "Imported Version",
   } as const,
 );
@@ -70,8 +73,10 @@ interface EventRecord {
   message: string;
   /** Ticked for international events. */
   international: boolean;
-  /** Ticked to include the event in calculations. */
-  include: boolean;
+  /** Ticked to count the event's results for the spirit award. */
+  spiritAward: boolean;
+  /** Ticked to check the event's results for issues. */
+  issues: boolean;
   /** File's last-modified time when last imported; null if never imported. */
   importedVersion: Date | null;
 }
@@ -80,6 +85,11 @@ interface EventRecord {
  * keys of EventRecord in column order
  */
 const EVENT_KEYS = Object.keys(EVENT_HEADERS) as (keyof typeof EVENT_HEADERS)[];
+
+/**
+ * tick box columns of the Events tab
+ */
+const EVENT_TOGGLES = Object.freeze(["international", "spiritAward", "issues"] as const);
 
 /**
  * changes smaller than this are ignored when comparing modified times
@@ -94,7 +104,28 @@ const VERSION_TOLERANCE_MS = 1000;
 function _getEventsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const headers: readonly string[] = Object.values(EVENT_HEADERS);
+  _upgradeIncludeColumn_(ss.getSheetByName(EVENTS_SHEET));
   return _getOrCreateSheet_(ss, EVENTS_SHEET, headers, EVENTS_INFO);
+}
+
+/**
+ * split the single Include column of hubs before 0.12 into Spirit Award and Issues
+ * both start as the old Include tick, and the info row is updated
+ * does nothing to a tab that is already split, or does not exist
+ *
+ * @param sheet  the Events tab, null if it does not exist yet
+ */
+function _upgradeIncludeColumn_(sheet: GoogleAppsScript.Spreadsheet.Sheet | null) {
+  if (!sheet) return;
+  const column = EVENT_KEYS.indexOf("spiritAward") + 1;
+  if (sheet.getMaxColumns() < column || sheet.getRange(HEADER_ROW, column).getValue() !== "Include") return;
+  sheet.insertColumnAfter(column);
+  sheet.getRange(HEADER_ROW, column, 1, 2).setValues([[EVENT_HEADERS.spiritAward, EVENT_HEADERS.issues]]);
+  const rows = sheet.getLastRow() - HEADER_ROW;
+  if (rows > 0) {
+    sheet.getRange(DATA_ROW, column, rows, 1).copyTo(sheet.getRange(DATA_ROW, column + 1, rows, 1));
+  }
+  sheet.getRange(INFO_ROW, 1).setValue(EVENTS_INFO);
 }
 
 /**
@@ -115,7 +146,8 @@ function _eventFromRow_(row: unknown[]): EventRecord {
     status: String(cell("status")).trim().toUpperCase(),
     message: String(cell("message")),
     international: cell("international") === true,
-    include: cell("include") === true,
+    spiritAward: cell("spiritAward") === true,
+    issues: cell("issues") === true,
     importedVersion: imported instanceof Date ? imported : null,
   };
 }
@@ -170,8 +202,7 @@ function _writeEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet, events: EventR
   sheet.getRange(DATA_ROW, column("status"), events.length, 1).setDataValidation(statusRule);
 
   const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-  sheet.getRange(DATA_ROW, column("international"), events.length, 1).setDataValidation(checkbox);
-  sheet.getRange(DATA_ROW, column("include"), events.length, 1).setDataValidation(checkbox);
+  for (const key of EVENT_TOGGLES) sheet.getRange(DATA_ROW, column(key), events.length, 1).setDataValidation(checkbox);
 
   sheet.getRange(DATA_ROW, column("date"), events.length, 1).setNumberFormat("yyyy-mm-dd");
   _highlightDuplicateTournaments_(sheet, events.length);
@@ -244,7 +275,8 @@ function _syncEvents_(existing: EventRecord[], files: ResultsFile[]): EventRecor
       status: _fileProblem_(f.name, f.folderName) === "" ? EVENT_STATUS.NEW : EVENT_STATUS.ERROR,
       message: _fileProblem_(f.name, f.folderName),
       international: false,
-      include: true,
+      spiritAward: true,
+      issues: true,
       importedVersion: null,
     }));
 
@@ -368,11 +400,8 @@ function _refreshTournaments_(): string {
   _timed_("write tournaments", () => _writeEvents_(sheet, events));
   _rememberCategory_(category);
 
-  // tournament names come from folder names, so Teams and Clubs pick up any renames
-  const teamsSheet = _getTeamsSheet_();
-  const responses = _readResponseTeams_(_getResponsesSheet_());
-  const teamClubs = _timed_("write teams", () => _writeTeams_(teamsSheet, _readTeams_(teamsSheet), responses, events));
-  _timed_("rebuild clubs", () => _rebuildClubs_(teamClubs, responses, events));
+  // tournament names come from folder names, so Teams and Clubs pick up any renames and International ticks
+  _rebuildTeamsAndClubs_(_readResponseTeams_(_getResponsesSheet_()), events);
 
   const counts: Record<string, number> = {};
   for (const e of events) {

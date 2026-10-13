@@ -239,17 +239,7 @@ function _refreshResults_(): string {
   _timed_("write results", () => _writeResponses_(responsesSheet, responses));
   _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
 
-  const internationalIds = new Set(updatedEvents.filter((e) => e.international).map((e) => e.fileId));
-  const teamsSheet = _getTeamsSheet_();
-  const sortedEvents = _sortEvents_(updatedEvents);
-  const teamClubs = _timed_("write teams", () =>
-    _writeTeams_(
-      teamsSheet,
-      _mergeTeams_(_readTeams_(teamsSheet), _teamNamesFromResponses_(responses, internationalIds)),
-      responses,
-      sortedEvents,
-    ));
-  _timed_("rebuild clubs", () => _rebuildClubs_(teamClubs, responses, sortedEvents));
+  _rebuildTeamsAndClubs_(responses, _sortEvents_(updatedEvents));
 
   const failed = [...results.values()].filter((r) => !r.ok).length;
   return `Imported ${results.size - failed} tournament(s), ${imported.length} response(s)`

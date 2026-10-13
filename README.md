@@ -24,6 +24,16 @@ The hub reads results from Google Drive, laid out as:
 - The breakdown tab is found by its header row, not its name.
 - International results are collected in the same layout as UK tournaments. Comments are ignored and monitoring for issue tracking is limited.
 
+Each tournament has three tick boxes on the Tournaments tab:
+
+| Tick box      | When ticked                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| International | Only the receiving teams are UK teams. The scoring teams are left off the Teams and Clubs tabs, and NOT-SUBMITTED is not checked, as only one or two scores per game are expected |
+| Spirit Award  | Results count towards Club Statistics and the Club Report (ticked for new tournaments)                                                                                            |
+| Issues        | Results are checked for issues (ticked for new tournaments)                                                                                                                       |
+
+Hubs from before 0.12 had a single Include tick box. Running any menu item splits it into Spirit Award and Issues, both keeping the old tick.
+
 ## Setting up a hub
 
 ### If using the online editor
@@ -80,7 +90,7 @@ Everything runs from the **SpiritHub** menu.
 A normal update after uploading tournament results:
 
 1. **Refresh Tournaments.**
-2. On the Tournaments tab, tick **International** for international events, untick **Include** for anything to leave out, and change any EDITED or ERROR rows you want re-imported to **REFRESH**. Rename any files or folders marked ERROR, then run Refresh Tournaments again.
+2. On the Tournaments tab, tick **International** for international events, untick **Spirit Award** or **Issues** for anything to leave out of the award or issue tracking, and change any EDITED or ERROR rows you want re-imported to **REFRESH**. Rename any files or folders marked ERROR, then run Refresh Tournaments again.
 3. **Refresh Results.**
 4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs updates on edit.
 5. **Refresh Issues.**
@@ -92,16 +102,16 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 
 ## Tabs
 
-| Tab             | What it's for                                                                                                                            |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Issues          | A working tracker of automatically flagged spirit issues. Each row is a single issue, see [issues](#issues) for more detail              |
-| Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red |
-| Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                             |
-| Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong       |
-| Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                   |
-| Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                         |
-| Club Report     | Pick a club to see its summary and charts of the scores it received                                                                      |
-| Settings        | Hidden while refreshing. Sections for the Hub (Category), Spirit Award (minimum tournaments), Name Rules and Issue Rules                 |
+| Tab             | What it's for                                                                                                                                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Issues          | A working tracker of automatically flagged spirit issues. Each row is a single issue, see [issues](#issues) for more detail                                                                                    |
+| Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                       |
+| Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                   |
+| Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                             |
+| Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                         |
+| Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |
+| Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team |
+| Settings        | Hidden while refreshing. Sections for the Hub (Category), Spirit Award (minimum tournaments), Name Rules and Issue Rules                                                                                       |
 
 ## Issues
 
@@ -128,11 +138,11 @@ Differences from the published policy:
 
 - Policy says "Consecutive" events are triggering, here we just look at multiple events in a season.
 - MIN-CATEGORY and SINGLE-LOW-SCORE are not policy, but included for interest
-- Comment checks and NON-SUBMITTED skip international tournaments. Comments not available and scoring teams are not necessarily UK teams.
+- Only tournaments ticked **Issues** are checked. Comment checks, NOT-SUBMITTED and monitoring skip international tournaments. Comments not available and scoring teams are not necessarily UK teams.
 
 ## Club Statistics
 
-Counts scores from included tournaments between different clubs (inter-club scores are excluded).
+Counts scores from tournaments ticked **Spirit Award**, between different clubs (inter-club scores are excluded).
 
 A club qualifies for the award once it has entered the minimum number of tournaments in the Spirit Award section of the Settings tab (default 3), and ranks are among qualifying clubs.
 
