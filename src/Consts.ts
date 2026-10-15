@@ -2,7 +2,7 @@
  * version of the hub code
  * stamped on the single-file build and its release
  */
-const HUB_VERSION = "0.12.0";
+const HUB_VERSION = "0.13.0";
 
 /**
  * row layout shared by every tab

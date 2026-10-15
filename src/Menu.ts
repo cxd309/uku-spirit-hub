@@ -11,6 +11,8 @@ function onOpen() {
     .addItem("Refresh Issues", "refreshIssues")
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
     .addSeparator()
+    .addItem("Draft Emails", "draftEmails")
+    .addSeparator()
     .addItem("SpiritHub Settings", "showSettings")
     .addToUi();
 }
@@ -172,4 +174,16 @@ function refreshIssues() {
  */
 function refreshClubStatistics() {
   _runRefresh_(_refreshClubStatistics_);
+}
+
+/**
+ * menu: put an Open in mail link on every NEW issue whose template is enabled
+ * after adding club emails or changing templates, nothing is sent
+ */
+function draftEmails() {
+  _runRefresh_(() => {
+    const summary = _timed_("email links", _updateEmailLinks_);
+    _getIssuesSheet_().activate();
+    return summary;
+  });
 }

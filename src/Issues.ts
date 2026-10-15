@@ -9,10 +9,12 @@ const ISSUES_SHEET = "Issues";
  */
 const ISSUES_INFO = "Spirit issues found in the results, one row per issue per team per tournament\n\n"
   + "User editable columns:\n"
-  + "- Status: NEW, IN PROGRESS or CLOSED\n"
+  + "- Status: NEW, IN PROGRESS or CLOSED. Change it once you have sent the email\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
-  + "New issues are added by Refresh Issues, existing rows are never changed, so sort and filter freely";
+  + "Email has an Open in mail link for NEW issues whose email template is enabled, "
+  + "kept up to date by Refresh Issues and Draft Emails. It is the only column the script changes on existing rows\n\n"
+  + "New issues are added by Refresh Issues, so sort and filter freely";
 
 /**
  * issues table columns, in order
@@ -33,6 +35,7 @@ const ISSUE_HEADERS = Object.freeze(
     given: "Given",
     tournamentAverage: "Tournament Average",
     status: "Status",
+    email: "Email",
     committeeMember: "Committee Member",
     notes: "Notes",
   } as const,
@@ -160,6 +163,8 @@ interface IssueRecord {
   tournamentAverage: string;
   /** one of ISSUE_STATUSES */
   status: string;
+  /** Open in mail link, filled in later by _updateEmailLinks_ */
+  email: string;
   /** who is handling it */
   committeeMember: string;
   /** free text */
@@ -612,6 +617,7 @@ function _issueRecords_(
     details: `${draft.event.international ? "INTERNATIONAL\n\n" : ""}${draft.details}`,
     ..._issueScoreColumns_(draft, scores),
     status: ISSUE_STATUSES[0],
+    email: "",
     committeeMember: "",
     notes: "",
   }));
@@ -698,6 +704,7 @@ function _monitoringIssues_(
       given: "",
       tournamentAverage: first.map((b) => b.average.toFixed(2)).join(", "),
       status: ISSUE_STATUSES[0],
+      email: "",
       committeeMember: "",
       notes: "",
     });
@@ -718,8 +725,33 @@ function _monitoringIssues_(
  * @returns the Issues tab, created on first use
  */
 function _getIssuesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const headers: readonly string[] = Object.values(ISSUE_HEADERS);
-  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), ISSUES_SHEET, headers, ISSUES_INFO);
+  _upgradeIssuesEmailColumn_(ss.getSheetByName(ISSUES_SHEET));
+  return _getOrCreateSheet_(ss, ISSUES_SHEET, headers, ISSUES_INFO);
+}
+
+/**
+ * add the Email column after Status on hubs before 0.13, and update the info row
+ * does nothing to a tab that already has it, or does not exist
+ *
+ * @param sheet  the Issues tab, null if it does not exist yet
+ */
+function _upgradeIssuesEmailColumn_(sheet: GoogleAppsScript.Spreadsheet.Sheet | null) {
+  if (!sheet) return;
+  const column = ISSUE_KEYS.indexOf("email") + 1;
+  if (
+    sheet.getMaxColumns() < column
+    || sheet.getRange(HEADER_ROW, column).getValue() !== ISSUE_HEADERS.committeeMember
+  ) return;
+  sheet.insertColumnBefore(column);
+  sheet.getRange(HEADER_ROW, column).setValue(ISSUE_HEADERS.email).setFontWeight("bold");
+  const rows = sheet.getMaxRows() - HEADER_ROW;
+  // a new column copies its neighbour's formatting, including the Status dropdown
+  if (rows > 0) sheet.getRange(DATA_ROW, column, rows, 1).clearDataValidations().clearContent();
+  sheet.getRange(INFO_ROW, 1).setValue(ISSUES_INFO);
+  const lastRow = sheet.getLastRow();
+  _applyFilter_(sheet, Math.max(lastRow - HEADER_ROW, 0), ISSUE_KEYS.length);
 }
 
 /**
@@ -787,5 +819,12 @@ function _refreshIssues_(): string {
     ];
   });
   const added = _timed_("write issues", () => _appendIssues_(issues));
-  return `${added} new issue(s)`;
+  const emails = _timed_("email links", () => {
+    try {
+      return _updateEmailLinks_();
+    } catch (e) {
+      return `email links not updated: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  });
+  return `${added} new issue(s); ${emails}`;
 }

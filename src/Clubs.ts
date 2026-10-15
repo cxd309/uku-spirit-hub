@@ -95,6 +95,7 @@ function _clubRecords_(
 /**
  * rebuild the Clubs tab from data the caller already has
  * one row per club, sorted A–Z, plain values so the text is easy to read
+ * any new club is also added to Club Contacts
  * does not take the lock, callers are responsible
  *
  * @param teamClubs  every team and its club, in display order, from _writeTeams_ or _teamClubPairs_
@@ -109,6 +110,7 @@ function _rebuildClubs_(
   const clubs = _clubRecords_(teamClubs, responses, events);
   _writeTable_(_getClubsSheet_(), clubs.map((c) => CLUB_KEYS.map((key) => c[key])), CLUB_KEYS.length);
   _setClubReportChoices_(clubs.map((c) => c.club));
+  _addClubContacts_(clubs.map((c) => c.club));
   _timed_("fit club report", () => _fitClubReportCharts_());
 }
 

@@ -86,6 +86,7 @@ Everything runs from the **SpiritHub** menu.
 | Refresh Results         | Imports every tournament marked NEW or REFRESH on the Tournaments tab, then updates Teams and Clubs. Does not add issues                        |
 | Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                     |
 | Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                            |
+| Draft Emails | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails) |
 
 A normal update after uploading tournament results:
 
@@ -111,6 +112,8 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 | Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                         |
 | Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |
 | Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team |
+| Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                         |
+| Email Templates | Hidden while refreshing. One subject and body per policy issue check, with placeholders filled from the issue                                                                                                       |
 | Settings        | Hidden while refreshing. Sections for the Hub (Category), Spirit Award (minimum tournaments), Name Rules and Issue Rules                                                                                       |
 
 ## Issues
@@ -139,6 +142,20 @@ Differences from the published policy:
 - Policy says "Consecutive" events are triggering, here we just look at multiple events in a season.
 - MIN-CATEGORY and SINGLE-LOW-SCORE are not policy, but included for interest
 - Only tournaments ticked **Issues** are checked. Comment checks, NOT-SUBMITTED and monitoring skip international tournaments. Comments not available and scoring teams are not necessarily UK teams.
+
+## Emails
+
+Each NEW issue gets an **Open in mail** link in the Email column of the Issues tab, right next to Status. SpiritHub never sends anything and needs no extra permissions.
+
+1. Fill in each club's address on the **Club Contacts** tab (several addresses separated by commas)
+2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). Only NOT-SUBMITTED is enabled to begin with, and CHEATING, HARASSMENT and monitoring have no template
+3. **Refresh Issues** adds links for new issues. After changing an address or a template, run **Draft Emails** to update the links of every NEW issue
+4. Click **Open in mail** to start the email in your mail app, check it and send it
+5. Set the issue's Status to IN PROGRESS or CLOSED. The link stays, but is no longer updated
+
+The Email column is the only column the script changes on existing rows. "No email for club" means the club has no address on Club Contacts.
+
+Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder stops Draft Emails with a message naming it.
 
 ## Club Statistics
 
