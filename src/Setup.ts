@@ -8,6 +8,7 @@ function _dataTabNames_(): string[] {
   return [
     ISSUES_SHEET,
     EVENTS_SHEET,
+    GAMES_SHEET,
     RESPONSES_SHEET,
     TEAMS_SHEET,
     CLUBS_SHEET,
@@ -49,6 +50,7 @@ function _showSettings_(): string {
 
   _getIssuesSheet_();
   _getEventsSheet_();
+  _getGamesSheet_();
   _getResponsesSheet_();
   _getTeamsSheet_();
   _getClubsSheet_();

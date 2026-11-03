@@ -6,7 +6,7 @@ It collects data from individual tournament results, maps teams to clubs, tracks
 
 One hub covers one season, or whatever dates are set on the Settings tab.
 
-> **In progress:** tournaments now come from the Schedule Manager. Refresh Results is being rebuilt to read each tournament's Form Responses and is not available in this version.
+> **In progress:** tournaments now come from the Schedule Manager and Refresh Results imports each schedule's games. Reading each tournament's Form Responses into Results is not built yet.
 
 ## Schedule Manager
 
@@ -35,6 +35,8 @@ On the Tournaments tab grey columns are filled on refresh and white columns are 
 Each file's status is **NEW** (not imported yet), **EDITED** (changed since it was imported), **REFRESH**, **ERROR** (cannot be read, see Message), **MISSING** (no longer on the Schedule List) or **OK**. Event Status is **NOT INCLUDED** when Include Results is unticked, otherwise the first of MISSING, ERROR, REFRESH, EDITED, NEW that either file has, otherwise OK.
 
 A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
+
+Refresh Results reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
 
 International tournaments will be added by hand, not through the Schedule Manager. Not built yet.
 
@@ -87,7 +89,7 @@ Everything runs from the **SpiritHub** menu.
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | SpiritHub Settings      | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                    |
 | Refresh Tournaments     | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                   |
-| Refresh Results         | Being rebuilt, not available in this version                                                                                                                 |
+| Refresh Results         | Imports the games of every included tournament whose schedule is NEW, EDITED or REFRESH onto the Games tab. Form Responses are not imported yet              |
 | Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                                  |
 | Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                                         |
 | Draft Emails            | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails) |
@@ -111,6 +113,7 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Issues          | A working tracker of automatically flagged spirit issues. Each row is a single issue, see [issues](#issues) for more detail                                                                                    |
 | Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                       |
+| Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                  |
 | Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                   |
 | Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                             |
 | Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                         |
