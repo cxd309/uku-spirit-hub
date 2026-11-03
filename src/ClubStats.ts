@@ -130,9 +130,9 @@ function _countedScores_(
 ): CountedScore[] {
   const included = new Set(events.filter((e) => _eventCountsForAward_(e, settings)).map((e) => e.spiritFormUrl));
   return responses
-    .filter((r) => included.has(r.fileId))
+    .filter((r) => included.has(r.spiritFormUrl))
     .map((r) => ({
-      tournament: r.fileId,
+      tournament: r.spiritFormUrl,
       scorer: r.scorer,
       scorerClub: clubOf.get(_teamKey_(r.scorer)) ?? "",
       receiver: r.receiver,

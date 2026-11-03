@@ -270,7 +270,7 @@ function _responseIssueHits_(
   const hits: IssueHit[] = [];
 
   for (const r of responses) {
-    const event = eventById.get(r.fileId);
+    const event = eventById.get(r.spiritFormUrl);
     if (!event || !event.includeResults) continue;
 
     const total = _responseTotal_(r);
@@ -446,7 +446,7 @@ function _teamEventIssueDrafts_(
   const drafts: IssueDraft[] = [];
 
   for (const event of events.filter((e) => e.includeResults)) {
-    const atEvent = responses.filter((r) => r.fileId === event.spiritFormUrl);
+    const atEvent = responses.filter((r) => r.spiritFormUrl === event.spiritFormUrl);
 
     for (const received of _receivedByTeam_(atEvent).values()) {
       const team = received[0].receiver;
@@ -521,10 +521,10 @@ interface EventScores {
 function _eventScores_(responses: ResponseRecord[]): Map<string, EventScores> {
   const byEvent: Map<string, EventScores> = new Map();
   for (const r of responses) {
-    let scores = byEvent.get(r.fileId);
+    let scores = byEvent.get(r.spiritFormUrl);
     if (!scores) {
       scores = { received: new Map(), pairs: new Map() };
-      byEvent.set(r.fileId, scores);
+      byEvent.set(r.spiritFormUrl, scores);
     }
     const receiver = _teamKey_(r.receiver);
     const pair = `${_teamKey_(r.scorer)}|${receiver}`;
@@ -644,7 +644,7 @@ function _clubBreaches_(
 ): Map<string, ClubBreach[]> {
   const breachesByClub: Map<string, ClubBreach[]> = new Map();
   for (const event of events.filter((e) => e.includeResults && !e.international)) {
-    const atEvent = responses.filter((r) => r.fileId === event.spiritFormUrl);
+    const atEvent = responses.filter((r) => r.spiritFormUrl === event.spiritFormUrl);
     for (const [key, received] of _receivedByTeam_(atEvent)) {
       const club = clubOf.get(key) ?? "";
       const average = received.map(_responseTotal_).reduce((a, b) => a + b, 0) / received.length;

@@ -6,7 +6,7 @@ It collects data from individual tournament results, maps teams to clubs, tracks
 
 One hub covers one season, or whatever dates are set on the Settings tab.
 
-> **In progress:** tournaments now come from the Schedule Manager and Refresh Results imports each schedule's games. Reading each tournament's Form Responses into Results is not built yet.
+> **In progress:** tournaments, games and Form Responses now come from the Schedule Manager. Issues still use the checks from before and are being rebuilt around games.
 
 ## Schedule Manager
 
@@ -37,6 +37,11 @@ Each file's status is **NEW** (not imported yet), **EDITED** (changed since it w
 A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
 
 Refresh Results reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
+
+Refresh Results also reads each included tournament's **Form Responses**, finding two tabs by their header row rather than their name:
+
+- the responses tab (today `Form responses 2`): every tab with the form's headers. There must be exactly one. Its rows go onto the Results tab. Rows with a missing team or a score that is not 0–4 are left out and listed in Message, placeholder rows with "Your Team Name" as the team are skipped
+- the Deleted forms tab: the one with the form's headers and "Reason for deletion". Optional. Its rows go onto the Deleted Forms tab as they are, as a record of what the chair moved out. Some are scores taken out, others the original of a response that was edited and is still on Results, so they are never used in statistics
 
 International tournaments will be added by hand, not through the Schedule Manager. Not built yet.
 
@@ -85,14 +90,14 @@ International tournaments will be added by hand, not through the Schedule Manage
 
 Everything runs from the **SpiritHub** menu.
 
-| Menu item               | What it does                                                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SpiritHub Settings      | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                    |
-| Refresh Tournaments     | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                   |
-| Refresh Results         | Imports the games of every included tournament whose schedule is NEW, EDITED or REFRESH onto the Games tab. Form Responses are not imported yet              |
-| Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                                  |
-| Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                                         |
-| Draft Emails            | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails) |
+| Menu item               | What it does                                                                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SpiritHub Settings      | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                                                       |
+| Refresh Tournaments     | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                                                      |
+| Refresh Results         | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs. Does not add issues |
+| Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                                                                     |
+| Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                                                                            |
+| Draft Emails            | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails)                                    |
 
 A normal update after uploading tournament results:
 
@@ -115,6 +120,7 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 | Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                       |
 | Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                  |
 | Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                   |
+| Deleted Forms   | Every row of each included tournament's Deleted forms tab, with the chair's reason. A record only, never used in statistics                                                                                    |
 | Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                             |
 | Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                         |
 | Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |

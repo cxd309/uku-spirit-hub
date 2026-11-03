@@ -95,32 +95,33 @@ function _tabsFromSpreadsheet_(book: GoogleAppsScript.Sheets.Schema.Spreadsheet)
 }
 
 /**
- * fetch many results files at once: every modified time together, then every file's contents together
+ * fetch many Form Responses files at once: every modified time together, then every file's contents together
  * much faster than reading the files one after another, where each read is mostly waiting
  * modified times are read before the contents, so an edit made during the read is picked up next time
  *
- * @param fileIds  Drive file IDs of the results files
- * @returns file id → its modified time and tabs, or why it could not be fetched
+ * @param urls  links to the Form Responses spreadsheets
+ * @returns link → its modified time and tabs, or why it could not be fetched
  */
-function _readResultsFiles_(fileIds: string[]): Map<string, FileRead> {
-  if (fileIds.length === 0) return new Map();
-  const modified = _fetchGoogleJson_(
-    fileIds.map((id) =>
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=modifiedTime&supportsAllDrives=true`
-    ),
-  );
+function _readResultsFiles_(urls: string[]): Map<string, FileRead> {
+  if (urls.length === 0) return new Map();
+  const versions = _readFileVersions_(urls);
+  const readable = urls.filter((url) => versions.get(url)?.ok);
   const books = _fetchGoogleJson_(
-    fileIds.map((id) =>
-      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}`
+    readable.map((url) =>
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(_spreadsheetIdFromUrl_(url))}`
       + `?includeGridData=true&fields=${encodeURIComponent(RESULTS_FILE_FIELDS)}`
     ),
   );
-  return new Map(fileIds.map((id, i): [string, FileRead] => {
-    const failed = [modified[i], books[i]].find((r) => r.code !== 200);
-    if (failed) return [id, { ok: false, reason: _apiError_(failed) }];
-    const file = modified[i].body as GoogleAppsScript.Drive_v3.Drive.V3.Schema.File;
-    const book = books[i].body as GoogleAppsScript.Sheets.Schema.Spreadsheet;
-    return [id, { ok: true, version: new Date(file.modifiedTime ?? 0), tabs: _tabsFromSpreadsheet_(book) }];
+  const bookByUrl = new Map(readable.map((url, i) => [url, books[i]]));
+  return new Map(urls.map((url): [string, FileRead] => {
+    const version = versions.get(url);
+    if (!version || !version.ok) return [url, { ok: false, reason: version ? version.reason : "not checked" }];
+    const book = bookByUrl.get(url);
+    if (!book || book.code !== 200) {
+      return [url, { ok: false, reason: book ? `could not open file (${_apiError_(book)})` : "not read" }];
+    }
+    const tabs = _tabsFromSpreadsheet_(book.body as GoogleAppsScript.Sheets.Schema.Spreadsheet);
+    return [url, { ok: true, version: version.version, tabs }];
   }));
 }
 
@@ -154,87 +155,233 @@ function _sourceMessage_(message: string, source: string, reason: string): strin
 }
 
 /**
- * work out which schedules to import and which to drop
+ * work out which files of one kind to import and which to drop
  * pure, no google calls
  *
- * a schedule is imported once, however many tournaments on the Tournaments tab share it,
+ * a file is imported once, however many tournaments on the Tournaments tab share it,
  * when any tournament with Include Results ticked has it NEW, EDITED or REFRESH
- * a schedule no included tournament uses is dropped, with its games
+ * a file no included tournament uses is dropped, with everything imported from it
  *
  * @param events  every event
- * @returns schedule links to import, and links still in use by an included tournament
+ * @param url     which file: the schedule or the Form Responses
+ * @param status  that file's status
+ * @returns links to import, and links still in use by an included tournament
  */
-function _schedulesToImport_(events: EventRecord[]): { toImport: string[]; inUse: Set<string> } {
-  const included = events.filter((e) => e.includeResults && e.scheduleStatus !== SOURCE_STATUS.MISSING);
-  const toImport = included.filter((e) => IMPORT_STATUSES.includes(e.scheduleStatus)).map((e) => e.scheduleUrl);
-  return { toImport: [...new Set(toImport)], inUse: new Set(included.map((e) => e.scheduleUrl)) };
+function _filesToImport_(
+  events: EventRecord[],
+  url: (e: EventRecord) => string,
+  status: (e: EventRecord) => string,
+): { toImport: string[]; inUse: Set<string> } {
+  const included = events.filter((e) => e.includeResults && status(e) !== SOURCE_STATUS.MISSING);
+  const toImport = included.filter((e) => IMPORT_STATUSES.includes(status(e))).map(url);
+  return { toImport: [...new Set(toImport)], inUse: new Set(included.map(url)) };
+}
+
+/**
+ * outcome of importing one Form Responses file
+ */
+type SpiritFormImport =
+  | {
+    ok: true;
+    responses: ResponseRecord[];
+    deleted: DeletedFormRecord[];
+    problems: RowProblem[];
+    version: Date;
+  }
+  | { ok: false; reason: string };
+
+/**
+ * turn a fetched Form Responses file into responses and deleted forms
+ * pure, no google calls, the file is fetched beforehand by _readResultsFiles_
+ *
+ * @param url   link to the Form Responses, stored on every row
+ * @param read  the fetched file, undefined if it was not fetched
+ * @returns the rows read, or why the file could not be read
+ */
+function _importSpiritForm_(url: string, read: FileRead | undefined): SpiritFormImport {
+  if (!read || !read.ok) return { ok: false, reason: read ? read.reason : "not read" };
+  const found = _findFormTabs_(read.tabs);
+  if (!found.ok) return { ok: false, reason: found.reason };
+
+  const { responses, problems } = _parseResponseRows_(found.responses.tab.values, found.responses.columns);
+  const deleted = found.deleted
+    ? _parseDeletedRows_(found.deleted.tab.values, found.deleted.columns, found.deleted.reasonColumn)
+    : [];
+  return {
+    ok: true,
+    responses: responses.map((r) => ({
+      spiritFormUrl: url,
+      sourceRow: r.sourceRow,
+      timestamp: r.timestamp,
+      scorer: r.scorer,
+      receiver: r.receiver,
+      ...r.scores,
+      comment: r.comment,
+    })),
+    deleted: deleted.map((f) => _deletedFormRecord_(url, f)),
+    problems,
+    version: read.version,
+  };
+}
+
+/**
+ * one file's new status after an import, or after Include Results was unticked
+ * pure, no google calls
+ *
+ * @param event       the tournament
+ * @param source      "Schedule" or "Spirit Form", for the Message
+ * @param importDate  the file's import date now
+ * @param result      the file's import, undefined if it was not imported
+ * @param note        what to say about a successful import, e.g. skipped rows, "" for nothing
+ * @returns the new import date, status and message, null if nothing changes
+ */
+function _importedSource_(
+  event: EventRecord,
+  source: string,
+  importDate: Date | null,
+  result: { ok: true; version: Date } | { ok: false; reason: string } | undefined,
+  note: string,
+): { importDate: Date | null; status: string; message: string } | null {
+  if (!event.includeResults) {
+    return importDate === null
+      ? null
+      : { importDate: null, status: SOURCE_STATUS.NEW, message: _sourceMessage_(event.message, source, "") };
+  }
+  if (!result) return null;
+  if (!result.ok) {
+    return { importDate, status: SOURCE_STATUS.ERROR, message: _sourceMessage_(event.message, source, result.reason) };
+  }
+  return {
+    importDate: result.version,
+    status: SOURCE_STATUS.OK,
+    message: _sourceMessage_(event.message, source, note),
+  };
+}
+
+/**
+ * the Message note for rows of a responses tab that could not be read
+ *
+ * @param problems  the rows and why
+ * @returns e.g. "2 row(s) skipped: row 4 (missing Your Team Name); ...", "" if none
+ */
+function _problemsNote_(problems: RowProblem[]): string {
+  if (problems.length === 0) return "";
+  return `${problems.length} row(s) skipped: ${problems.map((p) => `row ${p.sourceRow} (${p.reason})`).join("; ")}`;
 }
 
 /**
  * import every included tournament's files marked NEW, EDITED or REFRESH on the Tournaments tab
- * so far only schedules are imported, onto the Games tab, Form Responses are not read yet
+ * schedules go onto the Games tab, Form Responses onto the Results and Deleted Forms tabs
  * works from the Tournaments tab only, run Refresh Tournaments first to find new or edited files
  *
- * a successful import replaces that schedule's games and marks every tournament using it OK
- * a failed import marks them ERROR and keeps the previous games
- * tournaments with Include Results unticked lose their games and go back to NEW
- * games are written before Tournaments, so an interrupted run is simply repeated
+ * each file is read once, however many tournaments share it
+ * a successful import replaces that file's rows and marks it OK on every tournament using it
+ * a failed import marks it ERROR and keeps the previous rows
+ * tournaments with Include Results unticked lose their rows and go back to NEW
+ * the tabs are written before Tournaments, so an interrupted run is simply repeated
  *
  * @returns a one-line summary of the refresh
  */
 function _refreshResults_(): string {
   const eventsSheet = _getEventsSheet_();
   const gamesSheet = _getGamesSheet_();
+  const responsesSheet = _getResponsesSheet_();
+  const deletedSheet = _getDeletedFormsSheet_();
   const events = _readEvents_(eventsSheet);
   if (events.length === 0) return "No tournaments found: run Refresh Tournaments first";
 
-  const { toImport, inUse } = _schedulesToImport_(events);
-  const versions = _timed_("read file versions", () => _readFileVersions_(toImport));
-  const gamelists = _timed_("read gamelists", () => _readGamelists_(toImport));
-  const imported: Map<string, ScheduleImport> = new Map(toImport.map((url): [string, ScheduleImport] => {
-    const version = versions.get(url);
-    const read = gamelists.get(url);
-    if (!version || !version.ok) return [url, { ok: false, reason: version ? version.reason : "not checked" }];
-    if (!read || !read.ok) return [url, { ok: false, reason: read ? read.reason : "not read" }];
-    return [url, { ok: true, games: _parseGamelist_(url, read.values), version: version.version }];
-  }));
+  const schedules = _filesToImport_(events, (e) => e.scheduleUrl, (e) => e.scheduleStatus);
+  const forms = _filesToImport_(events, (e) => e.spiritFormUrl, (e) => e.spiritFormStatus);
+
+  const versions = _timed_("read schedule versions", () => _readFileVersions_(schedules.toImport));
+  const gamelists = _timed_("read gamelists", () => _readGamelists_(schedules.toImport));
+  const scheduleImports: Map<string, ScheduleImport> = new Map(
+    schedules.toImport.map((url): [string, ScheduleImport] => {
+      const version = versions.get(url);
+      const read = gamelists.get(url);
+      if (!version || !version.ok) return [url, { ok: false, reason: version ? version.reason : "not checked" }];
+      if (!read || !read.ok) return [url, { ok: false, reason: read ? read.reason : "not read" }];
+      return [url, { ok: true, games: _parseGamelist_(url, read.values), version: version.version }];
+    }),
+  );
+
+  const reads = _timed_("read form responses", () => _readResultsFiles_(forms.toImport));
+  const formImports: Map<string, SpiritFormImport> = new Map(
+    forms.toImport.map((url): [string, SpiritFormImport] => [url, _importSpiritForm_(url, reads.get(url))]),
+  );
 
   const updatedEvents = events.map((event): EventRecord => {
     let updated = event;
-    const result = imported.get(event.scheduleUrl);
-    if (!event.includeResults && event.scheduleImportDate !== null) {
-      updated = { ...event, scheduleImportDate: null, scheduleStatus: SOURCE_STATUS.NEW };
-    } else if (event.includeResults && result) {
-      updated = result.ok
-        ? {
-          ...event,
-          scheduleImportDate: result.version,
-          scheduleStatus: SOURCE_STATUS.OK,
-          message: _sourceMessage_(event.message, "Schedule", ""),
-        }
-        : {
-          ...event,
-          scheduleStatus: SOURCE_STATUS.ERROR,
-          message: _sourceMessage_(event.message, "Schedule", result.reason),
-        };
+    const schedule = _importedSource_(
+      updated,
+      "Schedule",
+      updated.scheduleImportDate,
+      scheduleImports.get(updated.scheduleUrl),
+      "",
+    );
+    if (schedule) {
+      updated = {
+        ...updated,
+        scheduleImportDate: schedule.importDate,
+        scheduleStatus: schedule.status,
+        message: schedule.message,
+      };
+    }
+    const formImport = formImports.get(updated.spiritFormUrl);
+    const form = _importedSource_(
+      updated,
+      "Spirit Form",
+      updated.spiritFormImportDate,
+      formImport,
+      formImport && formImport.ok ? _problemsNote_(formImport.problems) : "",
+    );
+    if (form) {
+      updated = {
+        ...updated,
+        spiritFormImportDate: form.importDate,
+        spiritFormStatus: form.status,
+        message: form.message,
+      };
     }
     return { ...updated, eventStatus: _eventStatus_(updated) };
   });
 
-  const replaced = new Set([...imported].filter(([, r]) => r.ok).map(([url]) => url));
-  const newGames = [...imported.values()].flatMap((r) => (r.ok ? r.games : []));
+  const replacedSchedules = new Set([...scheduleImports].filter(([, r]) => r.ok).map(([url]) => url));
+  const newGames = [...scheduleImports.values()].flatMap((r) => (r.ok ? r.games : []));
   const games = _sortGames_([
-    ..._readGames_(gamesSheet).filter((g) => inUse.has(g.scheduleUrl) && !replaced.has(g.scheduleUrl)),
+    ..._readGames_(gamesSheet).filter((g) =>
+      schedules.inUse.has(g.scheduleUrl) && !replacedSchedules.has(g.scheduleUrl)
+    ),
     ...newGames,
   ], updatedEvents);
 
+  const replacedForms = new Set([...formImports].filter(([, r]) => r.ok).map(([url]) => url));
+  const keep = (url: string) => forms.inUse.has(url) && !replacedForms.has(url);
+  const newResponses = [...formImports.values()].flatMap((r) => (r.ok ? r.responses : []));
+  const responses = _sortResponses_([
+    ..._readResponses_(responsesSheet).filter((r) => keep(r.spiritFormUrl)),
+    ...newResponses,
+  ], updatedEvents);
+  const deleted = _sortDeletedForms_([
+    ..._readDeletedForms_(deletedSheet).filter((f) => keep(f.spiritFormUrl)),
+    ...[...formImports.values()].flatMap((r) => (r.ok ? r.deleted : [])),
+  ], updatedEvents);
+
   _timed_("write games", () => _writeGames_(gamesSheet, games));
+  _timed_("write results", () => _writeResponses_(responsesSheet, responses));
+  _timed_("write deleted forms", () => _writeDeletedForms_(deletedSheet, deleted));
   _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
 
-  const failed = [...imported.values()].filter((r) => !r.ok).length;
-  const schedules = toImport.length === 0
-    ? "No schedules to import"
-    : `Imported ${toImport.length - failed} schedule(s), ${newGames.length} game(s)`
-      + (failed > 0 ? `; ${failed} failed (see Tournaments tab)` : "");
-  return `${schedules}; Form Responses are not imported yet`;
+  _rebuildTeamsAndClubs_(responses, _sortEvents_(updatedEvents));
+
+  const summary = (imports: Map<string, { ok: boolean }>, what: string, rows: string) => {
+    if (imports.size === 0) return `No ${what} to import`;
+    const failed = [...imports.values()].filter((r) => !r.ok).length;
+    return `Imported ${imports.size - failed} ${what}, ${rows}`
+      + (failed > 0 ? ` (${failed} failed, see Tournaments)` : "");
+  };
+  return [
+    summary(scheduleImports, "schedule(s)", `${newGames.length} game(s)`),
+    summary(formImports, "Form Responses", `${newResponses.length} response(s)`),
+  ].join("; ");
 }

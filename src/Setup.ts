@@ -10,6 +10,7 @@ function _dataTabNames_(): string[] {
     EVENTS_SHEET,
     GAMES_SHEET,
     RESPONSES_SHEET,
+    DELETED_FORMS_SHEET,
     TEAMS_SHEET,
     CLUBS_SHEET,
     CLUB_CONTACTS_SHEET,
@@ -52,6 +53,7 @@ function _showSettings_(): string {
   _getEventsSheet_();
   _getGamesSheet_();
   _getResponsesSheet_();
+  _getDeletedFormsSheet_();
   _getTeamsSheet_();
   _getClubsSheet_();
   _getClubContactsSheet_();

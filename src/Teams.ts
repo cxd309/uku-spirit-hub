@@ -171,9 +171,9 @@ function _tournamentsPlayed_(
   const internationalIds = _internationalIds_(events);
   const idsByGroup: Map<string, Set<string>> = new Map();
   for (const r of responses) {
-    for (const team of internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver]) {
+    for (const team of internationalIds.has(r.spiritFormUrl) ? [r.receiver] : [r.scorer, r.receiver]) {
       const group = groupOf(team);
-      if (group !== "") idsByGroup.set(group, (idsByGroup.get(group) ?? new Set()).add(r.fileId));
+      if (group !== "") idsByGroup.set(group, (idsByGroup.get(group) ?? new Set()).add(r.spiritFormUrl));
     }
   }
   return new Map([...idsByGroup].map(([group, ids]) => {
@@ -245,7 +245,7 @@ function _teamKey_(name: string): string {
 function _teamNamesFromResponses_(responses: ResponseTeams[], internationalIds: Set<string>): string[] {
   const byKey: Map<string, string> = new Map();
   for (const r of responses) {
-    const names = internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver];
+    const names = internationalIds.has(r.spiritFormUrl) ? [r.receiver] : [r.scorer, r.receiver];
     for (const name of names) {
       const key = _teamKey_(name);
       if (!byKey.has(key)) byKey.set(key, name);
