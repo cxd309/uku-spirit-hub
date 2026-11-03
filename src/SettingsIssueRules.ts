@@ -13,66 +13,81 @@ const ISSUE_RULE_HEADERS = Object.freeze(
 const DEFAULT_ISSUE_RULES: Readonly<
   Record<IssueCategoryKey, { value1: number | string; value2: number | string; description: string }>
 > = Object.freeze({
-  totalWithoutComment: {
-    value1: 14,
-    value2: 6,
-    description: "Policy: a single score total above Value 1 or below Value 2 needs a comment",
-  },
-  categoryWithoutComment: {
-    value1: "0, 4",
-    value2: "",
-    description: "Policy: a category scored any of Value 1 needs a comment",
+  lowScore: {
+    value1: 6,
+    value2: 2,
+    description: "Play, policy: received a total of Value 1 or below. "
+      + "Details say when the team has Value 2 or more of them at the tournament, the policy trigger",
   },
   dangerousPlay: {
     value1: "dangerous, danger, reckless, unsafe",
     value2: "",
-    description: "Policy: a comment mentions dangerous play, any of the words in Value 1",
+    description: "Play, policy: a comment received mentions dangerous play, any of the words in Value 1",
   },
   cheating: {
     value1: "cheat, cheating, intentional",
     value2: "",
-    description: "A comment mentions cheating, any of the words in Value 1",
+    description: "Play: a comment received mentions cheating, any of the words in Value 1",
   },
   harassment: {
     value1: "abuse, abusive, swear, swearing, unwarranted, harass, harassment, insult, insulting",
     value2: "",
-    description: "A comment mentions harassment or abuse, any of the words in Value 1",
-  },
-  notSubmitted: {
-    value1: "",
-    value2: "",
-    description: "Policy: a team gave fewer scores to an opponent than it received from them",
-  },
-  twoLowScores: {
-    value1: 6,
-    value2: 2,
-    description: "Policy: Value 2 or more scores of Value 1 or below at a single tournament",
-  },
-  lowAverage: {
-    value1: 8,
-    value2: "",
-    description: "Policy: an average below Value 1 at a single tournament tournament",
+    description: "Play: a comment received mentions harassment or abuse, any of the words in Value 1",
   },
   categoryMinimum: {
     value1: 0,
     value2: "",
-    description: "Extra: received Value 1 in any category",
+    description: "Play: received Value 1 in any category",
   },
-  singleLowScore: {
-    value1: 6,
+  totalWithoutComment: {
+    value1: 14,
+    value2: 6,
+    description: "Scoring, policy: gave a total above Value 1 or below Value 2 without a comment",
+  },
+  categoryWithoutComment: {
+    value1: "0, 4",
     value2: "",
-    description: "Extra: received a single score total below Value 1",
+    description: "Scoring, policy: gave any of Value 1 in a category without a comment",
   },
-  monitoring: {
-    value1: 9,
-    value2: 2,
-    description:
-      "Policy: a club's teams average below Value 1, Value 2 times in the season, the club goes on monitoring.",
-  },
-  monitoringBreach: {
+  deletedRow: {
     value1: "",
     value2: "",
-    description: "Another average below the MONITORING Value 1 once a club is on monitoring. Needs MONITORING enabled",
+    description: "Scoring: a form is on the Deleted Forms tab, with the chair's reason",
+  },
+  selfScore: {
+    value1: "",
+    value2: "",
+    description: "Scoring: a team scored itself",
+  },
+  noSuchGame: {
+    value1: "",
+    value2: "",
+    description: "Scoring: a form for two teams with no game between them on the schedule",
+  },
+  duplicate: {
+    value1: "",
+    value2: "",
+    description: "Scoring: more forms to an opponent than games played, the one with a comment then the latest counts",
+  },
+  noScores: {
+    value1: "",
+    value2: "",
+    description: "Tournament, policy: a team submitted no scores at a tournament",
+  },
+  underSubmitted: {
+    value1: 50,
+    value2: "",
+    description: "Tournament, policy: a team submitted scores for fewer than Value 1 % of the games it played",
+  },
+  immediateAverage: {
+    value1: 8,
+    value2: "",
+    description: "Tournament, policy: a team averaged below Value 1 at a tournament",
+  },
+  monitoringAverage: {
+    value1: 9,
+    value2: "",
+    description: "Tournament, policy: a team averaged below Value 1 at a tournament, but not below IMMEDIATE-AVERAGE",
   },
 });
 
@@ -82,28 +97,26 @@ const DEFAULT_ISSUE_RULES: Readonly<
 interface IssueSettings {
   /** which checks add issues */
   enabled: Record<IssueCategoryKey, boolean>;
+  /** a total at or below this is a low score */
+  lowScoreAtOrBelow: number;
+  /** this many low scores at a tournament meets the policy */
+  lowScoreCount: number;
+  /** words that flag a comment, for each comment keyword check */
+  commentKeywords: Record<typeof COMMENT_KEYWORD_CHECKS[number], string[]>;
+  /** receiving this in a category is an issue */
+  categoryMinimum: number;
   /** total above this needs a comment */
   commentTotalAbove: number;
   /** total below this needs a comment */
   commentTotalBelow: number;
   /** category scores that need a comment */
   commentCategoryScores: number[];
-  /** words that flag a comment, for each comment keyword check */
-  commentKeywords: Record<typeof COMMENT_KEYWORD_CHECKS[number], string[]>;
-  /** a total at or below this is a low score */
-  lowScoreAtOrBelow: number;
-  /** this many low scores at a tournament is an issue */
-  lowScoreCount: number;
-  /** an average below this at a tournament is an issue */
-  lowAverageBelow: number;
-  /** receiving this in a category is an issue */
-  categoryMinimum: number;
-  /** receiving a total below this is an issue */
-  singleLowScoreBelow: number;
-  /** an average below this is a monitoring breach */
+  /** submitting for fewer than this percentage of played games is an issue */
+  submittedPercentBelow: number;
+  /** an average below this at a tournament needs immediate action */
+  immediateAverageBelow: number;
+  /** an average below this at a tournament counts towards monitoring */
   monitoringAverageBelow: number;
-  /** this many breaches puts a club on monitoring */
-  monitoringBreaches: number;
 }
 
 /**
@@ -125,7 +138,7 @@ const ISSUE_RULES_SECTION = Object.freeze<SettingsSection>({
   description: "Settings for each issue check, used by Refresh Issues. "
     + "Untick Enabled to stop adding new issues of that type. "
     + "Value 1 and Value 2 are thresholds, the description says what each means, lists are comma separated. "
-    + "Do not change the Rule column. Issues already on the Issues tab are never changed",
+    + "Do not change the Rule column. Rules no longer used by this version can be deleted",
   headers: ISSUE_RULE_HEADERS,
   keyed: true,
   defaults: () =>
@@ -207,20 +220,19 @@ function _readIssueSettings_(): IssueSettings {
   const keys = _issueCategoryKeys_();
   return {
     enabled: Object.fromEntries(keys.map((key) => [key, rowOf(key).enabled])) as Record<IssueCategoryKey, boolean>,
-    commentTotalAbove: number("totalWithoutComment", 1),
-    commentTotalBelow: number("totalWithoutComment", 2),
-    commentCategoryScores: numbers("categoryWithoutComment", 1),
+    lowScoreAtOrBelow: number("lowScore", 1),
+    lowScoreCount: number("lowScore", 2),
     commentKeywords: {
       dangerousPlay: items("dangerousPlay", 1),
       cheating: items("cheating", 1),
       harassment: items("harassment", 1),
     },
-    lowScoreAtOrBelow: number("twoLowScores", 1),
-    lowScoreCount: number("twoLowScores", 2),
-    lowAverageBelow: number("lowAverage", 1),
     categoryMinimum: number("categoryMinimum", 1),
-    singleLowScoreBelow: number("singleLowScore", 1),
-    monitoringAverageBelow: number("monitoring", 1),
-    monitoringBreaches: number("monitoring", 2),
+    commentTotalAbove: number("totalWithoutComment", 1),
+    commentTotalBelow: number("totalWithoutComment", 2),
+    commentCategoryScores: numbers("categoryWithoutComment", 1),
+    submittedPercentBelow: number("underSubmitted", 1),
+    immediateAverageBelow: number("immediateAverage", 1),
+    monitoringAverageBelow: number("monitoringAverage", 1),
   };
 }

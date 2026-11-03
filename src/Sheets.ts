@@ -174,3 +174,14 @@ function _isoDate_(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+/**
+ * date and time as yyyy-mm-dd hh:mm, using the date's own calendar day and clock
+ *
+ * @param date  the date
+ * @returns e.g. "2025-11-01 14:05"
+ */
+function _isoDateTime_(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${_isoDate_(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}

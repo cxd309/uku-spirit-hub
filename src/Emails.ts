@@ -41,13 +41,15 @@ const EMAIL_PLACEHOLDERS = Object.freeze(
   {
     club_name: "Club column of the issue",
     team_name: "Team column of the issue",
-    tournament_name: "Tournament(s) column of the issue",
+    tournament_name: "Tournament column of the issue",
     tournament_date: "Tournament Date, e.g. 1 November 2025",
-    issue_category: "Issue Category column of the issue",
+    game: "Game column of the issue, blank for tournament issues and forms with no game",
+    opponent: "Opponent column of the issue",
+    checks: "Checks column of the issue",
     details: "Details column of the issue",
     committee_member: "Committee Member column of the issue",
-    missing_count: "NOT-SUBMITTED only: how many scores were not submitted",
-    missing_opponents: "NOT-SUBMITTED only: who they were for, e.g. Durham 1 (2 games) and York 2",
+    missing_count: "NO-SCORES and UNDER-SUBMITTED only: how many scores were not submitted",
+    missing_opponents: "NO-SCORES and UNDER-SUBMITTED only: who they were for, e.g. Durham 1 (2 games) and York 2",
   } as const,
 );
 
@@ -59,7 +61,8 @@ type EmailPlaceholder = keyof typeof EMAIL_PLACEHOLDERS;
 /**
  * text for the info row above the Email Templates table
  */
-const EMAIL_TEMPLATES_INFO = "One email template per policy issue check, used by Draft Emails\n\n"
+const EMAIL_TEMPLATES_INFO = "One email template per issue check, used by Draft Emails\n"
+  + "An issue with one check uses that check's template, an issue with several uses MULTIPLE\n\n"
   + "User editable columns: Enabled, Subject and Body. Do not change the Issue Code column. "
   + "Only issues whose template is ticked Enabled get a draft. Missing templates are added back with starter wording\n\n"
   + "Placeholders, replaced from the issue row:\n"
@@ -87,7 +90,7 @@ const EMAIL_TEMPLATE_KEYS = Object.keys(EMAIL_TEMPLATE_HEADERS) as (keyof typeof
  * one row of the Email Templates tab
  */
 interface EmailTemplate {
-  /** issue check code, e.g. NOT-SUBMITTED */
+  /** issue check code, e.g. NO-SCORES, or MULTIPLE_EMAIL_CODE */
   code: string;
   /** ticked to draft emails for this check */
   enabled: boolean;
@@ -103,37 +106,66 @@ interface EmailTemplate {
 const EMAIL_SIGN_OFF = "\n\nThanks,\nUKU Spirit Committee";
 
 /**
+ * code of the template used by an issue with more than one check
+ */
+const MULTIPLE_EMAIL_CODE = "MULTIPLE";
+
+/**
  * starter wording written for each check when its template is missing
- * only NOT-SUBMITTED is enabled to begin with
+ * only NO-SCORES and UNDER-SUBMITTED are enabled to begin with
  * checks left out here never get a template or an email (e.g. CHEATING and HARASSMENT, which are not policy)
  */
 const DEFAULT_EMAIL_TEMPLATES: Readonly<
   Partial<Record<IssueCategoryKey, { enabled: boolean; subject: string; body: string }>>
 > = Object.freeze({
-  totalWithoutComment: {
+  lowScore: {
     enabled: false,
-    subject: "Spirit score without a comment - {tournament_name}",
+    subject: "Low spirit score - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "At {tournament_name}, {team_name} gave a spirit score total that the UKU SOTG Policy says needs a comment, "
-      + "but no comment was given.\n\n{details}"
-      + EMAIL_SIGN_OFF,
-  },
-  categoryWithoutComment: {
-    enabled: false,
-    subject: "Spirit score without a comment - {tournament_name}",
-    body: "Dear {club_name},\n\n"
-      + "At {tournament_name}, {team_name} gave a category score that the UKU SOTG Policy says needs a comment, "
-      + "but no comment was given.\n\n{details}"
+      + "{team_name} received a low spirit score from {opponent} at {tournament_name}.\n\n{details}"
       + EMAIL_SIGN_OFF,
   },
   dangerousPlay: {
     enabled: false,
     subject: "Spirit comment received - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "A spirit score comment received by {team_name} at {tournament_name} mentions dangerous play.\n\n{details}"
+      + "A spirit score comment {team_name} received from {opponent} at {tournament_name} mentions dangerous play."
+      + "\n\n{details}"
       + EMAIL_SIGN_OFF,
   },
-  notSubmitted: {
+  categoryMinimum: {
+    enabled: false,
+    subject: "Spirit score received - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a 0 in a spirit category from {opponent} at {tournament_name}.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  totalWithoutComment: {
+    enabled: false,
+    subject: "Spirit score without a comment - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "At {tournament_name}, {team_name} gave {opponent} a spirit score total that the UKU SOTG Policy says "
+      + "needs a comment, but no comment was given.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  categoryWithoutComment: {
+    enabled: false,
+    subject: "Spirit score without a comment - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "At {tournament_name}, {team_name} gave {opponent} a category score that the UKU SOTG Policy says "
+      + "needs a comment, but no comment was given.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  noScores: {
+    enabled: true,
+    subject: "No spirit scores submitted - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} did not submit any spirit scores at {tournament_name}, "
+      + "for games against {missing_opponents}.\n\n"
+      + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
+      + EMAIL_SIGN_OFF,
+  },
+  underSubmitted: {
     enabled: true,
     subject: "Missing spirit scores - {tournament_name}",
     body: "Dear {club_name},\n\n"
@@ -142,32 +174,33 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
       + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
       + EMAIL_SIGN_OFF,
   },
-  twoLowScores: {
-    enabled: false,
-    subject: "Low spirit scores - {tournament_name}",
-    body: "Dear {club_name},\n\n"
-      + "{team_name} received several low spirit scores at {tournament_name}.\n\n{details}"
-      + EMAIL_SIGN_OFF,
-  },
-  lowAverage: {
+  immediateAverage: {
     enabled: false,
     subject: "Low spirit average - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "{team_name} received a low average spirit score at {tournament_name}.\n\n{details}"
       + EMAIL_SIGN_OFF,
   },
-  categoryMinimum: {
+  monitoringAverage: {
     enabled: false,
-    subject: "Spirit score received - {tournament_name}",
+    subject: "Spirit average - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "{team_name} received a 0 in a spirit category at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
+      + "{team_name} received an average spirit score at {tournament_name} that counts towards monitoring."
+      + "\n\n{details}"
+      + EMAIL_SIGN_OFF,
   },
-  singleLowScore: {
-    enabled: false,
-    subject: "Low spirit score - {tournament_name}",
-    body: "Dear {club_name},\n\n"
-      + "{team_name} received a low spirit score at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
-  },
+});
+
+/**
+ * starter wording for an issue with more than one check, to be filled in by hand
+ */
+const DEFAULT_MULTIPLE_EMAIL_TEMPLATE = Object.freeze({
+  enabled: false,
+  subject: "Spirit - {tournament_name}",
+  body: "Dear {club_name},\n\n"
+    + "We are getting in touch about {team_name} at {tournament_name}, in the game against {opponent}.\n\n"
+    + "{checks}\n\n{details}"
+    + EMAIL_SIGN_OFF,
 });
 
 /**
@@ -273,13 +306,17 @@ function _readClubEmails_(): Map<string, string> {
 /**
  * default rows for the Email Templates tab
  *
- * @returns one row per issue check that has a template, in the order of ISSUE_CATEGORIES
+ * @returns one row per issue check that has a template, in the order of ISSUE_CATEGORIES, then MULTIPLE
  */
 function _defaultEmailTemplateRows_(): unknown[][] {
-  return _issueCategoryKeys_().flatMap((key) => {
-    const template = DEFAULT_EMAIL_TEMPLATES[key];
-    return template ? [[ISSUE_CATEGORIES[key].code, template.enabled, template.subject, template.body]] : [];
-  });
+  const multiple = DEFAULT_MULTIPLE_EMAIL_TEMPLATE;
+  return [
+    ..._issueCategoryKeys_().flatMap((key) => {
+      const template = DEFAULT_EMAIL_TEMPLATES[key];
+      return template ? [[ISSUE_CATEGORIES[key].code, template.enabled, template.subject, template.body]] : [];
+    }),
+    [MULTIPLE_EMAIL_CODE, multiple.enabled, multiple.subject, multiple.body],
+  ];
 }
 
 /**
@@ -369,16 +406,16 @@ function _readableList_(names: string[]): string {
 }
 
 /**
- * how many scores were not submitted and for whom, from a NOT-SUBMITTED issue's Details
+ * how many scores were not submitted and for whom, from a NO-SCORES or UNDER-SUBMITTED issue's Details
  * pure
- * Details lists one opponent per missing score below "Missing for:"
+ * Details lists one opponent per missing score below "Missing for:", up to the next blank line
  *
  * @param details  the Details cell
  * @returns the count, and the opponents with a game count when more than one
  */
 function _missingScores_(details: string): { count: number; opponents: string } {
   const [, after = ""] = details.split(/Missing for:\s*\n/);
-  const names = after.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+  const names = after.split(/\n\s*\n/)[0].split("\n").map((line) => line.trim()).filter((line) => line !== "");
   const counts: Map<string, number> = new Map();
   for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
   const opponents = [...counts].map(([name, n]) => (n > 1 ? `${name} (${n} games)` : name));
@@ -408,7 +445,7 @@ function _readIssueRows_(): IssueRow[] {
 /**
  * draft one email per NEW issue whose template is enabled
  * pure, never modifies its arguments
- * the check is the code at the start of the Issue ID
+ * an issue with one check uses that check's template, one with several the MULTIPLE template
  *
  * @param issues      every Issues row
  * @param templates   issue code → template
@@ -428,21 +465,23 @@ function _draftEmails_(
 
   issues.forEach((issue, index) => {
     if (text(issue.status).toUpperCase() !== ISSUE_STATUSES[0]) return;
-    const code = text(issue.issueId).split(" | ")[0];
+    const codes = _checkCodes_(issue.checks);
+    const code = codes.length === 1 ? codes[0] : MULTIPLE_EMAIL_CODE;
     const template = templates.get(code);
     if (!template || !template.enabled) return;
 
     const details = text(issue.details);
-    const missing = code === ISSUE_CATEGORIES.notSubmitted.code
-      ? _missingScores_(details)
-      : { count: NaN, opponents: "" };
+    const missingCodes: string[] = [ISSUE_CATEGORIES.noScores.code, ISSUE_CATEGORIES.underSubmitted.code];
+    const missing = missingCodes.includes(code) ? _missingScores_(details) : { count: NaN, opponents: "" };
     const date = issue.tournamentDate;
     const values: Record<EmailPlaceholder, string> = {
       club_name: text(issue.club),
       team_name: text(issue.team),
-      tournament_name: text(issue.tournaments),
+      tournament_name: text(issue.tournament),
       tournament_date: date instanceof Date ? formatDate(date) : text(date),
-      issue_category: text(issue.category),
+      game: text(issue.game),
+      opponent: text(issue.opponent),
+      checks: text(issue.checks),
       details,
       committee_member: text(issue.committeeMember),
       missing_count: Number.isNaN(missing.count) ? "" : String(missing.count),

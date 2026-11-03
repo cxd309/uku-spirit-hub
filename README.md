@@ -6,7 +6,7 @@ It collects data from individual tournament results, maps teams to clubs, tracks
 
 One hub covers one season, or whatever dates are set on the Settings tab.
 
-> **In progress:** tournaments, games and Form Responses now come from the Schedule Manager. Issues still use the checks from before and are being rebuilt around games.
+> **In progress:** international tournaments will be added by hand, not through the Schedule Manager, and publishing Results and Breakdown from the hub is still to come.
 
 ## Schedule Manager
 
@@ -24,13 +24,13 @@ Rows without a Schedule URL or SOTG Sheet, or starting outside the Start Date an
 
 On the Tournaments tab grey columns are filled on refresh and white columns are yours to edit:
 
-| Column              | What it's for                                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Event Name Override | A name to use instead of the Schedule Manager's. Event Name is the name used on every other tab                                                                                   |
-| Schedule Status     | Whether the schedule needs importing, set REFRESH to import it again                                                                                                              |
-| Spirit Form Status  | Whether the Form Responses need importing, set REFRESH to import them again                                                                                                       |
-| Include Results     | Import this tournament's results. Unticked for new tournaments                                                                                                                    |
-| International       | Only the receiving teams are UK teams. The scoring teams are left off the Teams and Clubs tabs, and NOT-SUBMITTED is not checked, as only one or two scores per game are expected |
+| Column              | What it's for                                                                                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event Name Override | A name to use instead of the Schedule Manager's. Event Name is the name used on every other tab                                                                                                    |
+| Schedule Status     | Whether the schedule needs importing, set REFRESH to import it again                                                                                                                               |
+| Spirit Form Status  | Whether the Form Responses need importing, set REFRESH to import them again                                                                                                                        |
+| Include Results     | Import this tournament's results. Unticked for new tournaments                                                                                                                                     |
+| International       | Only the receiving teams are UK teams. The scoring teams are left off the Teams and Clubs tabs, and NO-SCORES and UNDER-SUBMITTED are not checked, as only one or two scores per game are expected |
 
 Each file's status is **NEW** (not imported yet), **EDITED** (changed since it was imported), **REFRESH**, **ERROR** (cannot be read, see Message), **MISSING** (no longer on the Schedule List) or **OK**. Event Status is **NOT INCLUDED** when Include Results is unticked, otherwise the first of MISSING, ERROR, REFRESH, EDITED, NEW that either file has, otherwise OK.
 
@@ -124,7 +124,7 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 
 | Tab             | What it's for                                                                                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Issues          | A working tracker of automatically flagged spirit issues. Each row is a single issue, see [issues](#issues) for more detail                                                                                    |
+| Issues          | A working tracker of automatically flagged spirit issues. Each row is one team in one game, or one team at one tournament, see [issues](#issues) for more detail                                               |
 | Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                       |
 | Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                  |
 | Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                   |
@@ -134,49 +134,62 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 | Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |
 | Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team |
 | Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                         |
-| Email Templates | Hidden while refreshing. One subject and body per policy issue check, with placeholders filled from the issue                                                                                                  |
+| Email Templates | Hidden while refreshing. One subject and body per issue check, plus MULTIPLE for issues with several checks, with placeholders filled from the issue                                                           |
 | Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                      |
 
 ## Issues
 
-Each refresh runs every enabled check and adds issues that are not already on the tab. Existing rows are never changed, so sort, filter and edit freely.
+Issues are about one team, at one of three levels:
 
-| Check               | Policy                                           | Issue is for             |
-| ------------------- | ------------------------------------------------ | ------------------------ |
-| TOTAL-NO-COMMENT    | Total above 14 or below 6 needs a comment        | Scoring team             |
-| CATEGORY-NO-COMMENT | A category scored 0 or 4 needs a comment         | Scoring team             |
-| DANGEROUS-PLAY      | Comment mentions dangerous play                  | Receiving team           |
-| CHEATING            | Comment mentions cheating                        | Receiving team           |
-| HARASSMENT          | Comment mentions harassment or abuse             | Receiving team           |
-| NOT-SUBMITTED       | Fewer scores given to an opponent than received  | Team that did not submit |
-| LOW-SCORES          | 2 or more scores of 6 or below at a tournament   | Receiving team           |
-| LOW-AVERAGE         | Average below 8 at a tournament                  | Receiving team           |
-| MONITORING          | Club's teams average below 9 twice in the season | Club                     |
-| MONITORING-BREACH   | Another average below 9 while on monitoring      | Club                     |
-| MIN-CATEGORY        | Extra, not policy: received 0 in a category      | Receiving team           |
-| SINGLE-LOW-SCORE    | Extra, not policy: received a total below 6      | Receiving team           |
+| Level      | One issue per        | From                                      |
+| ---------- | -------------------- | ----------------------------------------- |
+| Play       | team in a game       | the scores the team received in that game |
+| Scoring    | team in a game       | the form the team gave for that game      |
+| Tournament | team at a tournament | the whole tournament                      |
 
-Thresholds, keywords and on/off switches are in the Issue Rules section of the Settings tab. Rules added in later versions appear there on their own.
+Everything found for the same issue goes into it: the Checks column lists every check, and Details has a section for each, then the comments. When a form has no game (a duplicate, a deleted form, or a tournament without a schedule) the issue is for the opponent instead of the game.
 
-Differences from the published policy:
+| Check               | Level      | Raised when                                                                                                                           | Source |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| LOW-SCORE           | Play       | received a total of 6 or below. Details list the team's other low scores at the tournament and say when policy's 2 or more is reached | policy |
+| DANGEROUS-PLAY      | Play       | comment received mentions dangerous play                                                                                              | policy |
+| CHEATING            | Play       | comment received mentions cheating                                                                                                    | extra  |
+| HARASSMENT          | Play       | comment received mentions harassment or abuse                                                                                         | extra  |
+| MIN-CATEGORY        | Play       | received 0 in a category                                                                                                              | extra  |
+| TOTAL-NO-COMMENT    | Scoring    | gave a total above 14 or below 6 without a comment                                                                                    | policy |
+| CATEGORY-NO-COMMENT | Scoring    | gave a 0 or 4 in a category without a comment                                                                                         | policy |
+| DELETED-ROW         | Scoring    | a form is on the Deleted Forms tab, the details are the chair's reason                                                                | extra  |
+| SELF-SCORE          | Scoring    | a team scored itself                                                                                                                  | extra  |
+| NO-SUCH-GAME        | Scoring    | a form for two teams with no game on the schedule                                                                                     | extra  |
+| DUPLICATE           | Scoring    | more forms to an opponent than games, every form is listed                                                                            | extra  |
+| NO-SCORES           | Tournament | a team submitted no scores                                                                                                            | policy |
+| UNDER-SUBMITTED     | Tournament | a team submitted for fewer than 50% of the games it played                                                                            | policy |
+| IMMEDIATE-AVERAGE   | Tournament | a team averaged below 8. Details list the club's earlier averages below 9 this season                                                 | policy |
+| MONITORING-AVERAGE  | Tournament | a team averaged below 9, but not below 8. Same details                                                                                | policy |
 
-- Policy says "Consecutive" events are triggering, here we just look at multiple events in a season.
-- MIN-CATEGORY and SINGLE-LOW-SCORE are not policy, but included for interest
-- Only tournaments ticked **Include Results** are checked. Comment checks, NOT-SUBMITTED and monitoring skip international tournaments. Comments not available and scoring teams are not necessarily UK teams.
+Thresholds, keywords and on/off switches are in the Issue Rules section of the Settings tab. Rules added in later versions appear there on their own, rules from earlier versions can be deleted.
+
+- Only tournaments ticked **Include Results** are checked
+- Play checks and averages only use counted forms, so a duplicate is never held against the opponent
+- Submission checks need the tournament's schedule. A team's games are the played games on the schedule, so a 1-0 is not expected to have scores unless someone submitted for it
+- Comment checks and submission checks skip international tournaments, comments are not available and scoring teams are not necessarily UK teams
+- "Earlier" averages are from tournaments with an earlier start date, among included tournaments
+
+Each refresh adds issues that are not already on the tab. When it finds a new check for an existing issue, the check is added to Checks and its section to Details, and a CLOSED issue goes back to NEW. Status, Committee Member and Notes are otherwise never changed, so sort, filter and edit freely.
 
 ## Emails
 
 Each NEW issue gets an **Open in mail** link in the Email column of the Issues tab, right next to Status. SpiritHub never sends anything and needs no extra permissions.
 
 1. Fill in each club's address on the **Club Contacts** tab (several addresses separated by commas)
-2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). Only NOT-SUBMITTED is enabled to begin with, and CHEATING, HARASSMENT and monitoring have no template
+2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). An issue with one check uses that check's template, an issue with several uses **MULTIPLE**. Only NO-SCORES and UNDER-SUBMITTED are enabled to begin with, and checks that are not policy have no template
 3. **Refresh Issues** adds links for new issues. After changing an address or a template, run **Draft Emails** to update the links of every NEW issue
 4. Click **Open in mail** to start the email in your mail app, check it and send it
 5. Set the issue's Status to IN PROGRESS or CLOSED. The link stays, but is no longer updated
 
-The Email column is the only column the script changes on existing rows. "No email for club" means the club has no address on Club Contacts.
+"No email for club" means the club has no address on Club Contacts.
 
-Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder stops Draft Emails with a message naming it.
+Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder stops Draft Emails with a message naming it.
 
 ## Club Statistics
 
