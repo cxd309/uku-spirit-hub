@@ -6,7 +6,7 @@ const CLUB_CONTACTS_SHEET = "Club Contacts";
 /**
  * text for the info row above the Club Contacts table
  */
-const CLUB_CONTACTS_INFO = "Email address for each club, used by Draft Emails\n\n"
+const CLUB_CONTACTS_INFO = "Email address for each club, looked up by the Email Address column of the Issues tab\n\n"
   + "User editable columns:\n"
   + "- Email: one address, or several separated by commas.\n"
   + "- Notes\n\n"
@@ -68,8 +68,10 @@ type EmailPlaceholder = keyof typeof EMAIL_PLACEHOLDERS;
 /**
  * text for the info row above the Email Templates table
  */
-const EMAIL_TEMPLATES_INFO = "One email template per issue check, used by Draft Emails\n"
-  + "An issue with one check uses that check's template, an issue with several uses MULTIPLE\n\n"
+const EMAIL_TEMPLATES_INFO =
+  "One email template per issue check, filling Email Subject and Email Body on the Issues tab\n"
+  + "An issue with one check uses that check's template, one with several uses MULTIPLE, one with none uses MANUAL\n"
+  + "Only NEW issues are filled, by Refresh Issues and whenever this tab is edited\n\n"
   + "User editable columns: Enabled, Subject and Body. Do not change the Issue Code column. "
   + "Only issues whose template is ticked Enabled get a draft. Missing templates are added back with starter wording\n\n"
   + "Placeholders, replaced from the issue row:\n"
@@ -218,9 +220,31 @@ const DEFAULT_MULTIPLE_EMAIL_TEMPLATE = Object.freeze({
 });
 
 /**
- * text of the Email cell when the club has no address on the Club Contacts tab
+ * code of the template used by an issue with no checks, e.g. one added by hand
+ */
+const MANUAL_EMAIL_CODE = "MANUAL";
+
+/**
+ * starter wording for an issue with no checks, to be filled in by hand
+ */
+const DEFAULT_MANUAL_EMAIL_TEMPLATE = Object.freeze({
+  enabled: false,
+  subject: "Spirit - {tournament_name}",
+  body: "Dear {club_name},\n\n"
+    + "We are getting in touch about {team_name} at {tournament_name}.\n\n{details}"
+    + EMAIL_SIGN_OFF,
+});
+
+/**
+ * text of the Email Address cell when the club has no address on the Club Contacts tab
  */
 const NO_CLUB_EMAIL = "No email for club";
+
+/**
+ * text of the Email Address cell when DELETED-ROW is the issue's only check
+ * a form can be deleted for something either team did, so neither club's address is given
+ */
+const UNKNOWN_RECIPIENT = "Could not be determined";
 
 /**
  * one drafted email, for one Issues row
@@ -228,8 +252,6 @@ const NO_CLUB_EMAIL = "No email for club";
 interface EmailDraft {
   /** index of the issue in the rows given to _draftEmails_ */
   index: number;
-  /** club's email, "" if it has none */
-  to: string;
   /** filled subject */
   subject: string;
   /** filled body */
@@ -237,18 +259,20 @@ interface EmailDraft {
 }
 
 /**
- * the Email cell for a draft: an Open in mail link, or a note that the club has no email
- * pure
- * subject and body are percent-encoded and quotes are dropped from addresses, so the formula never contains a quote
+ * formula for the Email Address cell of one Issues row: the club's email from the Club Contacts tab
+ * a formula, so a changed address shows straight away and a row added by hand can copy it down
+ * an issue whose only check is DELETED-ROW gives no address, see UNKNOWN_RECIPIENT
  *
- * @param draft  the drafted email
- * @returns a formula, or the no email text
+ * @param row  1-based sheet row the formula is for
+ * @returns the formula
  */
-function _emailCell_(draft: EmailDraft): string {
-  if (draft.to === "") return NO_CLUB_EMAIL;
-  const to = draft.to.split(",").map((address) => address.trim().replace(/[\s"?&]/g, "")).join(",");
-  const url = `mailto:${to}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
-  return `=HYPERLINK("${url}","Open in mail")`;
+function _emailAddressFormula_(row: number): string {
+  const cell = (key: keyof typeof ISSUE_HEADERS) => `$${_columnLetter_(ISSUE_KEYS.indexOf(key) + 1)}${row}`;
+  const contacts = (key: keyof typeof CLUB_CONTACT_HEADERS) =>
+    _columnBelowHeader_(CLUB_CONTACTS_SHEET, CLUB_CONTACT_KEYS.indexOf(key) + 1);
+  return `=IF(TRIM(${cell("checks")})="${ISSUE_CATEGORIES.deletedRow.code}", "${UNKNOWN_RECIPIENT}", `
+    + `LET(address, IFERROR(XLOOKUP(${cell("club")}, ${contacts("club")}, ${contacts("email")}), ""), `
+    + `IF(TRIM(address)="", "${NO_CLUB_EMAIL}", address)))`;
 }
 
 /**
@@ -305,33 +329,20 @@ function _addClubContacts_(clubs: string[]) {
 }
 
 /**
- * each club's email from the Club Contacts tab
- *
- * @returns lower case club name → email, blank emails left out
- */
-function _readClubEmails_(): Map<string, string> {
-  const emails: Map<string, string> = new Map();
-  for (const row of _readClubContactRows_(_getClubContactsSheet_())) {
-    const club = String(row[0]).trim().toLowerCase();
-    const email = String(row[1]).trim();
-    if (club !== "" && email !== "" && !emails.has(club)) emails.set(club, email);
-  }
-  return emails;
-}
-
-/**
  * default rows for the Email Templates tab
  *
- * @returns one row per issue check that has a template, in the order of ISSUE_CATEGORIES, then MULTIPLE
+ * @returns one row per issue check that has a template, in the order of ISSUE_CATEGORIES, then MULTIPLE and MANUAL
  */
 function _defaultEmailTemplateRows_(): unknown[][] {
   const multiple = DEFAULT_MULTIPLE_EMAIL_TEMPLATE;
+  const manual = DEFAULT_MANUAL_EMAIL_TEMPLATE;
   return [
     ..._issueCategoryKeys_().flatMap((key) => {
       const template = DEFAULT_EMAIL_TEMPLATES[key];
       return template ? [[ISSUE_CATEGORIES[key].code, template.enabled, template.subject, template.body]] : [];
     }),
     [MULTIPLE_EMAIL_CODE, multiple.enabled, multiple.subject, multiple.body],
+    [MANUAL_EMAIL_CODE, manual.enabled, manual.subject, manual.body],
   ];
 }
 
@@ -463,18 +474,16 @@ function _readIssueRows_(): IssueRow[] {
 /**
  * draft one email per NEW issue whose template is enabled
  * pure, never modifies its arguments
- * an issue with one check uses that check's template, one with several the MULTIPLE template
+ * an issue with one check uses that check's template, one with several MULTIPLE, one with none MANUAL
  *
  * @param issues      every Issues row
  * @param templates   issue code → template
- * @param emails      lower case club → email
  * @param formatDate  turns a tournament date into text
  * @returns the emails, and every unknown placeholder as "CODE: {name}"
  */
 function _draftEmails_(
   issues: IssueRow[],
   templates: Map<string, EmailTemplate>,
-  emails: Map<string, string>,
   formatDate: (date: Date) => string,
 ): { drafts: EmailDraft[]; unknown: string[] } {
   const drafts: EmailDraft[] = [];
@@ -484,7 +493,7 @@ function _draftEmails_(
   issues.forEach((issue, index) => {
     if (text(issue.status).toUpperCase() !== ISSUE_STATUSES[0]) return;
     const codes = _checkCodes_(issue.checks);
-    const code = codes.length === 1 ? codes[0] : MULTIPLE_EMAIL_CODE;
+    const code = codes.length === 0 ? MANUAL_EMAIL_CODE : codes.length === 1 ? codes[0] : MULTIPLE_EMAIL_CODE;
     const template = templates.get(code);
     if (!template || !template.enabled) return;
 
@@ -509,45 +518,40 @@ function _draftEmails_(
     const subject = _fillTemplate_(template.subject, values);
     const body = _fillTemplate_(template.body, values);
     for (const name of [...subject.unknown, ...body.unknown]) unknown.add(`${code}: ${name}`);
-
-    drafts.push({
-      index,
-      to: emails.get(values.club_name.toLowerCase()) ?? "",
-      subject: subject.text,
-      body: body.text,
-    });
+    drafts.push({ index, subject: subject.text, body: body.text });
   });
   return { drafts, unknown: [...unknown] };
 }
 
 /**
- * the whole Email column after drafting
+ * the Email Subject and Email Body columns after drafting
  * pure, never modifies its arguments
- * NEW issues get their draft's link, or blank when their template is missing or disabled
- * every other issue keeps what it had, so the link to an email already sent stays
+ * NEW issues get their draft, or blank when their template is missing or disabled
+ * every other issue keeps what it had, so the wording of an email already sent stays
  *
- * @param issues   every Issues row
- * @param current  the Email column as it is, formulas where there are any
- * @param drafts   from _draftEmails_
- * @returns one cell per issue, formulas start with "="
+ * @param issues  every Issues row
+ * @param drafts  from _draftEmails_
+ * @returns one subject and one body per issue
  */
-function _emailColumn_(issues: IssueRow[], current: string[], drafts: EmailDraft[]): string[] {
-  const cells = issues.map((issue, i) =>
-    String(issue.status ?? "").trim().toUpperCase() === ISSUE_STATUSES[0] ? "" : current[i] ?? ""
+function _emailColumns_(issues: IssueRow[], drafts: EmailDraft[]): { subject: string; body: string }[] {
+  const cells = issues.map((issue) =>
+    String(issue.status ?? "").trim().toUpperCase() === ISSUE_STATUSES[0]
+      ? { subject: "", body: "" }
+      : { subject: String(issue.emailSubject ?? ""), body: String(issue.emailBody ?? "") }
   );
-  for (const draft of drafts) cells[draft.index] = _emailCell_(draft);
+  for (const draft of drafts) cells[draft.index] = { subject: draft.subject, body: draft.body };
   return cells;
 }
 
 /**
- * fill the Email column of the Issues tab with an Open in mail link for every NEW issue whose template is enabled
- * reads the Issues, Email Templates and Club Contacts tabs, nothing is sent
- * only the Email column is written
+ * fill Email Subject and Email Body for every NEW issue whose template is enabled
+ * run by Refresh Issues, and whenever the Email Templates tab is edited
+ * reads the Issues and Email Templates tabs, writes only those two columns, nothing is sent
  *
  * @returns a one-line summary
  * @throws {Error} if a template uses a placeholder that does not exist
  */
-function _updateEmailLinks_(): string {
+function _updateEmailDrafts_(): string {
   const sheet = _getIssuesSheet_();
   const issues = _readIssueRows_();
   if (issues.length === 0) return "no issues to email";
@@ -556,7 +560,6 @@ function _updateEmailLinks_(): string {
   const { drafts, unknown } = _draftEmails_(
     issues,
     _readEmailTemplates_(),
-    _readClubEmails_(),
     (date) => Utilities.formatDate(date, timeZone, "d MMMM yyyy"),
   );
   if (unknown.length > 0) {
@@ -566,13 +569,12 @@ function _updateEmailLinks_(): string {
     );
   }
 
-  const range = sheet.getRange(DATA_ROW, ISSUE_KEYS.indexOf("email") + 1, issues.length, 1);
-  const formulas = range.getFormulas();
-  const values = range.getValues();
-  const current = formulas.map((row, i) => (row[0] !== "" ? row[0] : String(values[i][0])));
-  range.setValues(_emailColumn_(issues, current, drafts).map((cell) => [cell]));
-
-  const noEmail = drafts.filter((d) => d.to === "").length;
-  const summary = `${drafts.length} email link(s)`;
-  return noEmail === 0 ? summary : `${summary}, ${noEmail} with no club email (see Club Contacts)`;
+  const columns = _emailColumns_(issues, drafts);
+  const write = (key: "emailSubject" | "emailBody", field: "subject" | "body") =>
+    sheet
+      .getRange(DATA_ROW, ISSUE_KEYS.indexOf(key) + 1, issues.length, 1)
+      .setValues(columns.map((cell) => [cell[field]]));
+  write("emailSubject", "subject");
+  write("emailBody", "body");
+  return `${drafts.length} email draft(s)`;
 }

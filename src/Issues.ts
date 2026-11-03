@@ -15,9 +15,10 @@ const ISSUES_INFO = "Spirit issues found in the results\n"
   + "- Status: NEW, IN PROGRESS or CLOSED. Change it once you have sent the email\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
+  + "Email Address looks the club up on Club Contacts. Email Subject and Email Body are filled from the email "
+  + "templates while the issue is NEW, and kept as they are once Status changes\n\n"
   + "A refresh that finds another check for an existing issue adds it to Checks and Details, "
-  + "and a CLOSED issue goes back to NEW. Nothing else on existing rows is changed, "
-  + "apart from the Open in mail link for NEW issues whose email template is enabled\n\n"
+  + "and a CLOSED issue goes back to NEW. Nothing else on existing rows is changed\n\n"
   + "Refresh Issues puts the tab back in order: club, tournament, team, level, checks, opponent. "
   + "Filters are kept, so filter freely";
 
@@ -40,7 +41,9 @@ const ISSUE_HEADERS = Object.freeze(
     club: "Club",
     details: "Details",
     status: "Status",
-    email: "Email",
+    emailAddress: "Email Address",
+    emailSubject: "Email Subject",
+    emailBody: "Email Body",
     committeeMember: "Committee Member",
     notes: "Notes",
   } as const,
@@ -216,8 +219,12 @@ interface IssueRecord {
   details: string;
   /** one of ISSUE_STATUSES */
   status: string;
-  /** Open in mail link, filled in later by _updateEmailLinks_ */
-  email: string;
+  /** formula looking up the club's email on Club Contacts, see _emailAddressFormula_ */
+  emailAddress: string;
+  /** filled from the email template while the issue is NEW, see _updateEmailDrafts_ */
+  emailSubject: string;
+  /** filled from the email template while the issue is NEW, see _updateEmailDrafts_ */
+  emailBody: string;
   /** who is handling it */
   committeeMember: string;
   /** free text */
@@ -686,7 +693,9 @@ function _issuesFromFindings_(
         club: clubOf.get(_teamKey_(first.team)) ?? "",
         details: `${first.event.international ? "INTERNATIONAL\n\n" : ""}${_findingsDetails_(grouped, settings)}`,
         status: ISSUE_STATUSES[0],
-        email: "",
+        emailAddress: "",
+        emailSubject: "",
+        emailBody: "",
         committeeMember: "",
         notes: "",
       },
@@ -782,7 +791,9 @@ function _writeIssues_(found: FoundIssue[], settings: IssueSettings): { added: n
     const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
     _fitSheet_(sheet, firstNew + added.length - 1, ISSUE_KEYS.length);
     sheet.getRange(firstNew, 1, added.length, ISSUE_KEYS.length).setValues(
-      added.map((issue) => ISSUE_KEYS.map((key) => issue[key] ?? "")),
+      added.map((issue, i) =>
+        ISSUE_KEYS.map((key) => (key === "emailAddress" ? _emailAddressFormula_(firstNew + i) : issue[key] ?? ""))
+      ),
     );
     const statusRule = SpreadsheetApp.newDataValidation().requireValueInList([...ISSUE_STATUSES], true).build();
     sheet.getRange(firstNew, column("status"), added.length, 1).setDataValidation(statusRule);
@@ -832,11 +843,11 @@ function _refreshIssues_(): string {
     return _issuesFromFindings_(findings, clubOf, new Date(), settings);
   });
   const { added, updated } = _timed_("write issues", () => _writeIssues_(found, settings));
-  const emails = _timed_("email links", () => {
+  const emails = _timed_("email drafts", () => {
     try {
-      return _updateEmailLinks_();
+      return _updateEmailDrafts_();
     } catch (e) {
-      return `email links not updated: ${e instanceof Error ? e.message : String(e)}`;
+      return `email drafts not updated: ${e instanceof Error ? e.message : String(e)}`;
     }
   });
   return `${added} new issue(s), ${updated} updated; ${emails}`;

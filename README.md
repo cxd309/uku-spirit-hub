@@ -105,7 +105,6 @@ Everything runs from the **SpiritHub** menu.
 | Refresh Results         | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs. Does not add issues |
 | Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                                                                     |
 | Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                                                                            |
-| Draft Emails            | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails)                                    |
 
 A normal update after uploading tournament results:
 
@@ -181,17 +180,23 @@ Each refresh adds issues that are not already on the tab. When it finds a new ch
 
 ## Emails
 
-Each NEW issue gets an **Open in mail** link in the Email column of the Issues tab, right next to Status. SpiritHub never sends anything and needs no extra permissions.
+The Issues tab drafts an email for each issue, ready to copy into whatever mail you use. SpiritHub never sends anything.
+
+| Column        | What it holds                                                                                                                                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email Address | the club's address from Club Contacts, a formula so it is always current. "No email for club" when there is none, "Could not be determined" when DELETED-ROW is the only check, as a form can be deleted for something either team did |
+| Email Subject | filled from the issue's template while the issue is NEW                                                                                                                                                                                |
+| Email Body    | filled from the issue's template while the issue is NEW                                                                                                                                                                                |
 
 1. Fill in each club's address on the **Club Contacts** tab (several addresses separated by commas)
-2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). An issue with one check uses that check's template, an issue with several uses **MULTIPLE**. Only NO-SCORES and UNDER-SUBMITTED are enabled to begin with, and checks that are not policy have no template
-3. **Refresh Issues** adds links for new issues. After changing an address or a template, run **Draft Emails** to update the links of every NEW issue
-4. Click **Open in mail** to start the email in your mail app, check it and send it
-5. Set the issue's Status to IN PROGRESS or CLOSED. The link stays, but is no longer updated
+2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). An issue with one check uses that check's template, one with several uses **MULTIPLE**, one with none (e.g. added by hand) uses **MANUAL**. Only NO-SCORES and UNDER-SUBMITTED are enabled to begin with, and checks that are not policy have no template
+3. **Refresh Issues** fills Email Subject and Email Body for NEW issues whose template is enabled. Editing the Email Templates tab fills them again straight away
+4. Copy the address, subject and body into your mail, check it and send it
+5. Set the issue's Status to IN PROGRESS or CLOSED. Subject and body are then kept as they are, a record of what was sent
 
-"No email for club" means the club has no address on Club Contacts.
+An issue added by hand gets an Email Address by copying the formula down from the row above.
 
-Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder stops Draft Emails with a message naming it.
+Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder is reported by Refresh Issues, or when the template is edited, and nothing is filled until it is fixed.
 
 ## Club Statistics
 
