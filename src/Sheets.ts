@@ -205,16 +205,32 @@ function _fillFormulaColumns_<K extends string>(
 }
 
 /**
- * put a fresh filter over the header row and data rows
- * any existing filter is removed first, so people's filter settings are reset on each write
+ * put a fresh filter over the header row and data rows, keeping what people had filtered
+ * a filter cannot grow with the table, so the old one is removed and a new one made,
+ * each column's criteria are carried over to the column with the same header text
  *
  * @param sheet     tab to filter
  * @param dataRows  number of data rows
  * @param columns   number of columns in the table
  */
 function _applyFilter_(sheet: GoogleAppsScript.Spreadsheet.Sheet, dataRows: number, columns: number) {
-  sheet.getFilter()?.remove();
-  sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
+  const headers = sheet.getRange(HEADER_ROW, 1, 1, columns).getValues()[0].map((h) => String(h).trim());
+  const kept: Map<string, GoogleAppsScript.Spreadsheet.FilterCriteria> = new Map();
+  const old = sheet.getFilter();
+  if (old) {
+    const range = old.getRange();
+    for (let column = range.getColumn(); column <= range.getLastColumn(); column++) {
+      const criteria = old.getColumnFilterCriteria(column);
+      const header = headers[column - 1];
+      if (criteria && header) kept.set(header, criteria.copy().build());
+    }
+    old.remove();
+  }
+  const filter = sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
+  headers.forEach((header, i) => {
+    const criteria = kept.get(header);
+    if (criteria) filter.setColumnFilterCriteria(i + 1, criteria);
+  });
 }
 
 /**

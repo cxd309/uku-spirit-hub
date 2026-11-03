@@ -175,7 +175,9 @@ Thresholds, keywords and on/off switches are in the Issue Rules section of the S
 - Comment checks and submission checks skip international tournaments, comments are not available and scoring teams are not necessarily UK teams
 - "Earlier" averages are from tournaments with an earlier start date, among included tournaments
 
-Each refresh adds issues that are not already on the tab. When it finds a new check for an existing issue, the check is added to Checks and its section to Details, and a CLOSED issue goes back to NEW. Status, Committee Member and Notes are otherwise never changed, so sort, filter and edit freely.
+Refresh Issues puts the tab back in order every time: club, then tournament (date, then name), team, level, checks and opponent, so a club's issues sit together. Filters are kept through every refresh, on this tab and every other.
+
+Each refresh adds issues that are not already on the tab. When it finds a new check for an existing issue, the check is added to Checks and its section to Details, and a CLOSED issue goes back to NEW. Status, Committee Member and Notes are otherwise never changed, so filter and edit freely.
 
 ## Emails
 

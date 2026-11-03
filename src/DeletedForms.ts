@@ -8,7 +8,7 @@ const DELETED_FORMS_SHEET = "Deleted Forms";
  * what the tab is, what to edit, how it refreshes
  */
 const DELETED_FORMS_INFO = "Every row on the Deleted forms tab of each included tournament's Form Responses\n\n"
-  + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
+  + "DO NOT EDIT, this is all regenerated on refresh. Filters are kept through a refresh, sorting is put back to the hub's order\n\n"
   + "A record of what the chair moved out of the responses, with their reason. "
   + "Some are scores taken out, others are the original of a response that was edited and is still on Results\n"
   + "Never used in statistics\n\n"

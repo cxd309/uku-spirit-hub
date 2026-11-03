@@ -18,7 +18,8 @@ const ISSUES_INFO = "Spirit issues found in the results\n"
   + "A refresh that finds another check for an existing issue adds it to Checks and Details, "
   + "and a CLOSED issue goes back to NEW. Nothing else on existing rows is changed, "
   + "apart from the Open in mail link for NEW issues whose email template is enabled\n\n"
-  + "New issues are added by Refresh Issues, so sort and filter freely";
+  + "Refresh Issues puts the tab back in order: club, tournament, team, level, checks, opponent. "
+  + "Filters are kept, so filter freely";
 
 /**
  * issues table columns, in order
@@ -55,6 +56,14 @@ const ISSUE_KEYS = Object.keys(ISSUE_HEADERS) as (keyof typeof ISSUE_HEADERS)[];
  */
 const ISSUE_EDITABLE = Object.freeze(
   (["status", "committeeMember", "notes"] as const).map((key) => ISSUE_KEYS.indexOf(key)),
+);
+
+/**
+ * the order of the Issues tab, put back after every refresh:
+ * a club's issues together, then by tournament (date, then name), team, level, checks and opponent
+ */
+const ISSUE_SORT: readonly (keyof typeof ISSUE_HEADERS)[] = Object.freeze(
+  ["club", "tournamentDate", "tournament", "team", "level", "checks", "opponent"] as const,
 );
 
 /**
@@ -737,7 +746,7 @@ function _getIssuesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
 }
 
 /**
- * add new issues at the bottom, and add newly found checks to existing ones
+ * add new issues, add newly found checks to existing ones, then put the tab back in ISSUE_SORT order
  * existing rows only ever have Checks, Details and Status written, see _mergeIssues_
  *
  * @param found     every issue found now
@@ -784,6 +793,12 @@ function _writeIssues_(found: FoundIssue[], settings: IssueSettings): { added: n
     _styleRows_(sheet, firstNew, added.length, ISSUE_KEYS.length, ISSUE_EDITABLE);
   }
   _styleRows_(sheet, HEADER_ROW, 1, ISSUE_KEYS.length, ISSUE_EDITABLE);
+  const total = rowCount + added.length;
+  if (total > 1) {
+    sheet
+      .getRange(DATA_ROW, 1, total, ISSUE_KEYS.length)
+      .sort(ISSUE_SORT.map((key) => ({ column: column(key), ascending: true })));
+  }
   return { added: added.length, updated: merged.updated };
 }
 

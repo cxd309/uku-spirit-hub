@@ -11,7 +11,7 @@ const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
   + "Each form is matched to a game on the Games tab. Counted is unticked for forms that do not count: "
   + "Match says Duplicate (more forms than games, the one with a comment then the latest counts), "
   + "Self score or No such game. No schedule means the tournament's schedule was not imported, so nothing is matched\n\n"
-  + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
+  + "DO NOT EDIT, this is all regenerated on refresh. Filters are kept through a refresh, sorting is put back to the hub's order\n\n"
   + "Report Team is the Receiving Team without trailing brackets, e.g. Birmingham 1 (WW4) is Birmingham 1, for the Club Report\n\n"
   + "To Refresh run \"Refresh Results\"";
 

@@ -8,7 +8,7 @@ const GAMES_SHEET = "Games";
  * what the tab is, what to edit, how it refreshes
  */
 const GAMES_INFO = "Every game on the Gamelist tab of each included tournament's schedule\n\n"
-  + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
+  + "DO NOT EDIT, this is all regenerated on refresh. Filters are kept through a refresh, sorting is put back to the hub's order\n\n"
   + "Each schedule is imported once, even when several divisions on the Tournaments tab share it\n"
   + "Games without both teams are left out. Played is unticked for 1-0 results, which are forfeits or cancelled games, "
   + "unless a spirit form was matched to the game\n"
