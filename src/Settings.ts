@@ -213,6 +213,7 @@ function _getSettingsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
 
 /**
  * shade a section's header grey, and each row's cells grey unless the section says they are filled in on that row
+ * every cell is wrapped, except the value of a setting whose name ends in URL, which is clipped
  *
  * @param sheet     the Settings tab
  * @param section   the section
@@ -230,7 +231,14 @@ function _shadeSection_(
     Array.from({ length: width }, (_, i) => (editable.includes(i) ? null : GENERATED_BACKGROUND));
   const labels = columnA.slice(location.firstRow - 1, location.firstRow - 1 + location.rowCount);
   const rows = [shading([]), ...labels.map((row) => shading(section.editable(String(row[0]).trim())))];
-  sheet.getRange(location.firstRow - 1, 1, rows.length, width).setBackgrounds(rows);
+  const range = sheet.getRange(location.firstRow - 1, 1, rows.length, width);
+  range.setBackgrounds(rows);
+  const wrap = SpreadsheetApp.WrapStrategy.WRAP;
+  const clip = SpreadsheetApp.WrapStrategy.CLIP;
+  range.setWrapStrategies([
+    section.headers.map(() => wrap),
+    ...labels.map((row) => section.headers.map((_, i) => (i === 1 && _isUrlColumn_(row[0]) ? clip : wrap))),
+  ]);
 }
 
 /**

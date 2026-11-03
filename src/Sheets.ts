@@ -122,16 +122,27 @@ function _compareDates_(a: Date | null, b: Date | null): number {
 const GENERATED_BACKGROUND = "#d9d9d9";
 
 /**
- * shade rows of a table: generated columns grey, columns a person edits white
- * one call, whatever the number of rows
+ * whether a column holds links, which are clipped rather than wrapped so rows stay short
  *
- * @param sheet     tab to shade
- * @param firstRow  first row to shade, e.g. the header row
+ * @param header  the column's header text
+ * @returns true when the header ends in URL
+ */
+function _isUrlColumn_(header: unknown): boolean {
+  return /URL$/.test(String(header).trim());
+}
+
+/**
+ * style rows of a table: generated columns grey and columns a person edits white,
+ * link columns clipped and every other column wrapped
+ * link columns are found from the header row, one call each for the backgrounds and the wrapping
+ *
+ * @param sheet     tab to style
+ * @param firstRow  first row to style, e.g. the header row
  * @param rowCount  how many rows
  * @param columns   number of columns in the table
  * @param editable  0-based columns a person edits
  */
-function _shadeRows_(
+function _styleRows_(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
   firstRow: number,
   rowCount: number,
@@ -139,13 +150,19 @@ function _shadeRows_(
   editable: readonly number[],
 ) {
   if (rowCount < 1) return;
+  const range = sheet.getRange(firstRow, 1, rowCount, columns);
   const shading = Array.from({ length: columns }, (_, i) => (editable.includes(i) ? null : GENERATED_BACKGROUND));
-  sheet.getRange(firstRow, 1, rowCount, columns).setBackgrounds(Array.from({ length: rowCount }, () => shading));
+  range.setBackgrounds(Array.from({ length: rowCount }, () => shading));
+  const headers = sheet.getRange(HEADER_ROW, 1, 1, columns).getValues()[0];
+  const wrapping = headers.map((header) =>
+    _isUrlColumn_(header) ? SpreadsheetApp.WrapStrategy.CLIP : SpreadsheetApp.WrapStrategy.WRAP
+  );
+  range.setWrapStrategies(Array.from({ length: rowCount }, () => wrapping));
 }
 
 /**
  * write rows below the header, resize the tab to fit, put a filter on the table,
- * and shade the header and data rows, see _shadeRows_
+ * and style the header and data rows, see _styleRows_
  *
  * @param sheet     tab to write
  * @param rows      data rows, formulas included
@@ -161,7 +178,7 @@ function _writeTable_(
   _fitSheet_(sheet, HEADER_ROW + rows.length, columns);
   if (rows.length > 0) sheet.getRange(DATA_ROW, 1, rows.length, columns).setValues(rows);
   _applyFilter_(sheet, rows.length, columns);
-  _shadeRows_(sheet, HEADER_ROW, 1 + rows.length, columns, editable);
+  _styleRows_(sheet, HEADER_ROW, 1 + rows.length, columns, editable);
 }
 
 /**

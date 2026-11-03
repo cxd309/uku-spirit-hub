@@ -781,9 +781,9 @@ function _writeIssues_(found: FoundIssue[], settings: IssueSettings): { added: n
       sheet.getRange(firstNew, column(key), added.length, 1).setNumberFormat("yyyy-mm-dd");
     }
     _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, ISSUE_KEYS.length);
-    _shadeRows_(sheet, firstNew, added.length, ISSUE_KEYS.length, ISSUE_EDITABLE);
+    _styleRows_(sheet, firstNew, added.length, ISSUE_KEYS.length, ISSUE_EDITABLE);
   }
-  _shadeRows_(sheet, HEADER_ROW, 1, ISSUE_KEYS.length, ISSUE_EDITABLE);
+  _styleRows_(sheet, HEADER_ROW, 1, ISSUE_KEYS.length, ISSUE_EDITABLE);
   return { added: added.length, updated: merged.updated };
 }
 

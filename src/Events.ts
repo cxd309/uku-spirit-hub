@@ -262,7 +262,7 @@ function _readEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet): EventRecord[] 
 
 /**
  * write events to the events tab, oldest first
- * set the status dropdowns, tick boxes and date formats on exactly those rows, shading is done by _writeTable_
+ * set the status dropdowns, tick boxes and date formats on exactly those rows, shading and wrapping are done by _writeTable_
  *
  * Validation is only applied to rows that hold an event: tick boxes store FALSE,
  * so applying them to empty rows would make those rows look like data.

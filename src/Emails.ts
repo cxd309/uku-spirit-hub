@@ -300,8 +300,8 @@ function _addClubContacts_(clubs: string[]) {
   _fitSheet_(sheet, firstNew + added.length - 1, CLUB_CONTACT_KEYS.length);
   sheet.getRange(firstNew, 1, added.length, CLUB_CONTACT_KEYS.length).setValues(added.map((club) => [club, "", ""]));
   _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, CLUB_CONTACT_KEYS.length);
-  _shadeRows_(sheet, HEADER_ROW, 1, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
-  _shadeRows_(sheet, firstNew, added.length, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
+  _styleRows_(sheet, HEADER_ROW, 1, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
+  _styleRows_(sheet, firstNew, added.length, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
 }
 
 /**
@@ -358,7 +358,7 @@ function _getEmailTemplatesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
       : sheet.getRange(DATA_ROW, 1, lastRow - HEADER_ROW, 1).getValues().map((row) => String(row[0]).trim()),
   );
   const missing = _defaultEmailTemplateRows_().filter((row) => !present.has(String(row[0])));
-  _shadeRows_(sheet, HEADER_ROW, 1, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
+  _styleRows_(sheet, HEADER_ROW, 1, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
   if (missing.length === 0) return sheet;
 
   const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
@@ -370,7 +370,7 @@ function _getEmailTemplatesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
     .getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("enabled") + 1, missing.length, 1)
     .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   sheet.getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("subject") + 1, missing.length, 2).setWrap(true);
-  _shadeRows_(sheet, firstNew, missing.length, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
+  _styleRows_(sheet, firstNew, missing.length, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
   return sheet;
 }
 
