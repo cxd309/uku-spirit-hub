@@ -23,6 +23,7 @@ const AWARD_SECTION = Object.freeze<SettingsSection>({
   description: "How clubs qualify for the spirit award on the Club Statistics tab",
   headers: SETTING_HEADERS,
   keyed: true,
+  editable: () => [SETTING_HEADERS.indexOf("Value")],
   defaults: () => _settingRows_(AWARD_SETTINGS),
   format: (sheet, firstRow, rowCount) => {
     const labels = sheet.getRange(firstRow, 1, rowCount, 1).getValues().map((row) => String(row[0]).trim());

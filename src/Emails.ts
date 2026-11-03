@@ -30,6 +30,13 @@ const CLUB_CONTACT_HEADERS = Object.freeze(
 const CLUB_CONTACT_KEYS = Object.keys(CLUB_CONTACT_HEADERS) as (keyof typeof CLUB_CONTACT_HEADERS)[];
 
 /**
+ * 0-based Club Contacts columns a person edits, left white, the Club column is shaded
+ */
+const CLUB_CONTACT_EDITABLE = Object.freeze(
+  (["email", "notes"] as const).map((key) => CLUB_CONTACT_KEYS.indexOf(key)),
+);
+
+/**
  * name of the Email Templates tab
  */
 const EMAIL_TEMPLATES_SHEET = "Email Templates";
@@ -85,6 +92,13 @@ const EMAIL_TEMPLATE_HEADERS = Object.freeze(
  * keys of the Email Templates tab in column order
  */
 const EMAIL_TEMPLATE_KEYS = Object.keys(EMAIL_TEMPLATE_HEADERS) as (keyof typeof EMAIL_TEMPLATE_HEADERS)[];
+
+/**
+ * 0-based Email Templates columns a person edits, left white, the Issue Code column is shaded
+ */
+const EMAIL_TEMPLATE_EDITABLE = Object.freeze(
+  (["enabled", "subject", "body"] as const).map((key) => EMAIL_TEMPLATE_KEYS.indexOf(key)),
+);
 
 /**
  * one row of the Email Templates tab
@@ -286,6 +300,8 @@ function _addClubContacts_(clubs: string[]) {
   _fitSheet_(sheet, firstNew + added.length - 1, CLUB_CONTACT_KEYS.length);
   sheet.getRange(firstNew, 1, added.length, CLUB_CONTACT_KEYS.length).setValues(added.map((club) => [club, "", ""]));
   _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, CLUB_CONTACT_KEYS.length);
+  _shadeRows_(sheet, HEADER_ROW, 1, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
+  _shadeRows_(sheet, firstNew, added.length, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
 }
 
 /**
@@ -342,6 +358,7 @@ function _getEmailTemplatesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
       : sheet.getRange(DATA_ROW, 1, lastRow - HEADER_ROW, 1).getValues().map((row) => String(row[0]).trim()),
   );
   const missing = _defaultEmailTemplateRows_().filter((row) => !present.has(String(row[0])));
+  _shadeRows_(sheet, HEADER_ROW, 1, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
   if (missing.length === 0) return sheet;
 
   const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
@@ -353,6 +370,7 @@ function _getEmailTemplatesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
     .getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("enabled") + 1, missing.length, 1)
     .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   sheet.getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("subject") + 1, missing.length, 2).setWrap(true);
+  _shadeRows_(sheet, firstNew, missing.length, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
   return sheet;
 }
 

@@ -46,6 +46,8 @@ interface SettingsSection {
   headers: readonly string[];
   /** rows are named by their first column, missing ones are added back */
   keyed: boolean;
+  /** 0-based columns a person fills in on a row, left white, the others are shaded, given the row's first cell */
+  editable: (label: string) => readonly number[];
   /** rows written when the section is created */
   defaults: () => unknown[][];
   /**
@@ -173,6 +175,7 @@ function _ensureSection_(
 
 /**
  * get the Settings tab, creating it and any missing section or keyed row on the way
+ * every section's description is brought up to date, and its header and rows shaded so the cells to fill in stand out
  *
  * @returns the Settings tab
  */
@@ -196,7 +199,38 @@ function _getSettingsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   for (const section of _settingsSections_()) {
     if (_ensureSection_(sheet, section, columnA)) columnA = _settingsColumnA_(sheet);
   }
+  for (const section of _settingsSections_()) {
+    const location = _findSection_(columnA, section);
+    if (!location) continue;
+    // descriptions are kept up to date, they say how the hub works and change between versions
+    if (String(columnA[location.titleRow][0]).trim() !== section.description) {
+      sheet.getRange(location.titleRow + 1, 1).setValue(section.description);
+    }
+    _shadeSection_(sheet, section, location, columnA);
+  }
   return sheet;
+}
+
+/**
+ * shade a section's header grey, and each row's cells grey unless the section says they are filled in on that row
+ *
+ * @param sheet     the Settings tab
+ * @param section   the section
+ * @param location  where its table is
+ * @param columnA   column A of the Settings tab, from row 1
+ */
+function _shadeSection_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  section: SettingsSection,
+  location: SectionLocation,
+  columnA: unknown[][],
+) {
+  const width = section.headers.length;
+  const shading = (editable: readonly number[]) =>
+    Array.from({ length: width }, (_, i) => (editable.includes(i) ? null : GENERATED_BACKGROUND));
+  const labels = columnA.slice(location.firstRow - 1, location.firstRow - 1 + location.rowCount);
+  const rows = [shading([]), ...labels.map((row) => shading(section.editable(String(row[0]).trim())))];
+  sheet.getRange(location.firstRow - 1, 1, rows.length, width).setBackgrounds(rows);
 }
 
 /**

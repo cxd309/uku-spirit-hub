@@ -116,16 +116,52 @@ function _compareDates_(a: Date | null, b: Date | null): number {
 }
 
 /**
- * write rows below the header, resize the tab to fit, and put a filter on the table
- *
- * @param sheet    tab to write
- * @param rows     data rows, formulas included
- * @param columns  number of columns in the table
+ * background of columns the script fills, light grey 1 as on the Schedule Manager
+ * columns a person edits are left white
  */
-function _writeTable_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: unknown[][], columns: number) {
+const GENERATED_BACKGROUND = "#d9d9d9";
+
+/**
+ * shade rows of a table: generated columns grey, columns a person edits white
+ * one call, whatever the number of rows
+ *
+ * @param sheet     tab to shade
+ * @param firstRow  first row to shade, e.g. the header row
+ * @param rowCount  how many rows
+ * @param columns   number of columns in the table
+ * @param editable  0-based columns a person edits
+ */
+function _shadeRows_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  firstRow: number,
+  rowCount: number,
+  columns: number,
+  editable: readonly number[],
+) {
+  if (rowCount < 1) return;
+  const shading = Array.from({ length: columns }, (_, i) => (editable.includes(i) ? null : GENERATED_BACKGROUND));
+  sheet.getRange(firstRow, 1, rowCount, columns).setBackgrounds(Array.from({ length: rowCount }, () => shading));
+}
+
+/**
+ * write rows below the header, resize the tab to fit, put a filter on the table,
+ * and shade the header and data rows, see _shadeRows_
+ *
+ * @param sheet     tab to write
+ * @param rows      data rows, formulas included
+ * @param columns   number of columns in the table
+ * @param editable  0-based columns a person edits, left white, every other column is shaded
+ */
+function _writeTable_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  rows: unknown[][],
+  columns: number,
+  editable: readonly number[] = [],
+) {
   _fitSheet_(sheet, HEADER_ROW + rows.length, columns);
   if (rows.length > 0) sheet.getRange(DATA_ROW, 1, rows.length, columns).setValues(rows);
   _applyFilter_(sheet, rows.length, columns);
+  _shadeRows_(sheet, HEADER_ROW, 1 + rows.length, columns, editable);
 }
 
 /**

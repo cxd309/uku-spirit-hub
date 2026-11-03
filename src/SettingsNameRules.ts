@@ -32,6 +32,7 @@ const NAME_RULES_SECTION = Object.freeze<SettingsSection>({
     + "Teams and Clubs update straight away",
   headers: NAME_RULE_HEADERS,
   keyed: false,
+  editable: () => NAME_RULE_HEADERS.map((_, i) => i),
   defaults: () => DEFAULT_NAME_RULES.map((rule) => [...rule]),
   format: (sheet, firstRow, rowCount) =>
     _settingsCheckboxes_(sheet, firstRow, rowCount, NAME_RULE_HEADERS.indexOf("Enabled") + 1),

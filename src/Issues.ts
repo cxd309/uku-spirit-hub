@@ -51,6 +51,13 @@ const ISSUE_HEADERS = Object.freeze(
 const ISSUE_KEYS = Object.keys(ISSUE_HEADERS) as (keyof typeof ISSUE_HEADERS)[];
 
 /**
+ * 0-based columns a person edits, left white, every other column is shaded
+ */
+const ISSUE_EDITABLE = Object.freeze(
+  (["status", "committeeMember", "notes"] as const).map((key) => ISSUE_KEYS.indexOf(key)),
+);
+
+/**
  * values of the Status column, first is given to new issues
  */
 const ISSUE_STATUSES = Object.freeze(["NEW", "IN PROGRESS", "CLOSED"]);
@@ -774,7 +781,9 @@ function _writeIssues_(found: FoundIssue[], settings: IssueSettings): { added: n
       sheet.getRange(firstNew, column(key), added.length, 1).setNumberFormat("yyyy-mm-dd");
     }
     _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, ISSUE_KEYS.length);
+    _shadeRows_(sheet, firstNew, added.length, ISSUE_KEYS.length, ISSUE_EDITABLE);
   }
+  _shadeRows_(sheet, HEADER_ROW, 1, ISSUE_KEYS.length, ISSUE_EDITABLE);
   return { added: added.length, updated: merged.updated };
 }
 

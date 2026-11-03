@@ -33,6 +33,7 @@ const HUB_SECTION = Object.freeze<SettingsSection>({
   description: "Where this hub reads its tournaments from, and which dates it covers",
   headers: SETTING_HEADERS,
   keyed: true,
+  editable: () => [SETTING_HEADERS.indexOf("Value")],
   defaults: () => _settingRows_(HUB_SETTINGS),
   format: (sheet, firstRow, rowCount) => {
     const labels = sheet.getRange(firstRow, 1, rowCount, 1).getValues().map((row) => String(row[0]).trim());

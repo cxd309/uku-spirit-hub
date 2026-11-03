@@ -93,11 +93,6 @@ const EVENT_EDITABLE = Object.freeze(
 );
 
 /**
- * background of the generated columns, light grey 1 as on the Schedule Manager
- */
-const GENERATED_BACKGROUND = "#d9d9d9";
-
-/**
  * tick box columns of the Events tab
  */
 const EVENT_TOGGLES = Object.freeze(["includeResults", "international"] as const);
@@ -267,7 +262,7 @@ function _readEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet): EventRecord[] 
 
 /**
  * write events to the events tab, oldest first
- * set the status dropdowns, tick boxes, date formats and shading on exactly those rows
+ * set the status dropdowns, tick boxes and date formats on exactly those rows, shading is done by _writeTable_
  *
  * Validation is only applied to rows that hold an event: tick boxes store FALSE,
  * so applying them to empty rows would make those rows look like data.
@@ -277,7 +272,9 @@ function _readEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet): EventRecord[] 
  */
 function _writeEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet, events: EventRecord[]) {
   const rows = _sortEvents_(events);
-  _writeTable_(sheet, rows.map(_eventToRow_), EVENT_KEYS.length);
+  const editable: readonly string[] = EVENT_EDITABLE;
+  const editableColumns = EVENT_KEYS.flatMap((key, i) => (editable.includes(key) ? [i] : []));
+  _writeTable_(sheet, rows.map(_eventToRow_), EVENT_KEYS.length, editableColumns);
   if (rows.length === 0) return;
   _fillFormulaColumns_(sheet, EVENT_KEYS, EVENT_FORMULAS, rows.length);
 
@@ -295,10 +292,6 @@ function _writeEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet, events: EventR
   range("endDate").setNumberFormat("yyyy-mm-dd");
   range("scheduleImportDate").setNumberFormat("yyyy-mm-dd hh:mm");
   range("spiritFormImportDate").setNumberFormat("yyyy-mm-dd hh:mm");
-
-  const editable: readonly string[] = EVENT_EDITABLE;
-  const shading = EVENT_KEYS.map((key) => (editable.includes(key) ? null : GENERATED_BACKGROUND));
-  sheet.getRange(DATA_ROW, 1, rows.length, EVENT_KEYS.length).setBackgrounds(rows.map(() => shading));
 
   _highlightDuplicateTournaments_(sheet, rows.length);
 }

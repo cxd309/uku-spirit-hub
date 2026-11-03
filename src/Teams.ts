@@ -147,6 +147,7 @@ function _writeTeams_(
       });
     }),
     TEAM_KEYS.length,
+    [TEAM_KEYS.indexOf("clubOverride")],
   );
   _fillFormulaColumns_(sheet, TEAM_KEYS, TEAM_FORMULAS, teams.length);
   return _teamClubPairs_(teams, regexes);

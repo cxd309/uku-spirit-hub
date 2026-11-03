@@ -129,6 +129,25 @@ function _issueCategoryKeys_(): IssueCategoryKey[] {
 }
 
 /**
+ * the cells of an Issue Rules row that are filled in: Enabled, and each value the rule uses
+ * a rule uses a value when its default is not blank, rules this version does not know only have Enabled
+ *
+ * @param code  the Rule column, e.g. LOW-SCORE
+ * @returns 0-based columns
+ */
+function _issueRuleEditable_(code: string): number[] {
+  const column = (header: typeof ISSUE_RULE_HEADERS[number]) => ISSUE_RULE_HEADERS.indexOf(header);
+  const key = _issueCategoryKeys_().find((k) => ISSUE_CATEGORIES[k].code === code);
+  if (!key) return [column("Enabled")];
+  const rule = DEFAULT_ISSUE_RULES[key];
+  return [
+    column("Enabled"),
+    ...(rule.value1 === "" ? [] : [column("Value 1")]),
+    ...(rule.value2 === "" ? [] : [column("Value 2")]),
+  ];
+}
+
+/**
  * the Issue Rules section of the Settings tab
  * keyed by rule code, so a missing rule is added back with its defaults
  * and checks added in later versions appear on their own
@@ -141,6 +160,7 @@ const ISSUE_RULES_SECTION = Object.freeze<SettingsSection>({
     + "Do not change the Rule column. Rules no longer used by this version can be deleted",
   headers: ISSUE_RULE_HEADERS,
   keyed: true,
+  editable: _issueRuleEditable_,
   defaults: () =>
     _issueCategoryKeys_().map((key) => {
       const rule = DEFAULT_ISSUE_RULES[key];
