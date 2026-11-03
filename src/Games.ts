@@ -10,7 +10,9 @@ const GAMES_SHEET = "Games";
 const GAMES_INFO = "Every game on the Gamelist tab of each included tournament's schedule\n\n"
   + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
   + "Each schedule is imported once, even when several divisions on the Tournaments tab share it\n"
-  + "Games without both teams are left out. Played is unticked for 1-0 results, which are forfeits or cancelled games\n"
+  + "Games without both teams are left out. Played is unticked for 1-0 results, which are forfeits or cancelled games, "
+  + "unless a spirit form was matched to the game\n"
+  + "Team 1 Submitted and Team 2 Submitted are ticked when that team has a counted spirit form for the game\n"
   + "Blank scores were not entered, the game still counts as played\n\n"
   + "To Refresh run \"Refresh Results\"";
 
@@ -54,6 +56,8 @@ const GAME_HEADERS = Object.freeze(
     score2: "Score 2",
     team2: "Team 2",
     played: "Played",
+    team1Submitted: "Team 1 Submitted",
+    team2Submitted: "Team 2 Submitted",
   } as const,
 );
 
@@ -86,8 +90,12 @@ interface GameRecord {
   score2: number | null;
   /** right team */
   team2: string;
-  /** false for 1-0 results: forfeits and cancelled games */
+  /** false for 1-0 results, forfeits and cancelled games, unless a form was matched to it */
   played: boolean;
+  /** Team 1 has a counted form for this game */
+  team1Submitted: boolean;
+  /** Team 2 has a counted form for this game */
+  team2Submitted: boolean;
 }
 
 /**
@@ -145,6 +153,8 @@ function _gameFromRow_(row: unknown[], timeText: string): GameRecord {
     score2: number("score2"),
     team2: String(cell("team2")),
     played: cell("played") === true,
+    team1Submitted: cell("team1Submitted") === true,
+    team2Submitted: cell("team2Submitted") === true,
   };
 }
 
@@ -190,7 +200,8 @@ function _writeGames_(sheet: GoogleAppsScript.Spreadsheet.Sheet, games: GameReco
     sheet.getRange(DATA_ROW, GAME_KEYS.indexOf(key) + 1, games.length, 1);
   range("day").setNumberFormat("yyyy-mm-dd");
   range("time").setNumberFormat("hh:mm");
-  range("played").setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  for (const key of ["played", "team1Submitted", "team2Submitted"] as const) range(key).setDataValidation(checkbox);
 }
 
 /**
@@ -258,6 +269,8 @@ function _parseGamelist_(scheduleUrl: string, values: unknown[][]): GameRecord[]
       score2,
       team2,
       played: !forfeit,
+      team1Submitted: false,
+      team2Submitted: false,
     });
   });
   return games;

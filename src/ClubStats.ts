@@ -92,7 +92,7 @@ function _clubStatsInfo_(when: Date, minimum: number, models: Record<string, Mod
     Utilities.formatDate(when, Session.getScriptTimeZone(), "d MMM yyyy HH:mm")
   }\n\n`
     + "Counted: scores at tournaments ticked Include Results (International ones only if the Settings say so), "
-    + "between different clubs\n"
+    + "ticked Counted on Results, between different clubs\n"
     + `Qualifies: entered at least ${minimum} tournaments, ranks are among qualifying clubs\n`
     + "CI: 95% confidence interval of the mean\n"
     + "Models: mean adjusted for scorers who give higher or lower scores, as in the old R script, "
@@ -130,7 +130,7 @@ function _countedScores_(
 ): CountedScore[] {
   const included = new Set(events.filter((e) => _eventCountsForAward_(e, settings)).map((e) => e.spiritFormUrl));
   return responses
-    .filter((r) => included.has(r.spiritFormUrl))
+    .filter((r) => included.has(r.spiritFormUrl) && r.counted)
     .map((r) => ({
       tournament: r.spiritFormUrl,
       scorer: r.scorer,

@@ -8,6 +8,9 @@ const RESPONSES_SHEET = "Results";
  * what the tab is, what to edit, how it refreshes
  */
 const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
+  + "Each form is matched to a game on the Games tab. Counted is unticked for forms that do not count: "
+  + "Match says Duplicate (more forms than games, the one with a comment then the latest counts), "
+  + "Self score or No such game. No schedule means the tournament's schedule was not imported, so nothing is matched\n\n"
   + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
   + "Report Team is the Receiving Team without trailing brackets, e.g. Birmingham 1 (WW4) is Birmingham 1, for the Club Report\n\n"
   + "To Refresh run \"Refresh Results\"";
@@ -36,6 +39,9 @@ const RESPONSE_HEADERS = Object.freeze(
     communication: "Communication",
     total: "Total",
     comment: "Comment",
+    game: "Game",
+    counted: "Counted",
+    match: "Match",
     spiritAward: "Spirit Award",
     countsForAward: "Counts for Award",
     reportTeam: "Report Team",
@@ -74,7 +80,7 @@ const RESPONSE_FORMULAS: Readonly<
   },
   countsForAward: (row: number) => {
     const cell = (key: keyof typeof RESPONSE_HEADERS) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
-    return `=AND(${cell("spiritAward")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
+    return `=AND(${cell("spiritAward")}, ${cell("counted")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
   },
   reportTeam: (row: number) => {
     const receiver = `$${_columnLetter_(RESPONSE_KEYS.indexOf("receiver") + 1)}${row}`;
@@ -117,6 +123,12 @@ interface ResponseRecord {
   communication: number;
   /** comment; "" if none */
   comment: string;
+  /** game code it was matched to, "" if none */
+  game: string;
+  /** whether this form counts, false for duplicates, self scores and forms with no game */
+  counted: boolean;
+  /** one of MATCH_RESULTS */
+  match: string;
 }
 
 /**
@@ -137,6 +149,9 @@ function _responseFromRow_(row: unknown[]): ResponseRecord {
     attitude: Number(cell("attitude")),
     communication: Number(cell("communication")),
     comment: String(cell("comment")),
+    game: String(cell("game")),
+    counted: cell("counted") === true,
+    match: String(cell("match")),
   };
 }
 
@@ -213,6 +228,9 @@ function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: 
     sheet
       .getRange(DATA_ROW, RESPONSE_KEYS.indexOf("timestamp") + 1, responses.length, 1)
       .setNumberFormat("yyyy-mm-dd hh:mm:ss");
+    sheet
+      .getRange(DATA_ROW, RESPONSE_KEYS.indexOf("counted") + 1, responses.length, 1)
+      .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   }
 }
 

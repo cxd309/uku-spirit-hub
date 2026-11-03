@@ -43,6 +43,14 @@ Refresh Results also reads each included tournament's **Form Responses**, findin
 - the responses tab (today `Form responses 2`): every tab with the form's headers. There must be exactly one. Its rows go onto the Results tab. Rows with a missing team or a score that is not 0–4 are left out and listed in Message, placeholder rows with "Your Team Name" as the team are skipped
 - the Deleted forms tab: the one with the form's headers and "Reason for deletion". Optional. Its rows go onto the Deleted Forms tab as they are, as a record of what the chair moved out. Some are scores taken out, others the original of a response that was edited and is still on Results, so they are never used in statistics
 
+Then every response is **matched to its game**, for tournaments whose schedule has been imported and is not ERROR or MISSING. For each scoring team → receiving team at a tournament:
+
+- as many forms count as the two teams played games: forms with a comment first, then the latest. Counted forms go to the games in timestamp order, the earliest to the earliest game
+- forms beyond that are **Duplicate**, a team scoring itself is **Self score**, and a form with no game between the two teams is **No such game**. None of these count
+- without a usable schedule every form is **No schedule** and counts as it is
+
+Results shows the Game, a Counted tick and the Match. Only counted forms go into Counts for Award, Club Statistics and the Club Report. On Games, Team 1 Submitted and Team 2 Submitted are ticked when that team has a counted form for the game, and a 1-0 game is Played if anyone submitted for it
+
 International tournaments will be added by hand, not through the Schedule Manager. Not built yet.
 
 ## Setting up a hub
