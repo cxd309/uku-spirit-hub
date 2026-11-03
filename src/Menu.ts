@@ -24,7 +24,7 @@ function onOpen() {
  * International on Tournaments: rebuild Teams and Clubs, scoring teams at international events are left out
  * Club on Club Report: pick the club's first team, then fit the totals charts to their tournaments
  * Team on Club Report: fit the totals charts to their tournaments
- * Email Templates: fill Email Subject and Email Body again for every NEW issue
+ * Email Templates, or Status on Issues: fill Email Subject and Email Body again, NEW issues only
  * anything else is ignored
  * skips quietly if another run holds the lock
  *   Refresh Results rebuilds Teams and Clubs anyway
@@ -60,11 +60,16 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
   const touchesReportClub = touchesReportCell(CLUB_REPORT_ROWS.club);
   const touchesReportTeam = touchesReportCell(CLUB_REPORT_ROWS.team);
 
-  const touchesTemplates = sheetName === EMAIL_TEMPLATES_SHEET && e.range.getLastRow() >= DATA_ROW;
+  const statusColumn = ISSUE_KEYS.indexOf("status") + 1;
+  const touchesEmailDrafts = (sheetName === EMAIL_TEMPLATES_SHEET && e.range.getLastRow() >= DATA_ROW)
+    || (sheetName === ISSUES_SHEET
+      && e.range.getLastRow() >= DATA_ROW
+      && e.range.getColumn() <= statusColumn
+      && e.range.getLastColumn() >= statusColumn);
 
   if (
     !touchesOverride && !touchesNameRules && !touchesInternational && !touchesReportClub && !touchesReportTeam
-    && !touchesTemplates
+    && !touchesEmailDrafts
   ) {
     return;
   }
@@ -74,7 +79,7 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
   try {
     if (touchesReportClub || touchesReportTeam) {
       _fitClubReportCharts_(touchesReportClub);
-    } else if (touchesTemplates) {
+    } else if (touchesEmailDrafts) {
       try {
         _notify_(_updateEmailDrafts_());
       } catch (err) {

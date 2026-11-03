@@ -15,8 +15,9 @@ const ISSUES_INFO = "Spirit issues found in the results\n"
   + "- Status: NEW, IN PROGRESS or CLOSED. Change it once you have sent the email\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
-  + "Email Address looks the club up on Club Contacts. Email Subject and Email Body are filled from the email "
-  + "templates while the issue is NEW, and kept as they are once Status changes\n\n"
+  + "Email Address looks the club up on Club Contacts. Email Subject and Email Body are only filled while the issue "
+  + "is NEW, ready to copy into an email. Changing Status clears them straight away, setting it back to NEW "
+  + "fills them again\n\n"
   + "A refresh that finds another check for an existing issue adds it to Checks and Details, "
   + "and a CLOSED issue goes back to NEW. Nothing else on existing rows is changed\n\n"
   + "Refresh Issues puts the tab back in order: club, tournament, team, level, checks, opponent. "
@@ -32,20 +33,21 @@ const ISSUE_HEADERS = Object.freeze(
     issueId: "Issue ID",
     dateCreated: "Issue Date",
     level: "Level",
-    checks: "Checks",
+    club: "Club",
+    team: "Team",
     tournament: "Tournament",
     tournamentDate: "Tournament Date",
     game: "Game",
     opponent: "Opponent",
-    team: "Team",
-    club: "Club",
+    score: "Score",
+    checks: "Checks",
     details: "Details",
     status: "Status",
+    committeeMember: "Committee Member",
+    notes: "Notes",
     emailAddress: "Email Address",
     emailSubject: "Email Subject",
     emailBody: "Email Body",
-    committeeMember: "Committee Member",
-    notes: "Notes",
   } as const,
 );
 
@@ -211,6 +213,8 @@ interface IssueRecord {
   game: string;
   /** the other team in the game, "" for tournament issues */
   opponent: string;
+  /** the game's result from the team's side, e.g. 15-12W, "" without a game or scores */
+  score: string;
   /** team the issue is about */
   team: string;
   /** club of the team */
@@ -652,10 +656,27 @@ interface FoundIssue {
 }
 
 /**
+ * a game's result from one team's side
+ * pure, no google calls
+ *
+ * @param game  the game, undefined when there is none
+ * @param team  the team the result is for
+ * @returns e.g. "15-12W", "12-15L" or "10-10D", "" without a game or both scores
+ */
+function _scoreText_(game: GameRecord | undefined, team: string): string {
+  if (!game || game.score1 === null || game.score2 === null) return "";
+  const isTeam1 = _teamKey_(game.team1) === _teamKey_(team);
+  const own = isTeam1 ? game.score1 : game.score2;
+  const other = isTeam1 ? game.score2 : game.score1;
+  return `${own}-${other}${own > other ? "W" : own < other ? "L" : "D"}`;
+}
+
+/**
  * group findings into issues, one per Issue ID
  * pure, never modifies its arguments
  *
  * @param findings  every finding, from enabled checks
+ * @param games     every game, for the Score column
  * @param clubOf    team key → club, from the Teams tab
  * @param today     date to record as the Issue Date
  * @param settings  thresholds, for the labels
@@ -663,10 +684,12 @@ interface FoundIssue {
  */
 function _issuesFromFindings_(
   findings: IssueFinding[],
+  games: GameRecord[],
   clubOf: Map<string, string>,
   today: Date,
   settings: IssueSettings,
 ): FoundIssue[] {
+  const gameOf = new Map(games.map((g) => [`${g.scheduleUrl}|${g.game}`, g]));
   const byId: Map<string, IssueFinding[]> = new Map();
   for (const f of findings) {
     const id = _issueId_(f);
@@ -689,6 +712,7 @@ function _issuesFromFindings_(
         tournamentDate: first.event.startDate,
         game: first.game,
         opponent: first.opponent,
+        score: first.game === "" ? "" : _scoreText_(gameOf.get(`${first.event.scheduleUrl}|${first.game}`), first.team),
         team: first.team,
         club: clubOf.get(_teamKey_(first.team)) ?? "",
         details: `${first.event.international ? "INTERNATIONAL\n\n" : ""}${_findingsDetails_(grouped, settings)}`,
@@ -840,7 +864,7 @@ function _refreshIssues_(): string {
       ..._gameFindings_(responses, deleted, events, settings),
       ..._tournamentFindings_(responses, games, events, clubOf, settings),
     ].filter((f) => settings.enabled[f.category]);
-    return _issuesFromFindings_(findings, clubOf, new Date(), settings);
+    return _issuesFromFindings_(findings, games, clubOf, new Date(), settings);
   });
   const { added, updated } = _timed_("write issues", () => _writeIssues_(found, settings));
   const emails = _timed_("email drafts", () => {

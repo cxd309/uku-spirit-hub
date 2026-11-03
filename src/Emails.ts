@@ -71,7 +71,7 @@ type EmailPlaceholder = keyof typeof EMAIL_PLACEHOLDERS;
 const EMAIL_TEMPLATES_INFO =
   "One email template per issue check, filling Email Subject and Email Body on the Issues tab\n"
   + "An issue with one check uses that check's template, one with several uses MULTIPLE, one with none uses MANUAL\n"
-  + "Only NEW issues are filled, by Refresh Issues and whenever this tab is edited\n\n"
+  + "Only NEW issues are filled, by Refresh Issues and whenever this tab or a Status is edited\n\n"
   + "User editable columns: Enabled, Subject and Body. Do not change the Issue Code column. "
   + "Only issues whose template is ticked Enabled get a draft. Missing templates are added back with starter wording\n\n"
   + "Placeholders, replaced from the issue row:\n"
@@ -261,6 +261,7 @@ interface EmailDraft {
 /**
  * formula for the Email Address cell of one Issues row: the club's email from the Club Contacts tab
  * a formula, so a changed address shows straight away and a row added by hand can copy it down
+ * shown whatever the Status, so issues can be searched by address
  * an issue whose only check is DELETED-ROW gives no address, see UNKNOWN_RECIPIENT
  *
  * @param row  1-based sheet row the formula is for
@@ -526,26 +527,22 @@ function _draftEmails_(
 /**
  * the Email Subject and Email Body columns after drafting
  * pure, never modifies its arguments
- * NEW issues get their draft, or blank when their template is missing or disabled
- * every other issue keeps what it had, so the wording of an email already sent stays
+ * NEW issues get their draft, every other issue is blank: the drafts are only there to send the email,
+ * what was sent is kept by the committee's mail
  *
  * @param issues  every Issues row
  * @param drafts  from _draftEmails_
  * @returns one subject and one body per issue
  */
 function _emailColumns_(issues: IssueRow[], drafts: EmailDraft[]): { subject: string; body: string }[] {
-  const cells = issues.map((issue) =>
-    String(issue.status ?? "").trim().toUpperCase() === ISSUE_STATUSES[0]
-      ? { subject: "", body: "" }
-      : { subject: String(issue.emailSubject ?? ""), body: String(issue.emailBody ?? "") }
-  );
+  const cells = issues.map(() => ({ subject: "", body: "" }));
   for (const draft of drafts) cells[draft.index] = { subject: draft.subject, body: draft.body };
   return cells;
 }
 
 /**
- * fill Email Subject and Email Body for every NEW issue whose template is enabled
- * run by Refresh Issues, and whenever the Email Templates tab is edited
+ * fill Email Subject and Email Body for every NEW issue whose template is enabled, and blank them for every other issue
+ * run by Refresh Issues, whenever the Email Templates tab is edited, and whenever a Status on the Issues tab changes
  * reads the Issues and Email Templates tabs, writes only those two columns, nothing is sent
  *
  * @returns a one-line summary

@@ -146,6 +146,8 @@ Issues are about one team, at one of three levels:
 | Scoring    | team in a game       | the form the team gave for that game      |
 | Tournament | team at a tournament | the whole tournament                      |
 
+Columns run Issue ID, Issue Date, Level, Club, Team, Tournament, Tournament Date, Game, Opponent, Score, Checks, Details, Status, Committee Member, Notes, then the email columns. Score is the game's result from the team's side, e.g. 15-12W, 12-15L or 10-10D, blank without a game.
+
 Everything found for the same issue goes into it: the Checks column lists every check, and Details has a section for each, then the comments. When a form has no game (a duplicate, a deleted form, or a tournament without a schedule) the issue is for the opponent instead of the game.
 
 | Check               | Level      | Raised when                                                                                                                           | Source |
@@ -182,17 +184,17 @@ Each refresh adds issues that are not already on the tab. When it finds a new ch
 
 The Issues tab drafts an email for each issue, ready to copy into whatever mail you use. SpiritHub never sends anything.
 
-| Column        | What it holds                                                                                                                                                                                                                          |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Email Address | the club's address from Club Contacts, a formula so it is always current. "No email for club" when there is none, "Could not be determined" when DELETED-ROW is the only check, as a form can be deleted for something either team did |
-| Email Subject | filled from the issue's template while the issue is NEW                                                                                                                                                                                |
-| Email Body    | filled from the issue's template while the issue is NEW                                                                                                                                                                                |
+| Column        | What it holds                                                                                                                                                                                                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email Address | the club's address from Club Contacts, on every issue so they can be searched by address, a formula so it is always current. "No email for club" when there is none, "Could not be determined" when DELETED-ROW is the only check, as a form can be deleted for something either team did |
+| Email Subject | filled from the issue's template while the issue is NEW                                                                                                                                                                                                                                   |
+| Email Body    | filled from the issue's template while the issue is NEW                                                                                                                                                                                                                                   |
 
 1. Fill in each club's address on the **Club Contacts** tab (several addresses separated by commas)
 2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). An issue with one check uses that check's template, one with several uses **MULTIPLE**, one with none (e.g. added by hand) uses **MANUAL**. Only NO-SCORES and UNDER-SUBMITTED are enabled to begin with, and checks that are not policy have no template
 3. **Refresh Issues** fills Email Subject and Email Body for NEW issues whose template is enabled. Editing the Email Templates tab fills them again straight away
 4. Copy the address, subject and body into your mail, check it and send it
-5. Set the issue's Status to IN PROGRESS or CLOSED. Subject and body are then kept as they are, a record of what was sent
+5. Set the issue's Status to IN PROGRESS or CLOSED. Subject and body clear straight away, setting it back to NEW fills them again. What was sent is kept by your mail, not the hub
 
 An issue added by hand gets an Email Address by copying the formula down from the row above.
 
