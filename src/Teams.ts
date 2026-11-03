@@ -177,19 +177,19 @@ function _tournamentsPlayed_(
     }
   }
   return new Map([...idsByGroup].map(([group, ids]) => {
-    const names = events.filter((e) => ids.has(e.fileId) && e.tournament !== "").map((e) => e.tournament);
+    const names = events.filter((e) => ids.has(e.spiritFormUrl) && e.eventName !== "").map((e) => e.eventName);
     return [group, { names: [...new Set(names)], count: ids.size }];
   }));
 }
 
 /**
- * file ids of the events ticked International
+ * Spirit Form URLs of the events ticked International
  *
  * @param events  all events
- * @returns their file ids
+ * @returns their Spirit Form URLs
  */
 function _internationalIds_(events: EventRecord[]): Set<string> {
-  return new Set(events.filter((e) => e.international).map((e) => e.fileId));
+  return new Set(events.filter((e) => e.international).map((e) => e.spiritFormUrl));
 }
 
 /**
@@ -239,7 +239,7 @@ function _teamKey_(name: string): string {
  * first spelling seen is kept
  *
  * @param responses         all responses
- * @param internationalIds  file ids of international events
+ * @param internationalIds  Spirit Form URLs of international events
  * @returns team names in order of first appearance
  */
 function _teamNamesFromResponses_(responses: ResponseTeams[], internationalIds: Set<string>): string[] {

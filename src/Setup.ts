@@ -36,7 +36,7 @@ function showSettings() {
 }
 
 /**
- * create any missing tabs, refresh the Category choices,
+ * create any missing tabs,
  * then show the Settings and Email Templates tabs on their own
  * tabs that already exist keep their contents
  * removes the empty default "Sheet1" once the hub tabs exist
@@ -61,15 +61,13 @@ function _showSettings_(): string {
   const blank = ss.getSheetByName("Sheet1");
   if (blank && blank.getLastRow() === 0 && blank.getLastColumn() === 0) ss.deleteSheet(blank);
 
-  const note = _setCategoryChoices_(settings);
-
   for (const name of _settingsTabNames_()) ss.getSheetByName(name)?.showSheet();
   ss.setActiveSheet(settings);
   for (const name of _dataTabNames_()) ss.getSheetByName(name)?.hideSheet();
 
   const created = ss.getSheets().map((s) => s.getName()).filter((n) => !before.has(n));
   const summary = created.length === 0 ? "Settings" : `Created: ${created.join(", ")}`;
-  return note === "" ? summary : `${summary}; ${note}`;
+  return summary;
 }
 
 /**

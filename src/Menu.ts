@@ -148,7 +148,7 @@ function _runRefresh_(work: () => string) {
 }
 
 /**
- * menu: scan the category folder and update the Tournaments tab
+ * menu: read the Schedule Manager and update the Tournaments tab
  */
 function refreshTournaments() {
   _runRefresh_(_refreshTournaments_);

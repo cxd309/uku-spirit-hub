@@ -3,110 +3,83 @@
  * keys are the names used in code
  */
 const HUB_SETTINGS = Object.freeze({
-  category: {
-    label: "Category",
+  scheduleManagerUrl: {
+    label: "Schedule Manager URL",
     default: "",
-    description: "Folder inside the season folder that this hub covers, pick from the list",
+    description: "Link to the Schedule Manager spreadsheet, tournaments are read from its Schedule List tab",
+  },
+  startDate: {
+    label: "Start Date",
+    default: "",
+    description: "Only tournaments starting on or after this date are listed",
+  },
+  endDate: {
+    label: "End Date",
+    default: "",
+    description: "Only tournaments starting on or before this date are listed",
   },
 });
+
+/**
+ * labels of the Hub settings that hold a date
+ */
+const HUB_DATE_LABELS = Object.freeze([HUB_SETTINGS.startDate.label, HUB_SETTINGS.endDate.label]);
 
 /**
  * the Hub section of the Settings tab
  */
 const HUB_SECTION = Object.freeze<SettingsSection>({
   title: "Hub",
-  description: "Which results this hub reads. Pick the Category once, changing it later would mix two categories",
+  description: "Where this hub reads its tournaments from, and which dates it covers",
   headers: SETTING_HEADERS,
   keyed: true,
   defaults: () => _settingRows_(HUB_SETTINGS),
-  format: () => {},
+  format: (sheet, firstRow, rowCount) => {
+    const labels = sheet.getRange(firstRow, 1, rowCount, 1).getValues().map((row) => String(row[0]).trim());
+    const rule = SpreadsheetApp.newDataValidation().requireDate().build();
+    labels.forEach((label, i) => {
+      if (HUB_DATE_LABELS.includes(label)) {
+        sheet.getRange(firstRow + i, 2).setDataValidation(rule).setNumberFormat("yyyy-mm-dd");
+      }
+    });
+  },
 });
 
 /**
  * settings read from the Hub section
  */
 interface HubSettings {
-  /** category folder this hub reads, e.g. University */
-  category: string;
+  /** link to the Schedule Manager spreadsheet */
+  scheduleManagerUrl: string;
+  /** first start date listed */
+  startDate: Date;
+  /** last start date listed */
+  endDate: Date;
 }
 
 /**
  * read the Hub section of the Settings tab
+ * the values are read as they are, not as text, so the dates stay dates
  *
  * @returns the settings
- * @throws {Error} if Category is blank
+ * @throws {Error} if a setting is blank or not a date, or End Date is before Start Date
  */
 function _readHubSettings_(): HubSettings {
-  const category = _readSettingValues_(HUB_SECTION).get(HUB_SETTINGS.category.label) ?? "";
-  if (category === "") {
-    throw new Error(
-      `Set "${HUB_SETTINGS.category.label}" on the ${SETTINGS_SHEET} tab (SpiritHub > SpiritHub Settings)`,
-    );
+  const values = new Map(_readSection_(HUB_SECTION).map((row) => [String(row[0]).trim(), row[1]]));
+  const where = `on the ${SETTINGS_SHEET} tab (SpiritHub > SpiritHub Settings)`;
+
+  const scheduleManagerUrl = String(values.get(HUB_SETTINGS.scheduleManagerUrl.label) ?? "").trim();
+  if (scheduleManagerUrl === "") throw new Error(`Set "${HUB_SETTINGS.scheduleManagerUrl.label}" ${where}`);
+
+  const date = (label: string): Date => {
+    const value = values.get(label);
+    if (!(value instanceof Date)) throw new Error(`Set "${label}" to a date ${where}`);
+    return value;
+  };
+  const startDate = date(HUB_SETTINGS.startDate.label);
+  const endDate = date(HUB_SETTINGS.endDate.label);
+  if (endDate.getTime() < startDate.getTime()) {
+    throw new Error(`"${HUB_SETTINGS.endDate.label}" is before "${HUB_SETTINGS.startDate.label}" ${where}`);
   }
-  return { category };
-}
-
-/**
- * make the Category value a dropdown of the folders in the season folder
- *
- * @param sheet  the Settings tab, from _getSettingsSheet_
- * @returns a note for the summary, "" when the dropdown was set
- */
-function _setCategoryChoices_(sheet: GoogleAppsScript.Spreadsheet.Sheet): string {
-  let names: string[] = [];
-  try {
-    names = _childFolders_(_findSeasonFolder_().id).map((f) => f.name);
-  } catch (e) {
-    return "Category list not updated, the hub is not inside a season folder";
-  }
-  if (names.length === 0) return "Category list not updated, no folders in the season folder";
-
-  const columnA = _settingsColumnA_(sheet);
-  const location = _findSection_(columnA, HUB_SECTION);
-  if (!location || location.rowCount === 0) return "Category list not updated, Hub section not found";
-  const labels = columnA
-    .slice(location.firstRow - 1, location.firstRow - 1 + location.rowCount)
-    .map((row) => String(row[0]).trim());
-  const index = labels.indexOf(HUB_SETTINGS.category.label);
-  if (index < 0) return "Category list not updated, Category row not found";
-
-  const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(names.sort((a, b) => a.localeCompare(b)), true)
-    .setAllowInvalid(false)
-    .build();
-  sheet.getRange(location.firstRow + index, 2).setDataValidation(rule);
-  return "";
-}
-
-/**
- * document property holding the category the Tournaments tab was built from
- */
-const SCANNED_CATEGORY_PROPERTY = "scannedCategory";
-
-/**
- * stop if the Category has changed since the Tournaments tab was built
- * changing it would mark every tournament MISSING and mix two categories
- *
- * @param category         the Category setting now
- * @param tournamentCount  rows on the Tournaments tab
- * @throws {Error} if the category changed and there are tournaments
- */
-function _checkCategory_(category: string, tournamentCount: number) {
-  const scanned = PropertiesService.getDocumentProperties().getProperty(SCANNED_CATEGORY_PROPERTY);
-  if (scanned && scanned !== category && tournamentCount > 0) {
-    throw new Error(
-      `This hub has ${scanned} tournaments but Category is now ${category}.`
-        + `Tournament Category should not be changed after data has been imported`
-        + `Set Category back to ${scanned}, or use a new hub for ${category}`,
-    );
-  }
-}
-
-/**
- * remember the category the Tournaments tab was built from
- *
- * @param category  the Category setting
- */
-function _rememberCategory_(category: string) {
-  PropertiesService.getDocumentProperties().setProperty(SCANNED_CATEGORY_PROPERTY, category);
+  return { scheduleManagerUrl, startDate, endDate };
 }

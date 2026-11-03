@@ -109,66 +109,66 @@ const EMAIL_SIGN_OFF = "\n\nThanks,\nUKU Spirit Committee";
  */
 const DEFAULT_EMAIL_TEMPLATES: Readonly<
   Partial<Record<IssueCategoryKey, { enabled: boolean; subject: string; body: string }>>
-> =
-  Object.freeze({
-    totalWithoutComment: {
-      enabled: false,
-      subject: "Spirit score without a comment - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "At {tournament_name}, {team_name} gave a spirit score total that the UKU SOTG Policy says needs a comment, "
-        + "but no comment was given.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    categoryWithoutComment: {
-      enabled: false,
-      subject: "Spirit score without a comment - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "At {tournament_name}, {team_name} gave a category score that the UKU SOTG Policy says needs a comment, "
-        + "but no comment was given.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    dangerousPlay: {
-      enabled: false,
-      subject: "Spirit comment received - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "A spirit score comment received by {team_name} at {tournament_name} mentions dangerous play.\n\n{details}" + EMAIL_SIGN_OFF,
-    },
-    notSubmitted: {
-      enabled: true,
-      subject: "Missing spirit scores - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} did not submit {missing_count} spirit score(s) at {tournament_name}, "
-        + "for games against {missing_opponents}.\n\n"
-        + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
-        + EMAIL_SIGN_OFF,
-    },
-    twoLowScores: {
-      enabled: false,
-      subject: "Low spirit scores - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received several low spirit scores at {tournament_name}.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    lowAverage: {
-      enabled: false,
-      subject: "Low spirit average - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received a low average spirit score at {tournament_name}.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    categoryMinimum: {
-      enabled: false,
-      subject: "Spirit score received - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received a 0 in a spirit category at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
-    },
-    singleLowScore: {
-      enabled: false,
-      subject: "Low spirit score - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received a low spirit score at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
-    }
-  });
+> = Object.freeze({
+  totalWithoutComment: {
+    enabled: false,
+    subject: "Spirit score without a comment - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "At {tournament_name}, {team_name} gave a spirit score total that the UKU SOTG Policy says needs a comment, "
+      + "but no comment was given.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  categoryWithoutComment: {
+    enabled: false,
+    subject: "Spirit score without a comment - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "At {tournament_name}, {team_name} gave a category score that the UKU SOTG Policy says needs a comment, "
+      + "but no comment was given.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  dangerousPlay: {
+    enabled: false,
+    subject: "Spirit comment received - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "A spirit score comment received by {team_name} at {tournament_name} mentions dangerous play.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  notSubmitted: {
+    enabled: true,
+    subject: "Missing spirit scores - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} did not submit {missing_count} spirit score(s) at {tournament_name}, "
+      + "for games against {missing_opponents}.\n\n"
+      + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
+      + EMAIL_SIGN_OFF,
+  },
+  twoLowScores: {
+    enabled: false,
+    subject: "Low spirit scores - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received several low spirit scores at {tournament_name}.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  lowAverage: {
+    enabled: false,
+    subject: "Low spirit average - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a low average spirit score at {tournament_name}.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  categoryMinimum: {
+    enabled: false,
+    subject: "Spirit score received - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a 0 in a spirit category at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
+  },
+  singleLowScore: {
+    enabled: false,
+    subject: "Low spirit score - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a low spirit score at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
+  },
+});
 
 /**
  * text of the Email cell when the club has no address on the Club Contacts tab
@@ -309,7 +309,9 @@ function _getEmailTemplatesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
 
   const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
   _fitSheet_(sheet, firstNew + missing.length - 1, EMAIL_TEMPLATE_KEYS.length);
-  sheet.getRange(firstNew, 1, missing.length, EMAIL_TEMPLATE_KEYS.length).setValues(missing).setVerticalAlignment("top");
+  sheet.getRange(firstNew, 1, missing.length, EMAIL_TEMPLATE_KEYS.length).setValues(missing).setVerticalAlignment(
+    "top",
+  );
   sheet
     .getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("enabled") + 1, missing.length, 1)
     .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());

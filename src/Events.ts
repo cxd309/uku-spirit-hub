@@ -7,79 +7,46 @@ const EVENTS_SHEET = "Tournaments";
  * text for the info row above the Events table
  * what the tab is, what to edit, how it refreshes
  */
-const EVENTS_INFO = "All the found spirit results files in the folder for this category (e.g. University, Club)\n"
-  + "Each results file must be in a folder named \"YYYYMMDD Tournament name\", rename the folder to rename the tournament\n\n"
-  + "User editable columns:\n"
-  + "- Status: filled on refresh, set to REFRESH to re-import results\n"
-  + "- International: is this an international tournament, only the receiving teams are UK teams\n"
-  + "  scoring teams are left off Teams and Clubs, and missing spirit scores are not checked\n"
-  + "- Spirit Award: should these results be included in the spirit award calculations\n"
-  + "- Issues: should these results be included in issue tracking\n\n"
-  + "To find new or edited files run \"Refresh Tournaments\", to import them run \"Refresh Results\"";
+const EVENTS_INFO =
+  "Every tournament on the Schedule List of the Schedule Manager within the dates on the Settings tab\n"
+  + "Rows without a Schedule URL or SOTG Sheet are left out, the SOTG Sheet link identifies each tournament\n\n"
+  + "Grey columns are filled on refresh, white columns are yours to edit:\n"
+  + "- Event Name Override: a name to use instead of the Schedule Manager's, leave blank to use theirs\n"
+  + "- Schedule Status / Spirit Form Status: set REFRESH to import that file again\n"
+  + "- Include Results: import this tournament's results, unticked rows are NOT INCLUDED\n"
+  + "- International: only the receiving teams are UK teams\n"
+  + "  scoring teams are left off Teams and Clubs, and missing spirit scores are not checked\n\n"
+  + "Statuses: NEW not imported yet, EDITED changed since import, REFRESH import again, ERROR cannot be read, "
+  + "MISSING no longer on the Schedule List, OK up to date\n"
+  + "Event Status is the first of NOT INCLUDED, MISSING, ERROR, REFRESH, EDITED, NEW that either file has, "
+  + "otherwise OK\n\n"
+  + "To read the Schedule Manager again run \"Refresh Tournaments\", to import results run \"Refresh Results\"";
 
 /**
  * events table columns, in order
  * keys are the names used in code
  * values are the header text
+ * columns listed in EVENT_FORMULAS are formulas, the rest hold EventRecord values
  */
 const EVENT_HEADERS = Object.freeze(
   {
-    fileId: "File ID",
-    fileName: "File Name",
-    path: "Path",
-    date: "Date",
-    tournament: "Tournament",
-    status: "Status",
+    scheduleEventName: "Schedule Event Name",
+    eventNameOverride: "Event Name Override",
+    eventName: "Event Name",
+    startDate: "Start Date",
+    endDate: "End Date",
+    scheduleUrl: "Schedule URL",
+    scheduleImportDate: "Schedule Import Date",
+    scheduleStatus: "Schedule Status",
+    spiritFormUrl: "Spirit Form URL",
+    spiritFormImportDate: "Spirit Form Import Date",
+    spiritFormStatus: "Spirit Form Status",
+    eventStatus: "Event Status",
     message: "Message",
+    includeResults: "Include Results",
     international: "International",
-    spiritAward: "Spirit Award",
-    issues: "Issues",
-    importedVersion: "Imported Version",
   } as const,
 );
-
-/**
- * values of the status column
- * OK is shown as a blank cell
- */
-const EVENT_STATUS = Object.freeze(
-  {
-    NEW: "NEW",
-    EDITED: "EDITED",
-    REFRESH: "REFRESH",
-    ERROR: "ERROR",
-    MISSING: "MISSING",
-    OK: "",
-  } as const,
-);
-
-/**
- * One row of the Events tab.
- */
-interface EventRecord {
-  /** Drive file ID (the key). */
-  fileId: string;
-  /** File name. */
-  fileName: string;
-  /** Folder path below the category, joined with " / ". */
-  path: string;
-  /** tournament date from the folder name, null if the folder name is invalid */
-  date: Date | null;
-  /** tournament name from the folder name, "" if the folder name is invalid */
-  tournament: string;
-  /** One of EVENT_STATUS. */
-  status: string;
-  /** Explanation for ERROR / MISSING; "" otherwise. */
-  message: string;
-  /** Ticked for international events. */
-  international: boolean;
-  /** Ticked to count the event's results for the spirit award. */
-  spiritAward: boolean;
-  /** Ticked to check the event's results for issues. */
-  issues: boolean;
-  /** File's last-modified time when last imported; null if never imported. */
-  importedVersion: Date | null;
-}
 
 /**
  * keys of EventRecord in column order
@@ -87,14 +54,117 @@ interface EventRecord {
 const EVENT_KEYS = Object.keys(EVENT_HEADERS) as (keyof typeof EVENT_HEADERS)[];
 
 /**
+ * values of the Schedule Status and Spirit Form Status columns
+ */
+const SOURCE_STATUS = Object.freeze(
+  {
+    NEW: "NEW",
+    EDITED: "EDITED",
+    REFRESH: "REFRESH",
+    ERROR: "ERROR",
+    MISSING: "MISSING",
+    OK: "OK",
+  } as const,
+);
+
+/**
+ * Event Status for a tournament with Include Results unticked
+ */
+const NOT_INCLUDED = "NOT INCLUDED";
+
+/**
+ * file statuses in the order they decide Event Status: the first either file has wins, otherwise OK
+ */
+const EVENT_STATUS_ORDER = Object.freeze(
+  [
+    SOURCE_STATUS.MISSING,
+    SOURCE_STATUS.ERROR,
+    SOURCE_STATUS.REFRESH,
+    SOURCE_STATUS.EDITED,
+    SOURCE_STATUS.NEW,
+  ] as const,
+);
+
+/**
+ * columns a person edits, left white, every other column is shaded as generated
+ */
+const EVENT_EDITABLE = Object.freeze(
+  ["eventNameOverride", "scheduleStatus", "spiritFormStatus", "includeResults", "international"] as const,
+);
+
+/**
+ * background of the generated columns, light grey 1 as on the Schedule Manager
+ */
+const GENERATED_BACKGROUND = "#d9d9d9";
+
+/**
  * tick box columns of the Events tab
  */
-const EVENT_TOGGLES = Object.freeze(["international", "spiritAward", "issues"] as const);
+const EVENT_TOGGLES = Object.freeze(["includeResults", "international"] as const);
 
 /**
  * changes smaller than this are ignored when comparing modified times
  */
 const VERSION_TOLERANCE_MS = 1000;
+
+/**
+ * One row of the Events tab.
+ */
+interface EventRecord {
+  /** Event Name on the Schedule List */
+  scheduleEventName: string;
+  /** name typed in to use instead, "" to use the Schedule List's */
+  eventNameOverride: string;
+  /** the name used everywhere else: the override if there is one */
+  eventName: string;
+  /** Start date on the Schedule List, null if it could not be read */
+  startDate: Date | null;
+  /** End date on the Schedule List, null if blank */
+  endDate: Date | null;
+  /** link to the schedule spreadsheet */
+  scheduleUrl: string;
+  /** schedule's modified time when it was last imported, null if never imported */
+  scheduleImportDate: Date | null;
+  /** one of SOURCE_STATUS */
+  scheduleStatus: string;
+  /** link to the Form Responses spreadsheet (the key) */
+  spiritFormUrl: string;
+  /** Form Responses' modified time when it was last imported, null if never imported */
+  spiritFormImportDate: Date | null;
+  /** one of SOURCE_STATUS */
+  spiritFormStatus: string;
+  /** NOT_INCLUDED or the first of EVENT_STATUS_ORDER either file has, otherwise OK */
+  eventStatus: string;
+  /** why a file is ERROR or MISSING, "" otherwise */
+  message: string;
+  /** ticked to import this tournament's results */
+  includeResults: boolean;
+  /** ticked for international events */
+  international: boolean;
+}
+
+/**
+ * formula columns of the Events tab
+ * each row gets its own formula, so sorting the tab never breaks them
+ */
+const EVENT_FORMULAS: Readonly<Partial<Record<keyof typeof EVENT_HEADERS, (row: number) => string>>> = Object.freeze({
+  eventName: (row: number) => {
+    const cell = (key: keyof typeof EVENT_HEADERS) => `$${_columnLetter_(EVENT_KEYS.indexOf(key) + 1)}${row}`;
+    return `=IF(TRIM(${cell("eventNameOverride")})="", ${cell("scheduleEventName")}, TRIM(${
+      cell("eventNameOverride")
+    }))`;
+  },
+  eventStatus: (row: number) => {
+    const cell = (key: keyof typeof EVENT_HEADERS) => `$${_columnLetter_(EVENT_KEYS.indexOf(key) + 1)}${row}`;
+    const either = (status: string) =>
+      `OR(${cell("scheduleStatus")}="${status}", ${cell("spiritFormStatus")}="${status}")`;
+    const rest = EVENT_STATUS_ORDER.reduceRight(
+      (otherwise, status) => `IF(${either(status)}, "${status}", ${otherwise})`,
+      `"${SOURCE_STATUS.OK}"`,
+    );
+    return `=IF(NOT(${cell("includeResults")}), "${NOT_INCLUDED}", ${rest})`;
+  },
+});
 
 /**
  * get the events tab, creating it with header row on first use.
@@ -104,51 +174,64 @@ const VERSION_TOLERANCE_MS = 1000;
 function _getEventsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const headers: readonly string[] = Object.values(EVENT_HEADERS);
-  _upgradeIncludeColumn_(ss.getSheetByName(EVENTS_SHEET));
   return _getOrCreateSheet_(ss, EVENTS_SHEET, headers, EVENTS_INFO);
 }
 
 /**
- * split the single Include column of hubs before 0.12 into Spirit Award and Issues
- * both start as the old Include tick, and the info row is updated
- * does nothing to a tab that is already split, or does not exist
+ * the name a tournament is known by: the override if there is one, otherwise the Schedule List's
+ * pure, the same as the Event Name formula
  *
- * @param sheet  the Events tab, null if it does not exist yet
+ * @param scheduleEventName  Event Name on the Schedule List
+ * @param override           Event Name Override
+ * @returns the name
  */
-function _upgradeIncludeColumn_(sheet: GoogleAppsScript.Spreadsheet.Sheet | null) {
-  if (!sheet) return;
-  const column = EVENT_KEYS.indexOf("spiritAward") + 1;
-  if (sheet.getMaxColumns() < column || sheet.getRange(HEADER_ROW, column).getValue() !== "Include") return;
-  sheet.insertColumnAfter(column);
-  sheet.getRange(HEADER_ROW, column, 1, 2).setValues([[EVENT_HEADERS.spiritAward, EVENT_HEADERS.issues]]);
-  const rows = sheet.getLastRow() - HEADER_ROW;
-  if (rows > 0) {
-    sheet.getRange(DATA_ROW, column, rows, 1).copyTo(sheet.getRange(DATA_ROW, column + 1, rows, 1));
-  }
-  sheet.getRange(INFO_ROW, 1).setValue(EVENTS_INFO);
+function _eventName_(scheduleEventName: string, override: string): string {
+  return override.trim() === "" ? scheduleEventName : override.trim();
+}
+
+/**
+ * Event Status of a tournament, the same as the Event Status formula
+ * pure, no google calls
+ *
+ * @param event  the tournament
+ * @returns NOT_INCLUDED, the first of EVENT_STATUS_ORDER either file has, otherwise OK
+ */
+function _eventStatus_(event: Pick<EventRecord, "includeResults" | "scheduleStatus" | "spiritFormStatus">): string {
+  if (!event.includeResults) return NOT_INCLUDED;
+  return EVENT_STATUS_ORDER.find((s) => event.scheduleStatus === s || event.spiritFormStatus === s)
+    ?? SOURCE_STATUS.OK;
 }
 
 /**
  * convert one row of Events tab values into an EventRecord
+ * Event Name and Event Status are worked out again rather than read, so they never wait for the formulas
  *
  * @param row  values of one data row, in EVENT_KEYS order
  * @returns the record
  */
 function _eventFromRow_(row: unknown[]): EventRecord {
   const cell = (key: keyof typeof EVENT_HEADERS) => row[EVENT_KEYS.indexOf(key)];
-  const imported = cell("importedVersion");
-  return {
-    fileId: String(cell("fileId")),
-    fileName: String(cell("fileName")),
-    path: String(cell("path")),
-    date: cell("date") instanceof Date ? cell("date") as Date : null,
-    tournament: String(cell("tournament")),
-    status: String(cell("status")).trim().toUpperCase(),
+  const date = (key: keyof typeof EVENT_HEADERS) => (cell(key) instanceof Date ? cell(key) as Date : null);
+  const status = (key: keyof typeof EVENT_HEADERS) => String(cell(key)).trim().toUpperCase();
+  const event = {
+    scheduleEventName: String(cell("scheduleEventName")),
+    eventNameOverride: String(cell("eventNameOverride")),
+    startDate: date("startDate"),
+    endDate: date("endDate"),
+    scheduleUrl: String(cell("scheduleUrl")).trim(),
+    scheduleImportDate: date("scheduleImportDate"),
+    scheduleStatus: status("scheduleStatus"),
+    spiritFormUrl: String(cell("spiritFormUrl")).trim(),
+    spiritFormImportDate: date("spiritFormImportDate"),
+    spiritFormStatus: status("spiritFormStatus"),
     message: String(cell("message")),
+    includeResults: cell("includeResults") === true,
     international: cell("international") === true,
-    spiritAward: cell("spiritAward") === true,
-    issues: cell("issues") === true,
-    importedVersion: imported instanceof Date ? imported : null,
+  };
+  return {
+    ...event,
+    eventName: _eventName_(event.scheduleEventName, event.eventNameOverride),
+    eventStatus: _eventStatus_(event),
   };
 }
 
@@ -156,10 +239,11 @@ function _eventFromRow_(row: unknown[]): EventRecord {
  * convert an EventRecord into a row of values for the Events tab
  *
  * @param event  the record
- * @returns values in EVENT_KEYS order
+ * @returns values in EVENT_KEYS order, "" in formula columns (filled by _fillFormulaColumns_)
  */
 function _eventToRow_(event: EventRecord): unknown[] {
   return EVENT_KEYS.map((key) => {
+    if (EVENT_FORMULAS[key]) return "";
     const value = event[key];
     return value === null ? "" : value;
   });
@@ -178,34 +262,45 @@ function _readEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet): EventRecord[] 
     .getRange(DATA_ROW, 1, rowCount, EVENT_KEYS.length)
     .getValues()
     .map(_eventFromRow_)
-    .filter((event) => event.fileId !== "");
+    .filter((event) => event.spiritFormUrl !== "");
 }
 
 /**
- * write events to the events tab, starting at row 2
- * set the Status dropdown and tick boxes on exactly those rows
+ * write events to the events tab, oldest first
+ * set the status dropdowns, tick boxes, date formats and shading on exactly those rows
  *
  * Validation is only applied to rows that hold an event: tick boxes store FALSE,
  * so applying them to empty rows would make those rows look like data.
  *
  * @param sheet   The Events tab.
- * @param events  Records to write, in display order.
+ * @param events  Records to write, in any order.
  */
 function _writeEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet, events: EventRecord[]) {
-  _writeTable_(sheet, events.map(_eventToRow_), EVENT_KEYS.length);
-  if (events.length === 0) return;
+  const rows = _sortEvents_(events);
+  _writeTable_(sheet, rows.map(_eventToRow_), EVENT_KEYS.length);
+  if (rows.length === 0) return;
+  _fillFormulaColumns_(sheet, EVENT_KEYS, EVENT_FORMULAS, rows.length);
 
   const column = (key: keyof typeof EVENT_HEADERS) => EVENT_KEYS.indexOf(key) + 1;
+  const range = (key: keyof typeof EVENT_HEADERS) => sheet.getRange(DATA_ROW, column(key), rows.length, 1);
 
-  const statuses = Object.values(EVENT_STATUS).filter((s) => s !== "");
-  const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statuses, true).build();
-  sheet.getRange(DATA_ROW, column("status"), events.length, 1).setDataValidation(statusRule);
+  const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(Object.values(SOURCE_STATUS), true).build();
+  range("scheduleStatus").setDataValidation(statusRule);
+  range("spiritFormStatus").setDataValidation(statusRule);
 
   const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-  for (const key of EVENT_TOGGLES) sheet.getRange(DATA_ROW, column(key), events.length, 1).setDataValidation(checkbox);
+  for (const key of EVENT_TOGGLES) range(key).setDataValidation(checkbox);
 
-  sheet.getRange(DATA_ROW, column("date"), events.length, 1).setNumberFormat("yyyy-mm-dd");
-  _highlightDuplicateTournaments_(sheet, events.length);
+  range("startDate").setNumberFormat("yyyy-mm-dd");
+  range("endDate").setNumberFormat("yyyy-mm-dd");
+  range("scheduleImportDate").setNumberFormat("yyyy-mm-dd hh:mm");
+  range("spiritFormImportDate").setNumberFormat("yyyy-mm-dd hh:mm");
+
+  const editable: readonly string[] = EVENT_EDITABLE;
+  const shading = EVENT_KEYS.map((key) => (editable.includes(key) ? null : GENERATED_BACKGROUND));
+  sheet.getRange(DATA_ROW, 1, rows.length, EVENT_KEYS.length).setBackgrounds(rows.map(() => shading));
+
+  _highlightDuplicateTournaments_(sheet, rows.length);
 }
 
 /**
@@ -220,153 +315,126 @@ function _isChangedSince_(importedVersion: Date | null, lastUpdated: Date): bool
 }
 
 /**
- * work out the new Events list from the current rows and a fresh scan
+ * the status of one file of a tournament, and why if it is not fine
+ * pure, no google calls
  *
- * existing rows keep their order and human-entered columns
- * new files are appended as NEW
- * files no longer found are marked MISSING
+ * a file that cannot be read is ERROR, REFRESH set by a person stays until it is imported
+ * otherwise NEW if never imported, EDITED if changed since, OK if not
+ *
+ * @param previous    the status on the tab now, "" for a new tournament
+ * @param importDate  modified time when last imported, null if never imported
+ * @param version     the file's modified time now, or why it could not be read
+ * @returns the status and a reason, "" unless ERROR
+ */
+function _sourceStatus_(
+  previous: string,
+  importDate: Date | null,
+  version: FileVersion | undefined,
+): { status: string; reason: string } {
+  if (!version) return { status: SOURCE_STATUS.ERROR, reason: "not checked" };
+  if (!version.ok) return { status: SOURCE_STATUS.ERROR, reason: version.reason };
+  if (previous === SOURCE_STATUS.REFRESH) return { status: SOURCE_STATUS.REFRESH, reason: "" };
+  if (importDate === null) return { status: SOURCE_STATUS.NEW, reason: "" };
+  if (_isChangedSince_(importDate, version.version)) return { status: SOURCE_STATUS.EDITED, reason: "" };
+  return { status: SOURCE_STATUS.OK, reason: "" };
+}
+
+/**
+ * work out the new Events list from the current rows and the Schedule List
+ * pure, no google calls
+ *
+ * tournaments are matched by their Spirit Form URL, keeping the columns a person edits
+ * names, dates and links always come from the Schedule List
+ * a changed Schedule URL counts as a new schedule, so it is imported again
+ * tournaments no longer listed are dropped if nothing was imported from them, otherwise marked MISSING
+ * a Spirit Form URL listed more than once uses its first row
  *
  * @param existing  current rows of the Events tab
- * @param files     results files found by the scan
+ * @param listed    tournaments on the Schedule List within the date range
+ * @param versions  link → the file's modified time now, for every link in `listed`
  * @returns updated list of events
  */
-function _syncEvents_(existing: EventRecord[], files: ResultsFile[]): EventRecord[] {
-  const fileById = new Map(files.map((f) => [f.id, f]));
-  const knownIds = new Set(existing.map((e) => e.fileId));
+function _syncEvents_(
+  existing: EventRecord[],
+  listed: ScheduleListRow[],
+  versions: Map<string, FileVersion>,
+): EventRecord[] {
+  const existingByUrl = new Map(existing.map((e) => [e.spiritFormUrl, e]));
+  const rowsByUrl: Map<string, ScheduleListRow[]> = new Map();
+  for (const row of listed) rowsByUrl.set(row.spiritFormUrl, [...(rowsByUrl.get(row.spiritFormUrl) ?? []), row]);
 
-  const updated = existing.map((event) => {
-    const file = fileById.get(event.fileId);
-    if (!file) {
-      return { ...event, status: EVENT_STATUS.MISSING, message: "File is no longer in the category folder" };
+  const updated = [...rowsByUrl].map(([url, rows]): EventRecord => {
+    const row = rows[0];
+    const previous = existingByUrl.get(url);
+    const scheduleImportDate = previous && previous.scheduleUrl === row.scheduleUrl
+      ? previous.scheduleImportDate
+      : null;
+    const spiritFormImportDate = previous?.spiritFormImportDate ?? null;
+    const schedule = _sourceStatus_(
+      previous && previous.scheduleUrl === row.scheduleUrl ? previous.scheduleStatus : "",
+      scheduleImportDate,
+      versions.get(row.scheduleUrl),
+    );
+    const spiritForm = _sourceStatus_(previous?.spiritFormStatus ?? "", spiritFormImportDate, versions.get(url));
+
+    const messages: string[] = [];
+    if (schedule.reason !== "") messages.push(`Schedule: ${schedule.reason}`);
+    if (spiritForm.reason !== "") messages.push(`Spirit Form: ${spiritForm.reason}`);
+    if (rows.length > 1) {
+      messages.push(
+        `SOTG Sheet is on rows ${
+          rows.map((r) => r.sourceRow).join(", ")
+        } of the Schedule List, row ${row.sourceRow} used`,
+      );
     }
 
-    const changed = _isChangedSince_(event.importedVersion, file.lastUpdated);
-    const problem = _fileProblem_(file.name, file.folderName);
-    let status = event.status;
-    let message = event.message;
-    if (problem !== "") {
-      status = EVENT_STATUS.ERROR;
-      message = problem;
-    } else if (status === EVENT_STATUS.MISSING || (status === EVENT_STATUS.ERROR && _isFileProblem_(message))) {
-      // the file is back, or its name has been fixed
-      status = event.importedVersion === null ? EVENT_STATUS.NEW : changed ? EVENT_STATUS.EDITED : EVENT_STATUS.OK;
-      message = "";
-    } else if (status === EVENT_STATUS.OK && changed) {
-      status = EVENT_STATUS.EDITED;
-    }
-
-    return {
-      ...event,
-      fileName: file.name,
-      path: file.path.join(" / "),
-      ..._folderFields_(file.folderName),
-      status: status,
-      message: message,
+    const eventNameOverride = previous?.eventNameOverride ?? "";
+    const event = {
+      scheduleEventName: row.eventName,
+      eventNameOverride,
+      eventName: _eventName_(row.eventName, eventNameOverride),
+      startDate: row.startDate,
+      endDate: row.endDate,
+      scheduleUrl: row.scheduleUrl,
+      scheduleImportDate,
+      scheduleStatus: schedule.status,
+      spiritFormUrl: url,
+      spiritFormImportDate,
+      spiritFormStatus: spiritForm.status,
+      message: messages.join("; "),
+      includeResults: previous?.includeResults ?? false,
+      international: previous?.international ?? false,
     };
+    return { ...event, eventStatus: _eventStatus_(event) };
   });
 
-  const added = files
-    .filter((f) => !knownIds.has(f.id))
-    .map((f) => ({
-      fileId: f.id,
-      fileName: f.name,
-      path: f.path.join(" / "),
-      ..._folderFields_(f.folderName),
-      status: _fileProblem_(f.name, f.folderName) === "" ? EVENT_STATUS.NEW : EVENT_STATUS.ERROR,
-      message: _fileProblem_(f.name, f.folderName),
-      international: false,
-      spiritAward: true,
-      issues: true,
-      importedVersion: null,
-    }));
+  const gone = existing
+    .filter((e) => !rowsByUrl.has(e.spiritFormUrl))
+    .filter((e) => e.scheduleImportDate !== null || e.spiritFormImportDate !== null)
+    .map((e): EventRecord => {
+      const event = {
+        ...e,
+        scheduleStatus: SOURCE_STATUS.MISSING,
+        spiritFormStatus: SOURCE_STATUS.MISSING,
+        message: "No longer on the Schedule List within the dates on the Settings tab",
+      };
+      return { ...event, eventStatus: _eventStatus_(event) };
+    });
 
-  return _sortEvents_([...updated, ...added]);
+  return [...updated, ...gone];
 }
 
 /**
- * pattern every event folder name must match
- * YYYYMMDD, one or more spaces, then the tournament name
- */
-const FOLDER_NAME_PATTERN = /^(\d{4})(\d{2})(\d{2})\s+(.+)$/;
-
-/**
- * result of reading an event folder name
- */
-type FolderNameResult = { ok: true; date: Date; tournament: string } | { ok: false; reason: string };
-
-/**
- * read the date and tournament name from an event folder name
- * pure, no google calls
- * the date must be a real calendar date, e.g. 20260000 is rejected
- *
- * @param name  folder name, e.g. "20251101 ELUXIR"
- * @returns date and tournament, or why the name is invalid
- */
-function _parseFolderName_(name: string): FolderNameResult {
-  const match = FOLDER_NAME_PATTERN.exec(name.trim());
-  if (!match) {
-    return { ok: false, reason: `folder name "${name}" must be "YYYYMMDD Tournament name"` };
-  }
-  const [, year, month, day, tournament] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-  if (date.getFullYear() !== Number(year) || date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day)) {
-    return { ok: false, reason: `folder name "${name}" starts with ${year}${month}${day}, which is not a real date` };
-  }
-  return { ok: true, date: date, tournament: tournament.trim() };
-}
-
-/**
- * why a file found by the scan cannot be imported, from its file and folder names
- * pure, no google calls
- * every reason starts with "file name" or "folder name", see _isFileProblem_
- *
- * @param fileName    name of the file
- * @param folderName  name of the folder containing the file
- * @returns the reason, "" if the names are fine
- */
-function _fileProblem_(fileName: string, folderName: string): string {
-  if (!fileName.toLowerCase().includes(RESULTS_FILE_TEXT.toLowerCase())) {
-    return `file name "${fileName}" does not contain "${RESULTS_FILE_TEXT}"`;
-  }
-  const folder = _parseFolderName_(folderName);
-  return folder.ok ? "" : folder.reason;
-}
-
-/**
- * whether a Message was written because of a bad file or folder name
- * these are cleared by the next Refresh Tournaments once the name is fixed
- * other errors (e.g. a failed import) stay until a person sets REFRESH
- *
- * @param message  the Message cell
- * @returns true if it came from _fileProblem_ or the folder name check on import
- */
-function _isFileProblem_(message: string): boolean {
-  return message.startsWith("file name ") || message.startsWith("folder name ");
-}
-
-/**
- * date and tournament columns for an event, from its folder name
- * both blank when the folder name is invalid
- *
- * @param folderName  name of the folder containing the results file
- * @returns values for the Date and Tournament columns
- */
-function _folderFields_(folderName: string): { date: Date | null; tournament: string } {
-  const folder = _parseFolderName_(folderName);
-  return folder.ok ? { date: folder.date, tournament: folder.tournament } : { date: null, tournament: "" };
-}
-
-/**
- * highlight tournament names that appear more than once in red
- * blank names are highlighted too: the folder name could not be read, so the tournament cannot be imported
- * replaces only rules on the Tournament column, other conditional formatting is kept
+ * highlight event names that appear more than once in red
+ * blank names are highlighted too, a tournament needs a name to be told apart in Issues and the Club Report
+ * replaces only rules on the Event Name column, other conditional formatting is kept
  * matching is case-insensitive, only event rows are covered so empty rows below the table are never highlighted
  *
  * @param sheet  the Events tab
  * @param rows   number of event rows
  */
 function _highlightDuplicateTournaments_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: number) {
-  const column = EVENT_KEYS.indexOf("tournament") + 1;
+  const column = EVENT_KEYS.indexOf("eventName") + 1;
   const letter = _columnLetter_(column);
   const range = sheet.getRange(DATA_ROW, column, rows, 1);
   const rule = SpreadsheetApp.newConditionalFormatRule()
@@ -384,37 +452,44 @@ function _highlightDuplicateTournaments_(sheet: GoogleAppsScript.Spreadsheet.She
 }
 
 /**
- * scan the category folder and bring the Events tab up to date
+ * read the Schedule List of the Schedule Manager and bring the Events tab up to date
  *
  * does not import any responses, Refresh Results does that
  *
  * @returns a one-line summary of the Events tab
  */
 function _refreshTournaments_(): string {
+  const settings = _readHubSettings_();
   const sheet = _getEventsSheet_();
-  const category = _readHubSettings_().category;
   const existing = _readEvents_(sheet);
-  _checkCategory_(category, existing.length);
-  const files = _timed_("scan drive", () => _scanCategory_(category));
-  const events = _syncEvents_(existing, files);
+  const list = _timed_("read schedule list", () =>
+    _parseScheduleList_(
+      _readScheduleListValues_(settings.scheduleManagerUrl),
+      settings.startDate,
+      settings.endDate,
+    ));
+  const versions = _timed_(
+    "read file versions",
+    () => _readFileVersions_(list.rows.flatMap((r) => [r.scheduleUrl, r.spiritFormUrl])),
+  );
+  const events = _syncEvents_(existing, list.rows, versions);
   _timed_("write tournaments", () => _writeEvents_(sheet, events));
-  _rememberCategory_(category);
 
-  // tournament names come from folder names, so Teams and Clubs pick up any renames and International ticks
-  _rebuildTeamsAndClubs_(_readResponseTeams_(_getResponsesSheet_()), events);
+  // event names come from the Schedule List, so Teams and Clubs pick up any renames and International ticks
+  _rebuildTeamsAndClubs_(_readResponseTeams_(_getResponsesSheet_()), _sortEvents_(events));
 
   const counts: Record<string, number> = {};
-  for (const e of events) {
-    const label = e.status || "up to date";
-    counts[label] = (counts[label] || 0) + 1;
-  }
+  for (const e of events) counts[e.eventStatus] = (counts[e.eventStatus] || 0) + 1;
   const breakdown = Object.entries(counts).map(([status, n]) => `${n} ${status}`).join(", ");
-  return `${events.length} events: ${breakdown}`;
+  const skipped = list.noStartDate.length === 0
+    ? ""
+    : `; Schedule List rows with no start date left out: ${list.noStartDate.join(", ")}`;
+  return `${events.length} tournaments${events.length > 0 ? `: ${breakdown}` : ""}${skipped}`;
 }
 
 /**
- * events in date order, oldest first
- * then by tournament and file name, so events on the same day have a fixed order
+ * events in date order, oldest first, the order of the Tournaments tab
+ * then by event name and Spirit Form URL, so events on the same day have a fixed order
  * pure, returns a new array
  *
  * @param events  events in any order
@@ -422,8 +497,8 @@ function _refreshTournaments_(): string {
  */
 function _sortEvents_(events: EventRecord[]): EventRecord[] {
   return [...events].sort((a, b) =>
-    _compareDates_(a.date, b.date)
-    || a.tournament.localeCompare(b.tournament)
-    || a.fileName.localeCompare(b.fileName)
+    _compareDates_(a.startDate, b.startDate)
+    || a.eventName.localeCompare(b.eventName)
+    || a.spiritFormUrl.localeCompare(b.spiritFormUrl)
   );
 }

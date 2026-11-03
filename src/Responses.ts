@@ -59,7 +59,7 @@ const RESPONSE_FORMULAS: Readonly<
   date: (row: number) => {
     const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
     const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("date")}), "")`;
+    return `=IFERROR(XLOOKUP(${id}, ${events("spiritFormUrl")}, ${events("startDate")}), "")`;
   },
   scorerClub: (row: number) => _responseClubFormula_(row, "scorer"),
   receiverClub: (row: number) => _responseClubFormula_(row, "receiver"),
@@ -67,7 +67,9 @@ const RESPONSE_FORMULAS: Readonly<
   spiritAward: (row: number) => {
     const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
     const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("spiritAward")}), FALSE)`;
+    const lookup = (key: keyof typeof EVENT_HEADERS) => `XLOOKUP(${id}, ${events("spiritFormUrl")}, ${events(key)})`;
+    const international = _readAwardSettings_().includeInternational ? "TRUE" : `NOT(${lookup("international")})`;
+    return `=IFERROR(AND(${lookup("includeResults")}, ${international}), FALSE)`;
   },
   countsForAward: (row: number) => {
     const cell = (key: keyof typeof RESPONSE_HEADERS) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
@@ -233,7 +235,7 @@ function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: 
 
 /**
  * tournament formula for one Responses row
- * looks the event up by file id on the Events tab
+ * looks the event up by its Spirit Form URL on the Events tab
  *
  * @param row  1-based sheet row the formula is for
  * @returns the formula
@@ -241,7 +243,7 @@ function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: 
 function _tournamentFormula_(row: number): string {
   const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
   const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-  return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("tournament")}), "(unknown event)")`;
+  return `=IFERROR(XLOOKUP(${id}, ${events("spiritFormUrl")}, ${events("eventName")}), "(unknown event)")`;
 }
 
 /**
@@ -270,12 +272,12 @@ function _responseClubFormula_(row: number, side: "scorer" | "receiver"): string
  * @returns responses in date order
  */
 function _sortResponses_(responses: ResponseRecord[], events: EventRecord[]): ResponseRecord[] {
-  const eventById = new Map(events.map((e) => [e.fileId, e]));
+  const eventById = new Map(events.map((e) => [e.spiritFormUrl, e]));
   return [...responses].sort((a, b) => {
     const ea = eventById.get(a.fileId);
     const eb = eventById.get(b.fileId);
-    return _compareDates_(ea?.date ?? null, eb?.date ?? null)
-      || (ea?.tournament ?? "").localeCompare(eb?.tournament ?? "")
+    return _compareDates_(ea?.startDate ?? null, eb?.startDate ?? null)
+      || (ea?.eventName ?? "").localeCompare(eb?.eventName ?? "")
       || a.fileId.localeCompare(b.fileId)
       || a.sourceRow - b.sourceRow;
   });

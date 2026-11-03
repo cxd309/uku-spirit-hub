@@ -104,7 +104,7 @@ function _columnBelowHeader_(sheetName: string, column: number): string {
 
 /**
  * compare two dates for sorting, oldest first
- * null (invalid folder name) sorts last
+ * null (no date) sorts last
  *
  * @param a  first date
  * @param b  second date

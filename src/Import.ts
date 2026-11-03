@@ -1,17 +1,4 @@
 /**
- * Outcome of importing one results file.
- */
-type ImportResult = {
-  ok: true;
-  responses: ResponseRecord[];
-  problems: RowProblem[];
-  version: Date;
-} | {
-  ok: false;
-  reason: string;
-};
-
-/**
  * a results file fetched from Google: its modified time and every tab, or why it could not be fetched
  */
 type FileRead = { ok: true; version: Date; tabs: ResultsTab[] } | { ok: false; reason: string };
@@ -138,110 +125,11 @@ function _readResultsFiles_(fileIds: string[]): Map<string, FileRead> {
 }
 
 /**
- * why an event's results file must not be imported, from its folder and file names
- * pure, no google calls
- *
- * @param event  the event
- * @returns the reason, "" if it can be imported
- */
-function _importProblem_(event: EventRecord): string {
-  if (event.date === null) {
-    return "folder name must be \"YYYYMMDD Tournament name\", fix it then run Refresh Tournaments";
-  }
-  if (!event.fileName.toLowerCase().includes(RESULTS_FILE_TEXT.toLowerCase())) {
-    return `file name "${event.fileName}" does not contain "${RESULTS_FILE_TEXT}", fix it then run Refresh Tournaments`;
-  }
-  return "";
-}
-
-/**
- * turn an event's fetched results file into response records
- * pure, no google calls, the file is fetched beforehand by _readResultsFiles_
- *
- * a file that could not be fetched (deleted, no permission) is returned as a reason,
- * so one bad file cannot stop the whole refresh
- *
- * @param event  the event to import
- * @param read   its fetched file, undefined if it was not fetched
- * @returns the responses read, or why the file could not be read
- */
-function _importFile_(event: EventRecord, read: FileRead | undefined): ImportResult {
-  const problem = _importProblem_(event);
-  if (problem !== "") return { ok: false, reason: problem };
-  if (!read || !read.ok) {
-    const message = read ? read.reason : "not fetched";
-    return { ok: false, reason: `could not open file (${message}), try Refresh Tournaments first` };
-  }
-
-  const found = _findBreakdownTab_(read.tabs);
-  if (!found.ok) return { ok: false, reason: found.reason };
-
-  const { responses, problems } = _parseBreakdownRows_(found.tab.values, found.columns);
-  return {
-    ok: true,
-    responses: responses.map((r) => ({
-      fileId: event.fileId,
-      sourceRow: r.sourceRow,
-      scorer: r.scorer,
-      receiver: r.receiver,
-      ...r.scores,
-      comment: r.comment,
-    })),
-    problems: problems,
-    version: read.version,
-  };
-}
-
-/**
- * import every tournament marked NEW or REFRESH on the Tournaments tab
- * works from the Tournaments tab only, run Refresh Tournaments first to find new or edited files
- *
- * successful imports replace that event's responses and clear its status
- * failed imports mark the event ERROR and keep its previous responses
- * responses are written before Tournaments, so an interrupted run is simply repeated
+ * import the results of every included tournament
+ * being rebuilt to read the Form Responses listed on the Tournaments tab
  *
  * @returns a one-line summary of the refresh
  */
 function _refreshResults_(): string {
-  const eventsSheet = _getEventsSheet_();
-  const responsesSheet = _getResponsesSheet_();
-  const events = _readEvents_(eventsSheet);
-  if (events.length === 0) return "No tournaments found: run Refresh Tournaments first";
-
-  const toImport = events.filter((e) => e.status === EVENT_STATUS.NEW || e.status === EVENT_STATUS.REFRESH);
-  if (toImport.length === 0) return "Nothing to refresh: no tournaments are NEW or REFRESH";
-
-  const readable = toImport.filter((e) => _importProblem_(e) === "");
-  const reads = _timed_("read files", () => _readResultsFiles_(readable.map((e) => e.fileId)));
-  const results: Map<string, ImportResult> = new Map(
-    toImport.map((e) => [e.fileId, _importFile_(e, reads.get(e.fileId))]),
-  );
-
-  const updatedEvents = events.map((event) => {
-    const result = results.get(event.fileId);
-    if (!result) return event;
-    if (!result.ok) return { ...event, status: EVENT_STATUS.ERROR, message: result.reason };
-    const skipped = result.problems.length === 0
-      ? ""
-      : `${result.problems.length} row(s) skipped: ${
-        result.problems.map((p) => `row ${p.sourceRow} (${p.reason})`).join("; ")
-      }`;
-    return { ...event, status: EVENT_STATUS.OK, message: skipped, importedVersion: result.version };
-  });
-
-  const replacedIds = new Set([...results].filter(([, r]) => r.ok).map(([id]) => id));
-  const imported = [...results.values()].flatMap((r) => (r.ok ? r.responses : []));
-  const responses = _sortResponses_([
-    ..._readResponses_(responsesSheet).filter((r) => !replacedIds.has(r.fileId)),
-    ...imported,
-  ], updatedEvents);
-
-  _timed_("write results", () => _writeResponses_(responsesSheet, responses));
-  _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
-
-  _rebuildTeamsAndClubs_(responses, _sortEvents_(updatedEvents));
-
-  const failed = [...results.values()].filter((r) => !r.ok).length;
-  return `Imported ${results.size - failed} tournament(s), ${imported.length} response(s)`
-    + (failed > 0 ? `; ${failed} failed (see Tournaments tab)` : "");
+  return "Refresh Results is being rebuilt to read the Form Responses, it is not available in this version";
 }

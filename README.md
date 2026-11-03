@@ -4,41 +4,45 @@ An Apps Script for Google Sheets designed to aid the spirit committee in underst
 
 It collects data from individual tournament results, maps teams to clubs, tracks issues and calculates statistics for spirit awards.
 
-One hub covers one category (University, Club, ...) for one season.
+One hub covers one season, or whatever dates are set on the Settings tab.
 
-## Folder layout
+> **In progress:** tournaments now come from the Schedule Manager. Refresh Results is being rebuilt to read each tournament's Form Responses and is not available in this version.
 
-The hub reads results from Google Drive, laid out as:
+## Schedule Manager
 
-```
-<season folder>/                     the hub spreadsheet lives here
-  <category folder>/                 e.g. University
-    YYYYMMDD Tournament name/        e.g. 20251101 ELUXIR
-      [regional folder/]
-        <Any name> Spirit Results and Breakdown
-```
+Tournaments are read from the **Schedule List** tab of the UKU Schedule Manager, set on the Settings tab. The hub reads these columns from row 1, by name:
 
-- Each results file must sit in a folder named `YYYYMMDD Tournament name`, with a real date. The folder name gives the tournament's date and name.
-- Each results file's name must contain `Spirit Results and Breakdown` (any capitalisation).
-- Every Google Sheet in the category folder is listed on the Tournaments tab. Badly named files or folders are marked **ERROR** with the reason, and are not imported until renamed.
-- The breakdown tab is found by its header row, not its name.
-- International results are collected in the same layout as UK tournaments. Comments are ignored and monitoring for issue tracking is limited.
+| Column       | Used for                                                  |
+| ------------ | --------------------------------------------------------- |
+| Event Name   | the tournament's name                                     |
+| Start date   | the tournament's date, and whether it is within the dates |
+| End date     | shown on the Tournaments tab                              |
+| Schedule URL | the tournament's schedule                                 |
+| SOTG Sheet   | the tournament's Form Responses, which identifies it      |
 
-Each tournament has three tick boxes on the Tournaments tab:
+Rows without a Schedule URL or SOTG Sheet, or starting outside the Start Date and End Date on the Settings tab, are left out.
 
-| Tick box      | When ticked                                                                                                                                                                       |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| International | Only the receiving teams are UK teams. The scoring teams are left off the Teams and Clubs tabs, and NOT-SUBMITTED is not checked, as only one or two scores per game are expected |
-| Spirit Award  | Results count towards Club Statistics and the Club Report (ticked for new tournaments)                                                                                            |
-| Issues        | Results are checked for issues (ticked for new tournaments)                                                                                                                       |
+On the Tournaments tab grey columns are filled on refresh and white columns are yours to edit:
 
-Hubs from before 0.12 had a single Include tick box. Running any menu item splits it into Spirit Award and Issues, both keeping the old tick.
+| Column              | What it's for                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Event Name Override | A name to use instead of the Schedule Manager's. Event Name is the name used on every other tab                                                                                   |
+| Schedule Status     | Whether the schedule needs importing, set REFRESH to import it again                                                                                                              |
+| Spirit Form Status  | Whether the Form Responses need importing, set REFRESH to import them again                                                                                                       |
+| Include Results     | Import this tournament's results. Unticked for new tournaments                                                                                                                    |
+| International       | Only the receiving teams are UK teams. The scoring teams are left off the Teams and Clubs tabs, and NOT-SUBMITTED is not checked, as only one or two scores per game are expected |
+
+Each file's status is **NEW** (not imported yet), **EDITED** (changed since it was imported), **REFRESH**, **ERROR** (cannot be read, see Message), **MISSING** (no longer on the Schedule List) or **OK**. Event Status is **NOT INCLUDED** when Include Results is unticked, otherwise the first of MISSING, ERROR, REFRESH, EDITED, NEW that either file has, otherwise OK.
+
+A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
+
+International tournaments will be added by hand, not through the Schedule Manager. Not built yet.
 
 ## Setting up a hub
 
 ### If using the online editor
 
-1. Create a Google Sheet inside the season folder (e.g. 2025-26)
+1. Create a Google Sheet
 2. Open the Apps Script Editor from the top menu **Extensions > Apps Script**
 3. Select **Settings** in the left hand menu and tick _"Show 'appsscript.json' manifest file in editor"_
 4. Return to the **Editor** page from the left hand menu
@@ -51,13 +55,13 @@ Hubs from before 0.12 had a single Include tick box. Running any menu item split
    4. The permission list appears. Tick **Select all** and click **Continue**. The hub asks for:
       - view and edit this spreadsheet only
       - see your Google Sheets, to read the results files (never to change them)
-      - see information about your Google Drive files (names, folders and dates, not their contents), to find the results files
+      - see information about your Google Drive files (names and dates, not their contents), to spot files that changed since they were imported
       - connect to an external service, to read all the results files at once from Google's own Drive and Sheets APIs
    5. The menu item does not carry on after approving: click **SpiritHub > SpiritHub Settings** again
 
    You only do this once per person. It happens again only when a new version of the hub asks for different permissions.
 8. Wait until it stops saying Running Script
-9. Select a Category of tournaments for this hub from the dropdown in cell **B6** (e.g. University, Club)
+9. In the Hub section, paste the Schedule Manager link and set the Start Date and End Date of the tournaments this hub covers
 10. Check the other settings to see if everything looks about right
 11. Gather tournaments, from the top menu click **SpiritHub > Refresh Tournaments**
 12. Gather results, from the top menu click **SpiritHub > Refresh Results**
@@ -68,7 +72,7 @@ Hubs from before 0.12 had a single Include tick box. Running any menu item split
 
 ### If using the clasp CLI
 
-1. Create a Google Sheet inside the season folder (e.g. 2025-26)
+1. Create a Google Sheet
 2. Open the Apps Script Editor from the top menu **Extensions > Apps Script**
 3. Select **Settings** in the left hand menu and copy the Script ID
 4. Copy the script ID into `.clasp.json`
@@ -79,19 +83,19 @@ Hubs from before 0.12 had a single Include tick box. Running any menu item split
 
 Everything runs from the **SpiritHub** menu.
 
-| Menu item               | What it does                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| SpiritHub Settings      | Creates any missing tabs, updates the Category list, then shows only the Settings tab. Safe to rerun                                            |
-| Refresh Tournaments     | Scans Drive and updates the Tournaments tab: new files are NEW, edited files are EDITED, removed files are MISSING, badly named files are ERROR |
-| Refresh Results         | Imports every tournament marked NEW or REFRESH on the Tournaments tab, then updates Teams and Clubs. Does not add issues                        |
-| Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                     |
-| Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                            |
-| Draft Emails | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails) |
+| Menu item               | What it does                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SpiritHub Settings      | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                    |
+| Refresh Tournaments     | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                   |
+| Refresh Results         | Being rebuilt, not available in this version                                                                                                                 |
+| Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                                  |
+| Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                                         |
+| Draft Emails            | Updates the Open in mail links in the Email column of the Issues tab, after adding club emails or changing templates. Nothing is sent, see [emails](#emails) |
 
 A normal update after uploading tournament results:
 
 1. **Refresh Tournaments.**
-2. On the Tournaments tab, tick **International** for international events, untick **Spirit Award** or **Issues** for anything to leave out of the award or issue tracking, and change any EDITED or ERROR rows you want re-imported to **REFRESH**. Rename any files or folders marked ERROR, then run Refresh Tournaments again.
+2. On the Tournaments tab, tick **Include Results** for this hub's tournaments and **International** for international events, and set any file you want re-imported to **REFRESH**.
 3. **Refresh Results.**
 4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs updates on edit.
 5. **Refresh Issues.**
@@ -113,8 +117,8 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 | Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |
 | Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team |
 | Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                         |
-| Email Templates | Hidden while refreshing. One subject and body per policy issue check, with placeholders filled from the issue                                                                                                       |
-| Settings        | Hidden while refreshing. Sections for the Hub (Category), Spirit Award (minimum tournaments), Name Rules and Issue Rules                                                                                       |
+| Email Templates | Hidden while refreshing. One subject and body per policy issue check, with placeholders filled from the issue                                                                                                  |
+| Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                      |
 
 ## Issues
 
@@ -141,7 +145,7 @@ Differences from the published policy:
 
 - Policy says "Consecutive" events are triggering, here we just look at multiple events in a season.
 - MIN-CATEGORY and SINGLE-LOW-SCORE are not policy, but included for interest
-- Only tournaments ticked **Issues** are checked. Comment checks, NOT-SUBMITTED and monitoring skip international tournaments. Comments not available and scoring teams are not necessarily UK teams.
+- Only tournaments ticked **Include Results** are checked. Comment checks, NOT-SUBMITTED and monitoring skip international tournaments. Comments not available and scoring teams are not necessarily UK teams.
 
 ## Emails
 
@@ -159,7 +163,7 @@ Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_na
 
 ## Club Statistics
 
-Counts scores from tournaments ticked **Spirit Award**, between different clubs (inter-club scores are excluded).
+Counts scores from tournaments ticked **Include Results**, between different clubs (inter-club scores are excluded). International tournaments count unless **Include International** is unticked in the Spirit Award section of the Settings tab.
 
 A club qualifies for the award once it has entered the minimum number of tournaments in the Spirit Award section of the Settings tab (default 3), and ranks are among qualifying clubs.
 
@@ -200,11 +204,11 @@ Conventions:
 
 Apps Script time goes almost entirely on calls to Google, not on the code itself, so:
 
-- Drive is scanned one level of folders at a time, up to 40 folders per query (`_scanFolder_`)
+- The Schedule List is read in one call, and every file's modified time is fetched at once with `UrlFetchApp.fetchAll` (`_readFileVersions_`)
 - Results files are fetched all at once with `UrlFetchApp.fetchAll`: every modified time, then every file's contents (`_readResultsFiles_`). Requests Google asks to slow down are retried once
 - Tables are written as one block of values, then one call per formula column
 - Clubs are rebuilt from data already in memory, never by waiting for formulas and reading them back
 - The Settings tab is read in one call and only repaired when a section or rule is missing
 - Issues look scores up in an index built once per refresh, and the club model packs its data into arrays once per fit
 
-Typical University season (30 tournaments, about 3,000 responses): Refresh Tournaments about 5s, Refresh Results about 10s.
+Typical University season (30 tournaments, about 3,000 responses) with the old Drive scan: Refresh Tournaments about 5s, Refresh Results about 10s.

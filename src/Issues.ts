@@ -245,7 +245,7 @@ function _withComment_(text: string, response: ResponseRecord): string {
 /**
  * run the per-response checks over every response
  * pure, no google calls
- * skips events not ticked for Issues
+ * skips events without Include Results ticked
  * min category and single low score are about the receiving team
  *   not in the policy, extra checks for the committee
  *   also run for international events, for awareness
@@ -262,7 +262,7 @@ function _responseIssueHits_(
   events: EventRecord[],
   settings: IssueSettings,
 ): IssueHit[] {
-  const eventById = new Map(events.map((e) => [e.fileId, e]));
+  const eventById = new Map(events.map((e) => [e.spiritFormUrl, e]));
   const commentChecks = COMMENT_KEYWORD_CHECKS.map((category) => ({
     category,
     pattern: _keywordPattern_(settings.commentKeywords[category]),
@@ -271,7 +271,7 @@ function _responseIssueHits_(
 
   for (const r of responses) {
     const event = eventById.get(r.fileId);
-    if (!event || !event.issues) continue;
+    if (!event || !event.includeResults) continue;
 
     const total = _responseTotal_(r);
 
@@ -400,8 +400,8 @@ function _averageDetails_(received: ResponseRecord[]): string {
  * @returns e.g. "LOW-AVERAGE | 2025-11-01 ELUXIR | Durham 1"
  */
 function _issueId_(category: IssueCategoryKey, event: EventRecord, team: string): string {
-  const date = event.date ? _isoDate_(event.date) : "no date";
-  return `${ISSUE_CATEGORIES[category].code} | ${date} ${event.tournament} | ${team}`;
+  const date = event.startDate ? _isoDate_(event.startDate) : "no date";
+  return `${ISSUE_CATEGORIES[category].code} | ${date} ${event.eventName} | ${team}`;
 }
 
 /**
@@ -427,7 +427,7 @@ function _draftsFromHits_(hits: IssueHit[]): IssueDraft[] {
 }
 
 /**
- * run the per-tournament checks for every team at every event ticked for Issues
+ * run the per-tournament checks for every team at every event with Include Results ticked
  * pure, no google calls
  * low scores and low average also run for international events, for awareness
  * scores not submitted is skipped for international events
@@ -445,8 +445,8 @@ function _teamEventIssueDrafts_(
 ): IssueDraft[] {
   const drafts: IssueDraft[] = [];
 
-  for (const event of events.filter((e) => e.issues)) {
-    const atEvent = responses.filter((r) => r.fileId === event.fileId);
+  for (const event of events.filter((e) => e.includeResults)) {
+    const atEvent = responses.filter((r) => r.fileId === event.spiritFormUrl);
 
     for (const received of _receivedByTeam_(atEvent).values()) {
       const team = received[0].receiver;
@@ -516,7 +516,7 @@ interface EventScores {
  * pure, never modifies its arguments
  *
  * @param responses  all responses
- * @returns file id → that event's responses, indexed
+ * @returns Spirit Form URL → that event's responses, indexed
  */
 function _eventScores_(responses: ResponseRecord[]): Map<string, EventScores> {
   const byEvent: Map<string, EventScores> = new Map();
@@ -561,7 +561,7 @@ function _issueScoreColumns_(
 ): { received: string; given: string; tournamentAverage: string } {
   if (draft.responses.length === 0) return { received: "", given: "", tournamentAverage: "" };
 
-  const atEvent = scores.get(draft.event.fileId);
+  const atEvent = scores.get(draft.event.spiritFormUrl);
   const between = (scorer: string, receiver: string) =>
     atEvent?.pairs.get(`${_teamKey_(scorer)}|${_teamKey_(receiver)}`) ?? [];
   const isAverage = draft.category === "lowAverage" || draft.category === "monitoringBreach";
@@ -612,8 +612,8 @@ function _issueRecords_(
     club: clubOf.get(_teamKey_(draft.team)) ?? "",
     category: ISSUE_CATEGORIES[draft.category].label(settings),
     team: draft.team,
-    tournaments: draft.event.tournament,
-    tournamentDate: draft.event.date,
+    tournaments: draft.event.eventName,
+    tournamentDate: draft.event.startDate,
     details: `${draft.event.international ? "INTERNATIONAL\n\n" : ""}${draft.details}`,
     ..._issueScoreColumns_(draft, scores),
     status: ISSUE_STATUSES[0],
@@ -628,7 +628,7 @@ function _issueRecords_(
  * pure, no google calls
  * a breach is a team averaging below the threshold at a tournament
  *   two teams from one club at the same tournament are two breaches
- * skips events not ticked for Issues, and international events
+ * skips events without Include Results ticked, and international events
  *
  * @param responses  all responses
  * @param events     all events, in date order
@@ -643,8 +643,8 @@ function _clubBreaches_(
   settings: IssueSettings,
 ): Map<string, ClubBreach[]> {
   const breachesByClub: Map<string, ClubBreach[]> = new Map();
-  for (const event of events.filter((e) => e.issues && !e.international)) {
-    const atEvent = responses.filter((r) => r.fileId === event.fileId);
+  for (const event of events.filter((e) => e.includeResults && !e.international)) {
+    const atEvent = responses.filter((r) => r.fileId === event.spiritFormUrl);
     for (const [key, received] of _receivedByTeam_(atEvent)) {
       const club = clubOf.get(key) ?? "";
       const average = received.map(_responseTotal_).reduce((a, b) => a + b, 0) / received.length;
@@ -679,7 +679,7 @@ function _monitoringIssues_(
 ): IssueRecord[] {
   if (!settings.enabled.monitoring) return [];
   const needed = settings.monitoringBreaches;
-  const dateOf = (b: ClubBreach) => (b.event.date ? _isoDate_(b.event.date) : "no date");
+  const dateOf = (b: ClubBreach) => (b.event.startDate ? _isoDate_(b.event.startDate) : "no date");
   const listed: IssueRecord[] = [];
   const later: IssueDraft[] = [];
 
@@ -687,7 +687,7 @@ function _monitoringIssues_(
     if (breaches.length < needed) continue;
     const first = breaches.slice(0, needed);
     const blocks = first.map((b) =>
-      `${b.event.tournament} (${dateOf(b)}):\n${b.team} averaged ${
+      `${b.event.eventName} (${dateOf(b)}):\n${b.team} averaged ${
         b.average.toFixed(2)
       } from ${b.responses.length} scores`
     );
@@ -697,7 +697,7 @@ function _monitoringIssues_(
       club,
       category: ISSUE_CATEGORIES.monitoring.label(settings),
       team: first.map((b) => b.team).join(", "),
-      tournaments: first.map((b) => b.event.tournament).join(", "),
+      tournaments: first.map((b) => b.event.eventName).join(", "),
       tournamentDate: first.map(dateOf).join(", "),
       details: `Number of breaches: ${first.length}\n\n${blocks.join("\n\n")}`,
       received: "",
@@ -792,7 +792,7 @@ function _appendIssues_(issues: IssueRecord[]): number {
 
 /**
  * run every check on what is already in the spreadsheet and add the new issues, no files are read
- * use after Refresh Results, or after changing Issues, International, a club override or an issue rule
+ * use after Refresh Results, or after changing Include Results, International, a club override or an issue rule
  * tabs may have been sorted by hand, so events and responses are put back in date order first
  * reads the clubs from the Teams tab and the thresholds from the Issue Rules settings, disabled checks add nothing
  *

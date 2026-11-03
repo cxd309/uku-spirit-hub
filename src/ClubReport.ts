@@ -23,7 +23,7 @@ const CLUB_REPORT_INFO_WIDTH = 14;
  */
 const CLUB_REPORT_INFO = "The spirit scores one club, and one of its teams, received\n\n"
   + "Pick a club in the Club cell and a team in the Team cell, everything below updates straight away\n"
-  + "Counts the same scores as the award: tournaments ticked for Spirit Award, between different clubs\n"
+  + "Counts the same scores as the award: see Counted on the Club Statistics tab\n"
   + "Teams are matched without trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are both Birmingham 1\n"
   + "Mean and Rank are from the Club Statistics tab, as last calculated\n"
   + "The charts are drawn from the tables below them";
