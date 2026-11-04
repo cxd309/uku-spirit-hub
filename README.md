@@ -149,20 +149,21 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 
 ## Tabs
 
-| Tab             | What it's for                                                                                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Issues          | A working tracker of automatically flagged spirit issues. Each row is one team in one game, or one team at one tournament, see [issues](#issues) for more detail                                               |
-| Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                       |
-| Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                  |
-| Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                   |
-| Deleted Forms   | Every row of each included tournament's Deleted forms tab, with the chair's reason. A record only, never used in statistics                                                                                    |
-| Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                             |
-| Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                         |
-| Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |
-| Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team |
-| Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                         |
-| Email Templates | Hidden while refreshing. One subject and body per issue check, plus MULTIPLE for issues with several checks, with placeholders filled from the issue                                                           |
-| Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                      |
+| Tab             | What it's for                                                                                                                                                                                                           |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instructions    | The first tab, always shown: the steps after a tournament weekend, what each Deleted forms reason raises, and where to look when something says ERROR. Rewritten by SpiritHub Settings, so it matches the hub's version |
+| Issues          | A working tracker of automatically flagged spirit issues. Each row is one team in one game, or one team at one tournament, see [issues](#issues) for more detail                                                        |
+| Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                                |
+| Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                           |
+| Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                            |
+| Deleted Forms   | Every row of each included tournament's Deleted forms tab, with the chair's reason. A record only, never used in statistics                                                                                             |
+| Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                                      |
+| Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                                  |
+| Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                                        |
+| Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team          |
+| Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                                  |
+| Email Templates | Hidden while refreshing. One subject and body per issue check, plus MULTIPLE for issues with several checks, with placeholders filled from the issue                                                                    |
+| Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                               |
 
 ## Issues
 

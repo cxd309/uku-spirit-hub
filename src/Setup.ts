@@ -38,9 +38,9 @@ function showSettings() {
 }
 
 /**
- * create any missing tabs,
- * then show the Settings and Email Templates tabs on their own
- * tabs that already exist keep their contents
+ * create any missing tabs and write the Instructions tab, first,
+ * then show the Settings and Email Templates tabs, with Instructions, on their own
+ * tabs that already exist keep their contents, apart from Instructions, which is always rewritten
  * removes the empty default "Sheet1" once the hub tabs exist
  *
  * @returns one-line summary
@@ -61,6 +61,7 @@ function _showSettings_(): string {
   _getClubReportSheet_();
   const settings = _getSettingsSheet_();
   _getEmailTemplatesSheet_();
+  _writeInstructions_();
 
   const blank = ss.getSheetByName("Sheet1");
   if (blank && blank.getLastRow() === 0 && blank.getLastColumn() === 0) ss.deleteSheet(blank);
