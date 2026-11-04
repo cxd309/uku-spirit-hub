@@ -6,7 +6,7 @@ It collects data from individual tournament results, maps teams to clubs, tracks
 
 One hub covers one season, or whatever dates are set on the Settings tab.
 
-> **In progress:** international tournaments will be added by hand, not through the Schedule Manager, and publishing Results and Breakdown from the hub is still to come.
+> **In progress:** international tournaments will be added by hand, not through the Schedule Manager.
 
 ## Schedule Manager
 
@@ -51,6 +51,16 @@ A tournament that leaves the Schedule List is removed, unless something was impo
 
 Results and Breakdown URL links to the file when there is one.
 
+### Publishing
+
+**SpiritHub > Publish Results** writes the Results and Breakdown file of every tournament with Include Results ticked, Event Status OK, an SOTG Folder, and Publish Status NOT PUBLISHED, OUT OF DATE or PUBLISHED EXTERNALLY:
+
+- a new Google Sheet is made in the SOTG Folder with the Published File Name and this hub's hidden label. Next time the same file is rewritten, so its link never changes
+- the file looks like the ones the Schedule Manager published: `<Event Name> SOTG Results` (each receiving team's count and averages, highest Total first, categories at or below 1.8 and totals at or below 9 coloured) and `<Event Name> SOTG Breakdown` (every form, by receiving team, red lines between teams)
+- only counted forms go in, so duplicates, self scores, forms for games that did not happen and deleted forms are left out
+- a file with the published name that this hub did not make is never touched: the tournament is skipped with a note in Message. Rename it, or change the Published File Name
+- File > Share > Publish to web, and copying the link to the Schedule Manager, are still done by hand
+
 Tabs from an earlier version that lack columns added at the end, like these three, have them added on their own, keeping everything else.
 
 Refresh Results and Issues reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
@@ -90,6 +100,7 @@ International tournaments will be added by hand, not through the Schedule Manage
       - view and edit this spreadsheet only
       - see your Google Sheets, to read the results files (never to change them)
       - see information about your Google Drive files (names and dates, not their contents), to spot files that changed since they were imported
+      - see, edit, create and delete only the specific Google Drive files you use with this app, to publish each tournament's Results and Breakdown file. It cannot open or change any other file
       - connect to an external service, to read all the results files at once from Google's own Drive and Sheets APIs
    5. The menu item does not carry on after approving: click **SpiritHub > SpiritHub Settings** again
 
@@ -121,6 +132,7 @@ Everything runs from the **SpiritHub** menu.
 | SpiritHub Settings         | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                                                                                                                       |
 | Refresh Tournaments        | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                                                                                                                      |
 | Refresh Results and Issues | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs, and adds any new issues. With nothing to import it just runs the issue checks again |
+| Publish Results            | Writes the Results and Breakdown file of every tournament ready to publish, see [publishing](#publishing)                                                                                                                                                       |
 | Refresh Club Statistics    | Recalculates the Club Statistics tab, no data import                                                                                                                                                                                                            |
 
 A normal update after uploading tournament results:

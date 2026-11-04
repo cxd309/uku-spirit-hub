@@ -8,6 +8,7 @@ function onOpen() {
     .createMenu("SpiritHub")
     .addItem("Refresh Tournaments", "refreshTournaments")
     .addItem("Refresh Results and Issues", "refreshResultsAndIssues")
+    .addItem("Publish Results", "publishResults")
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
     .addSeparator()
     .addItem("SpiritHub Settings", "showSettings")
@@ -183,6 +184,13 @@ function refreshResultsAndIssues() {
     if (results.startsWith("No tournaments found")) return results;
     return `${results}; ${_timed_("issues", _refreshIssues_)}`;
   });
+}
+
+/**
+ * menu: write the Results and Breakdown file of every tournament ready to publish
+ */
+function publishResults() {
+  _runRefresh_(_publishResults_);
 }
 
 /**

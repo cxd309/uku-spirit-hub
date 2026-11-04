@@ -28,6 +28,11 @@ function _folderIdFromUrl_(url: string): string {
 }
 
 /**
+ * Drive's type for a Google Sheet, given when a published file is made
+ */
+const DRIVE_SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
+
+/**
  * Drive app property the hub puts on files it publishes, holding its own spreadsheet ID
  * only the app that set it can read it, so a file without it was made somewhere else
  */
@@ -221,4 +226,209 @@ function _withPublishStatus_(events: EventRecord[], pattern: string, links: Map<
       message: _sourceMessage_(event.message, "Publish", reason),
     };
   });
+}
+
+/**
+ * Publish Statuses that Publish Results writes a file for
+ * PUBLISHED EXTERNALLY gets a file of this hub's own, unless one by another hand already has the published name
+ */
+const PUBLISHABLE_STATUSES: readonly string[] = Object.freeze([
+  PUBLISH_STATUS.NOT_PUBLISHED,
+  PUBLISH_STATUS.OUT_OF_DATE,
+  PUBLISH_STATUS.PUBLISHED_EXTERNALLY,
+]);
+
+/**
+ * how one tournament's publish went
+ */
+type PublishOutcome = { ok: true; fileId: string; created: boolean } | { ok: false; reason: string };
+
+/**
+ * the published file a tournament should be written to, from what is in its SOTG Folder
+ * pure, no google calls
+ *
+ * this hub's own file with the published name is updated, a file with that name made by another hand blocks it,
+ * as this hub cannot change it, otherwise a new file is made
+ *
+ * @param event   the tournament
+ * @param name    the published file name
+ * @param lookup  the files in its SOTG Folder with that name
+ * @returns the file ID to update, "" to make a new one, or why it cannot be published
+ */
+function _publishTarget_(
+  event: EventRecord,
+  name: string,
+  lookup: FolderLookup,
+): { ok: true; fileId: string } | { ok: false; reason: string } {
+  if (!lookup.ok) return { ok: false, reason: lookup.reason };
+  const own = lookup.files.find((f) => f.own);
+  if (own) return { ok: true, fileId: own.id };
+  if (lookup.files.length > 0) {
+    return { ok: false, reason: `"${name}" in the SOTG Folder was not made by this hub, rename or remove it first` };
+  }
+  if (event.publishStatus === PUBLISH_STATUS.OUT_OF_DATE) {
+    const linked = _spreadsheetIdFromUrl_(event.publishedUrl);
+    if (linked !== "") return { ok: true, fileId: linked };
+  }
+  return { ok: true, fileId: "" };
+}
+
+/**
+ * the tabs of a published file the requests are written for: the first two, or a new second one
+ * pure, no google calls
+ *
+ * @param sheets  the file's tabs, as the Sheets API gives them
+ * @returns the Results and Breakdown tabs
+ */
+function _publishTabs_(
+  sheets: GoogleAppsScript.Sheets.Schema.Sheet[],
+): { results: PublishedTab; breakdown: PublishedTab } {
+  const ordered = [...sheets].sort((a, b) => (a.properties?.index ?? 0) - (b.properties?.index ?? 0));
+  const tab = (sheet: GoogleAppsScript.Sheets.Schema.Sheet | undefined, fallbackId: number): PublishedTab =>
+    sheet
+      ? { sheetId: sheet.properties?.sheetId ?? 0, isNew: false, ruleCount: sheet.conditionalFormats?.length ?? 0 }
+      : { sheetId: fallbackId, isNew: true, ruleCount: 0 };
+  const nextId = Math.max(0, ...sheets.map((s) => s.properties?.sheetId ?? 0)) + 1;
+  return { results: tab(ordered[0], nextId), breakdown: tab(ordered[1], nextId + 1) };
+}
+
+/**
+ * write the Results and Breakdown file of every tournament ready to publish, then check Publish Status again
+ * ready: Include Results ticked, Event Status OK, a SOTG Folder, and NOT PUBLISHED, OUT OF DATE or PUBLISHED EXTERNALLY
+ * a new file is made in the SOTG Folder with the published name and this hub's label, an existing one of this hub's
+ * is rewritten in place so its link never changes, files made by another hand are never touched
+ * the content is today's layout, from the counted forms on Results
+ *
+ * @returns a one-line summary
+ */
+function _publishResults_(): string {
+  const settings = _readHubSettings_();
+  const sheet = _getEventsSheet_();
+  const events = _readEvents_(sheet);
+  const responses = _readResponses_(_getResponsesSheet_());
+  const hubId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  const nameOf = (e: EventRecord) => _publishedFileName_(settings.publishedFileName, e);
+
+  const ready = events.filter((e) =>
+    e.includeResults
+    && e.eventStatus === SOURCE_STATUS.OK
+    && _folderIdFromUrl_(e.sotgFolderUrl) !== ""
+    && PUBLISHABLE_STATUSES.includes(e.publishStatus)
+  );
+  if (ready.length === 0) {
+    return "Nothing to publish: no included tournament with Event Status OK, an SOTG Folder, "
+      + "and Publish Status NOT PUBLISHED, OUT OF DATE or PUBLISHED EXTERNALLY";
+  }
+
+  const outcomes: Map<EventRecord, PublishOutcome> = new Map();
+  const lookups = _timed_(
+    "check publish folders",
+    () =>
+      _lookUpPublishedFiles_(
+        ready.map((e) => ({ folderId: _folderIdFromUrl_(e.sotgFolderUrl), name: nameOf(e) })),
+        hubId,
+      ),
+  );
+  const targets: Map<EventRecord, string> = new Map();
+  ready.forEach((event, i) => {
+    const target = _publishTarget_(event, nameOf(event), lookups[i]);
+    if (target.ok) targets.set(event, target.fileId);
+    else outcomes.set(event, target);
+  });
+
+  // make the files that do not exist yet, in each SOTG Folder, with this hub's label
+  const toCreate = [...targets].filter(([, fileId]) => fileId === "").map(([event]) => event);
+  const created = _timed_("create published files", () =>
+    _sendGoogleJson_(toCreate.map((event) => ({
+      url: "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id",
+      body: {
+        name: nameOf(event),
+        mimeType: DRIVE_SHEET_MIME_TYPE,
+        parents: [_folderIdFromUrl_(event.sotgFolderUrl)],
+        appProperties: { [PUBLISHED_BY_PROPERTY]: hubId },
+      },
+    }))));
+  const isNew: Set<EventRecord> = new Set();
+  toCreate.forEach((event, i) => {
+    const id = (created[i].body as { id?: string }).id;
+    if (created[i].code === 200 && id) {
+      targets.set(event, id);
+      isNew.add(event);
+    } else {
+      targets.delete(event);
+      outcomes.set(event, { ok: false, reason: `could not create the file (${_apiError_(created[i])})` });
+    }
+  });
+
+  // read each file's tabs, then write both in one batch per file
+  const writing = [...targets.keys()];
+  const books = _timed_(
+    "read published files",
+    () =>
+      _fetchGoogleJson_(
+        writing.map((event) =>
+          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(targets.get(event) as string)}`
+          + `?fields=${encodeURIComponent("sheets(properties(sheetId,index),conditionalFormats(booleanRule))")}`
+        ),
+      ),
+  );
+  const batches: { event: EventRecord; url: string; body: unknown }[] = [];
+  writing.forEach((event, i) => {
+    const fileId = targets.get(event) as string;
+    if (books[i].code !== 200) {
+      outcomes.set(event, { ok: false, reason: `could not open the published file (${_apiError_(books[i])})` });
+      return;
+    }
+    const tabs = _publishTabs_((books[i].body as GoogleAppsScript.Sheets.Schema.Spreadsheet).sheets ?? []);
+    const tables = _publishedTables_(responses.filter((r) => r.spiritFormUrl === event.spiritFormUrl));
+    const titles = { results: `${event.eventName} SOTG Results`, breakdown: `${event.eventName} SOTG Breakdown` };
+    batches.push({
+      event,
+      url: `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(fileId)}:batchUpdate`,
+      body: { requests: _publishRequests_(tables, titles, tabs.results, tabs.breakdown) },
+    });
+  });
+  const written = _timed_(
+    "write published files",
+    () => _sendGoogleJson_(batches.map(({ url, body }) => ({ url, body }))),
+  );
+  batches.forEach(({ event }, i) => {
+    outcomes.set(
+      event,
+      written[i].code === 200
+        ? { ok: true, fileId: targets.get(event) as string, created: isNew.has(event) }
+        : { ok: false, reason: `could not write the published file (${_apiError_(written[i])})` },
+    );
+  });
+
+  const updated = events.map((event) => {
+    const outcome = outcomes.get(event);
+    if (!outcome) return event;
+    return outcome.ok
+      ? {
+        ...event,
+        publishedUrl: `https://docs.google.com/spreadsheets/d/${outcome.fileId}/edit`,
+        message: _sourceMessage_(event.message, "Publish", ""),
+      }
+      : { ...event, message: _sourceMessage_(event.message, "Publish", outcome.reason) };
+  });
+  const checked = _timed_(
+    "check published files",
+    () => _withPublishStatus_(updated, settings.publishedFileName, new Map()),
+  );
+  // a failed publish keeps its reason, the check only knows about the files it finds
+  const final = checked.map((event, i) => {
+    const outcome = outcomes.get(events[i]);
+    return outcome && !outcome.ok
+      ? { ...event, message: _sourceMessage_(event.message, "Publish", outcome.reason) }
+      : event;
+  });
+  _timed_("write tournaments", () => _writeEvents_(sheet, final));
+
+  const results = [...outcomes.values()];
+  const madeCount = results.filter((o) => o.ok && o.created).length;
+  const updatedCount = results.filter((o) => o.ok && !o.created).length;
+  const failed = results.filter((o) => !o.ok).length;
+  return `Published ${madeCount} new file(s), updated ${updatedCount}`
+    + (failed > 0 ? `; ${failed} could not be published, see Message on Tournaments` : "");
 }

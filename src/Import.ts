@@ -15,22 +15,39 @@ const RETRY_WAIT_MS = 5000;
 
 /**
  * send GET requests to Google APIs all at once, as the person running the script
- * requests Google answers with 429 (too many requests) are retried once, after RETRY_WAIT_MS
  *
  * @param urls  API urls
  * @returns each response's status code and parsed body, in the order given
  */
 function _fetchGoogleJson_(urls: string[]): { code: number; body: unknown }[] {
-  const headers = { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` };
-  const fetch = (list: string[]) =>
-    UrlFetchApp.fetchAll(list.map((url) => ({ url, headers, muteHttpExceptions: true })))
-      .map((response) => ({ code: response.getResponseCode(), text: response.getContentText() }));
+  return _sendGoogleJson_(urls.map((url) => ({ url })));
+}
 
-  const results = fetch(urls);
+/**
+ * send requests to Google APIs all at once, as the person running the script
+ * a request with a body is sent as a POST of that body as JSON, one without as a GET
+ * requests Google answers with 429 (too many requests) are retried once, after RETRY_WAIT_MS
+ *
+ * @param requests  API url, and the body to POST if any
+ * @returns each response's status code and parsed body, in the order given
+ */
+function _sendGoogleJson_(requests: { url: string; body?: unknown }[]): { code: number; body: unknown }[] {
+  const headers = { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` };
+  const fetch = (list: { url: string; body?: unknown }[]) =>
+    UrlFetchApp.fetchAll(list.map((request) => ({
+      url: request.url,
+      headers,
+      muteHttpExceptions: true,
+      ...(request.body === undefined
+        ? {}
+        : { method: "post" as const, contentType: "application/json", payload: JSON.stringify(request.body) }),
+    }))).map((response) => ({ code: response.getResponseCode(), text: response.getContentText() }));
+
+  const results = fetch(requests);
   const retry = results.flatMap((r, i) => (r.code === 429 ? [i] : []));
   if (retry.length > 0) {
     Utilities.sleep(RETRY_WAIT_MS);
-    fetch(retry.map((i) => urls[i])).forEach((r, j) => {
+    fetch(retry.map((i) => requests[i])).forEach((r, j) => {
       results[retry[j]] = r;
     });
   }
