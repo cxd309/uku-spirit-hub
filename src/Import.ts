@@ -281,7 +281,7 @@ function _problemsNote_(problems: RowProblem[]): string {
  * a successful import replaces that file's rows and marks it OK on every tournament using it
  * a failed import marks it ERROR and keeps the previous rows
  * tournaments with Include Results unticked lose their rows and go back to NEW
- * every response is then matched to its game again, see _matchResponses_
+ * every response and deleted form is then matched to its game again, see _matchResponses_
  * the tabs are written before Tournaments, so an interrupted run is simply repeated
  *
  * @returns a one-line summary of the refresh
@@ -371,11 +371,11 @@ function _refreshResults_(): string {
     ...[...formImports.values()].flatMap((r) => (r.ok ? r.deleted : [])),
   ], updatedEvents);
 
-  const matched = _timed_("match games", () => _matchResponses_(responses, games, updatedEvents));
+  const matched = _timed_("match games", () => _matchResponses_(responses, deleted, games, updatedEvents));
 
   _timed_("write games", () => _writeGames_(gamesSheet, matched.games));
   _timed_("write results", () => _writeResponses_(responsesSheet, matched.responses));
-  _timed_("write deleted forms", () => _writeDeletedForms_(deletedSheet, deleted));
+  _timed_("write deleted forms", () => _writeDeletedForms_(deletedSheet, matched.deleted));
   _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
 
   _rebuildTeamsAndClubs_(matched.responses, _sortEvents_(updatedEvents));

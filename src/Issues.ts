@@ -284,8 +284,7 @@ function _keywordsFound_(comment: string, words: string[]): string[] {
  * the comment checks skip international tournaments, comments are not available and the scorers are not UKU teams
  *
  * @param responses  every response, matched to games
- * @param deleted    every deleted form
- * @param games      every game, to put deleted forms in a game
+ * @param deleted    every deleted form, matched to games
  * @param events     events with Include Results ticked
  * @param settings   thresholds from the Issue Rules settings
  * @returns one finding per form per check
@@ -293,7 +292,6 @@ function _keywordsFound_(comment: string, words: string[]): string[] {
 function _gameFindings_(
   responses: ResponseRecord[],
   deleted: DeletedFormRecord[],
-  games: GameRecord[],
   events: EventRecord[],
   settings: IssueSettings,
 ): IssueFinding[] {
@@ -357,7 +355,7 @@ function _gameFindings_(
   }
 
   findings.push(..._duplicateFindings_(responses, eventByUrl));
-  findings.push(..._deletedFindings_(deleted, responses, games, eventByUrl, settings));
+  findings.push(..._deletedFindings_(deleted, responses, eventByUrl, settings));
   return findings;
 }
 
@@ -430,11 +428,10 @@ function _isCommentRequiredReason_(reason: string): boolean {
  * a deleted form whose reason says it needed a comment raises TOTAL-NO-COMMENT and CATEGORY-NO-COMMENT
  * as if it were still on Results, falling back to DELETED-ROW if its scores break neither
  * any other deleted form was taken out: DELETED-ROW, Comment shows its comment
- * forms not on Results are put in a game when their two teams played only once there
+ * each uses the game the deleted form was matched to, see _matchResponses_
  *
- * @param deleted     every deleted form
+ * @param deleted     every deleted form, matched to games
  * @param responses   every response, to find edited comments
- * @param games       every game, to find the game of a deleted form
  * @param eventByUrl  Spirit Form URL → included event
  * @param settings    thresholds from the Issue Rules settings
  * @returns the findings
@@ -442,20 +439,12 @@ function _isCommentRequiredReason_(reason: string): boolean {
 function _deletedFindings_(
   deleted: DeletedFormRecord[],
   responses: ResponseRecord[],
-  games: GameRecord[],
   eventByUrl: Map<string, EventRecord>,
   settings: IssueSettings,
 ): IssueFinding[] {
   const formKey = (f: { spiritFormUrl: string; scorer: string; receiver: string; timestamp: Date | null }) =>
     `${f.spiritFormUrl}|${_teamKey_(f.scorer)}|${_teamKey_(f.receiver)}|${f.timestamp?.getTime() ?? ""}`;
   const kept = new Map(responses.filter((r) => r.timestamp !== null).map((r) => [formKey(r), r]));
-  const onlyGame = (event: EventRecord, a: string, b: string) => {
-    const between = games.filter((g) =>
-      g.scheduleUrl === event.scheduleUrl
-      && [_teamKey_(g.team1), _teamKey_(g.team2)].sort().join("|") === [_teamKey_(a), _teamKey_(b)].sort().join("|")
-    );
-    return between.length === 1 ? between[0].game : "";
-  };
 
   const findings: IssueFinding[] = [];
   for (const f of deleted) {
@@ -479,7 +468,7 @@ function _deletedFindings_(
       continue;
     }
 
-    const game = onlyGame(event, f.scorer, f.receiver);
+    const game = f.game;
     const comment = _quoted_(f.comment);
     if (_isCommentRequiredReason_(f.reason) && f.comment === "" && !event.international) {
       const totalText = _totalWithoutCommentText_(f, settings);
@@ -980,7 +969,7 @@ function _refreshIssues_(): string {
 
   const found = _timed_("check issues", () => {
     const findings = [
-      ..._gameFindings_(responses, deleted, games, events, settings),
+      ..._gameFindings_(responses, deleted, events, settings),
       ..._tournamentFindings_(responses, games, events, clubOf, settings),
     ].filter((f) => settings.enabled[f.category]);
     return _issuesFromFindings_(findings, games, clubOf, new Date());
