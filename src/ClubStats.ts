@@ -55,7 +55,7 @@ type ClubStatsRow = Record<keyof typeof CLUB_STATS_HEADERS, string | number | bo
  * one score counted for club statistics, with both clubs worked out
  */
 interface CountedScore {
-  /** file id of the tournament */
+  /** Spirit Form URL of the tournament */
   tournament: string;
   /** scoring team */
   scorer: string;
@@ -91,7 +91,8 @@ function _clubStatsInfo_(when: Date, minimum: number, models: Record<string, Mod
   return `Spirit statistics for each club, calculated ${
     Utilities.formatDate(when, Session.getScriptTimeZone(), "d MMM yyyy HH:mm")
   }\n\n`
-    + "Counted: scores at tournaments ticked for Spirit Award, between different clubs\n"
+    + "Counted: scores at tournaments ticked Include Results (International ones only if the Settings say so), "
+    + "ticked Counted on Results, between different clubs\n"
     + `Qualifies: entered at least ${minimum} tournaments, ranks are among qualifying clubs\n`
     + "CI: 95% confidence interval of the mean\n"
     + "Models: mean adjusted for scorers who give higher or lower scores, as in the old R script, "
@@ -118,18 +119,20 @@ function _getClubStatsSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
  * @param responses  all responses
  * @param events     all events
  * @param clubOf     team key → club, from the Teams tab
+ * @param settings   the Spirit Award settings
  * @returns the scores, those with no receiving club dropped
  */
 function _countedScores_(
   responses: ResponseRecord[],
   events: EventRecord[],
   clubOf: Map<string, string>,
+  settings: AwardSettings,
 ): CountedScore[] {
-  const included = new Set(events.filter((e) => e.spiritAward).map((e) => e.fileId));
+  const included = new Set(events.filter((e) => _eventCountsForAward_(e, settings)).map((e) => e.spiritFormUrl));
   return responses
-    .filter((r) => included.has(r.fileId))
+    .filter((r) => included.has(r.spiritFormUrl) && r.counted)
     .map((r) => ({
-      tournament: r.fileId,
+      tournament: r.spiritFormUrl,
       scorer: r.scorer,
       scorerClub: clubOf.get(_teamKey_(r.scorer)) ?? "",
       receiver: r.receiver,
@@ -293,12 +296,13 @@ function _clubStatsCiFormula_(row: number, sign: 1 | -1): string {
 function _refreshClubStatistics_(): string {
   const events = _readEvents_(_getEventsSheet_());
   const responses = _readResponses_(_getResponsesSheet_());
-  if (responses.length === 0) return "No results found: run Refresh Results first";
+  if (responses.length === 0) return "No results found: run Refresh Results and Issues first";
 
   const clubOf = _readTeamClubs_();
-  const minimum = _readAwardSettings_().minimumTournaments;
+  const awardSettings = _readAwardSettings_();
+  const minimum = awardSettings.minimumTournaments;
 
-  const scores = _countedScores_(responses, events, clubOf);
+  const scores = _countedScores_(responses, events, clubOf, awardSettings);
   const countedTotal = scores.filter((s) => s.counts).length;
   const { rows: clubRows, models } = _timed_(
     "club statistics",

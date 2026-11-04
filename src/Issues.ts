@@ -7,14 +7,22 @@ const ISSUES_SHEET = "Issues";
  * text for the info row above the Issues table
  * what the tab is, what to edit, how it refreshes
  */
-const ISSUES_INFO = "Spirit issues found in the results, one row per issue per team per tournament\n\n"
+const ISSUES_INFO = "Spirit issues found in the results\n"
+  + "Play: one team in one game, from the scores it received. Scoring: one team in one game, from the form it gave. "
+  + "Tournament: one team at one tournament\n"
+  + "Game is blank and Opponent is used instead when a form has no game, e.g. a duplicate or a deleted form\n\n"
   + "User editable columns:\n"
   + "- Status: NEW, IN PROGRESS or CLOSED. Change it once you have sent the email\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
-  + "Email has an Open in mail link for NEW issues whose email template is enabled, "
-  + "kept up to date by Refresh Issues and Draft Emails. It is the only column the script changes on existing rows\n\n"
-  + "New issues are added by Refresh Issues, so sort and filter freely";
+  + "Club looks the team up on Teams, so it follows Club Overrides. "
+  + "Email Address looks the club up on Club Contacts. Email Subject and Email Body are only filled while the issue "
+  + "is NEW, ready to copy into an email. Changing Status clears them straight away, setting it back to NEW "
+  + "fills them again\n\n"
+  + "A refresh that finds another check for an existing issue adds it to Checks and Details, "
+  + "and a CLOSED issue goes back to NEW. Nothing else on existing rows is changed\n\n"
+  + "Refresh Results and Issues puts the tab back in order: club, tournament, team, level, checks, opponent. "
+  + "Filters are kept, so filter freely";
 
 /**
  * issues table columns, in order
@@ -25,19 +33,24 @@ const ISSUE_HEADERS = Object.freeze(
   {
     issueId: "Issue ID",
     dateCreated: "Issue Date",
+    level: "Level",
     club: "Club",
-    category: "Issue Category",
     team: "Team",
-    tournaments: "Tournament(s)",
+    tournament: "Tournament",
     tournamentDate: "Tournament Date",
+    game: "Game",
+    opponent: "Opponent",
+    score: "Score",
+    spirit: "Spirit",
+    comment: "Comment",
+    checks: "Checks",
     details: "Details",
-    received: "Received",
-    given: "Given",
-    tournamentAverage: "Tournament Average",
     status: "Status",
-    email: "Email",
     committeeMember: "Committee Member",
     notes: "Notes",
+    emailAddress: "Email Address",
+    emailSubject: "Email Subject",
+    emailBody: "Email Body",
   } as const,
 );
 
@@ -47,71 +60,67 @@ const ISSUE_HEADERS = Object.freeze(
 const ISSUE_KEYS = Object.keys(ISSUE_HEADERS) as (keyof typeof ISSUE_HEADERS)[];
 
 /**
+ * 0-based columns a person edits, left white, every other column is shaded
+ */
+const ISSUE_EDITABLE = Object.freeze(
+  (["status", "committeeMember", "notes"] as const).map((key) => ISSUE_KEYS.indexOf(key)),
+);
+
+/**
+ * the order of the Issues tab, put back after every refresh:
+ * a club's issues together, then by tournament (date, then name), team, level, checks and opponent
+ */
+const ISSUE_SORT: readonly (keyof typeof ISSUE_HEADERS)[] = Object.freeze(
+  ["club", "tournamentDate", "tournament", "team", "level", "checks", "opponent"] as const,
+);
+
+/**
  * values of the Status column, first is given to new issues
  */
 const ISSUE_STATUSES = Object.freeze(["NEW", "IN PROGRESS", "CLOSED"]);
 
 /**
+ * values of the Level column
+ * Play and Scoring issues are about one team in one game, Tournament issues one team at one tournament
+ */
+const ISSUE_LEVELS = Object.freeze({ PLAY: "Play", SCORING: "Scoring", TOURNAMENT: "Tournament" } as const);
+
+/**
  * every issue check
- * code goes into the Issue ID and the Rule column of the Issue Rules settings
- * label goes into the Issue Category column, built from the current settings
+ * code goes into the Checks column, the Issue ID of tournament issues and the Rule column of the Issue Rules settings
+ * level says which kind of issue it adds to
  */
 const ISSUE_CATEGORIES = Object.freeze({
-  totalWithoutComment: {
-    code: "TOTAL-NO-COMMENT",
-    label: (s: IssueSettings) => `Total above ${s.commentTotalAbove} or below ${s.commentTotalBelow} without comment`,
-  },
-  categoryWithoutComment: {
-    code: "CATEGORY-NO-COMMENT",
-    label: (s: IssueSettings) => `Category scored ${s.commentCategoryScores.join(" or ")} without comment`,
-  },
-  dangerousPlay: {
-    code: "DANGEROUS-PLAY",
-    label: (s: IssueSettings) => "Dangerous play mentioned",
-  },
-  cheating: {
-    code: "CHEATING",
-    label: (s: IssueSettings) => "Cheating mentioned",
-  },
-  harassment: {
-    code: "HARASSMENT",
-    label: (s: IssueSettings) => "Harassment mentioned",
-  },
-  notSubmitted: {
-    code: "NOT-SUBMITTED",
-    label: (s: IssueSettings) => "Spirit scores not submitted",
-  },
-  twoLowScores: {
-    code: "LOW-SCORES",
-    label: (s: IssueSettings) => `${s.lowScoreCount} or more scores of ${s.lowScoreAtOrBelow} or below at a tournament`,
-  },
-  lowAverage: {
-    code: "LOW-AVERAGE",
-    label: (s: IssueSettings) => `Average score below ${s.lowAverageBelow} at a tournament`,
-  },
-  categoryMinimum: {
-    code: "MIN-CATEGORY",
-    label: (s: IssueSettings) => `Received ${s.categoryMinimum} in a category`,
-  },
-  singleLowScore: {
-    code: "SINGLE-LOW-SCORE",
-    label: (s: IssueSettings) => `Received a score below ${s.singleLowScoreBelow}`,
-  },
-  monitoring: {
-    code: "MONITORING",
-    label: (s: IssueSettings) =>
-      `${s.monitoringBreaches} team averages below ${s.monitoringAverageBelow} in the season`,
-  },
-  monitoringBreach: {
-    code: "MONITORING-BREACH",
-    label: (s: IssueSettings) => `Averaged below ${s.monitoringAverageBelow} again while on monitoring`,
-  },
+  lowScore: { code: "LOW-SCORE", level: ISSUE_LEVELS.PLAY },
+  dangerousPlay: { code: "DANGEROUS-PLAY", level: ISSUE_LEVELS.PLAY },
+  cheating: { code: "CHEATING", level: ISSUE_LEVELS.PLAY },
+  harassment: { code: "HARASSMENT", level: ISSUE_LEVELS.PLAY },
+  categoryMinimum: { code: "MIN-CATEGORY", level: ISSUE_LEVELS.PLAY },
+  totalWithoutComment: { code: "TOTAL-NO-COMMENT", level: ISSUE_LEVELS.SCORING },
+  categoryWithoutComment: { code: "CATEGORY-NO-COMMENT", level: ISSUE_LEVELS.SCORING },
+  deletedRow: { code: "DELETED-ROW", level: ISSUE_LEVELS.SCORING },
+  redactedComment: { code: "REDACTED-COMMENT", level: ISSUE_LEVELS.SCORING },
+  selfScore: { code: "SELF-SCORE", level: ISSUE_LEVELS.SCORING },
+  noSuchGame: { code: "NO-SUCH-GAME", level: ISSUE_LEVELS.SCORING },
+  duplicate: { code: "DUPLICATE", level: ISSUE_LEVELS.SCORING },
+  noScores: { code: "NO-SCORES", level: ISSUE_LEVELS.TOURNAMENT },
+  underSubmitted: { code: "UNDER-SUBMITTED", level: ISSUE_LEVELS.TOURNAMENT },
+  immediateAverage: { code: "IMMEDIATE-AVERAGE", level: ISSUE_LEVELS.TOURNAMENT },
+  monitoringAverage: { code: "MONITORING-AVERAGE", level: ISSUE_LEVELS.TOURNAMENT },
+});
+
+/**
+ * how each comment keyword check is named in Details, e.g. Comment includes dangerous play keyword: "danger"
+ */
+const KEYWORD_CHECK_NAMES: Readonly<Record<typeof COMMENT_KEYWORD_CHECKS[number], string>> = Object.freeze({
+  dangerousPlay: "dangerous play",
+  cheating: "cheating",
+  harassment: "harassment",
 });
 
 /**
  * checks raised by words in a comment, each with its own word list in the Issue Rules settings
- * the issue is for the receiving team and its Details quote the comment
- * a comment matching more than one list raises one issue per check
+ * the issue is for the receiving team
  */
 const COMMENT_KEYWORD_CHECKS = Object.freeze(["dangerousPlay", "cheating", "harassment"] as const);
 
@@ -131,7 +140,7 @@ function _keywordPattern_(words: string[]): RegExp | null {
 }
 
 /**
- * key of one issue check, e.g. "lowAverage"
+ * key of one issue check, e.g. "lowScore"
  */
 type IssueCategoryKey = keyof typeof ISSUE_CATEGORIES;
 
@@ -139,32 +148,42 @@ type IssueCategoryKey = keyof typeof ISSUE_CATEGORIES;
  * one row of the Issues tab
  */
 interface IssueRecord {
-  /** check, tournament and team, unique per issue */
+  /** level, tournament, game or opponent, and team, unique per issue */
   issueId: string;
   /** when the issue was first added */
   dateCreated: Date;
-  /** club the issue is about */
-  club: string;
-  /** label of the check */
-  category: string;
+  /** one of ISSUE_LEVELS */
+  level: string;
+  /** codes of every check found, comma separated */
+  checks: string;
+  /** tournament name */
+  tournament: string;
+  /** tournament start date, null if unknown */
+  tournamentDate: Date | null;
+  /** game code, "" for tournament issues and forms with no game */
+  game: string;
+  /** the other team in the game, "" for tournament issues */
+  opponent: string;
+  /** the game's result from the team's side, e.g. 15-12W, "" without a game or scores */
+  score: string;
+  /** the spirit score behind the issue, e.g. "10 (2, 2, 2, 2, 2)": received for Play, given for Scoring */
+  spirit: string;
+  /** the comment behind the issue, in quotes, from the same form as Spirit */
+  comment: string;
   /** team the issue is about */
   team: string;
-  /** tournament name(s) */
-  tournaments: string;
-  /** tournament date, null if unknown, comma separated text for several */
-  tournamentDate: Date | string | null;
-  /** one line per response that triggered it */
+  /** club of the team, written as a formula looking it up on Teams, see _issueClubFormula_ */
+  club: string;
+  /** one section per check */
   details: string;
-  /** total of each flagged response, comma separated */
-  received: string;
-  /** total of the reply to each flagged response, comma separated */
-  given: string;
-  /** average received at the tournament by each team that received a flagged score */
-  tournamentAverage: string;
   /** one of ISSUE_STATUSES */
   status: string;
-  /** Open in mail link, filled in later by _updateEmailLinks_ */
-  email: string;
+  /** formula looking up the club's email on Club Contacts, see _emailAddressFormula_ */
+  emailAddress: string;
+  /** filled from the email template while the issue is NEW, see _updateEmailDrafts_ */
+  emailSubject: string;
+  /** filled from the email template while the issue is NEW, see _updateEmailDrafts_ */
+  emailBody: string;
   /** who is handling it */
   committeeMember: string;
   /** free text */
@@ -172,53 +191,25 @@ interface IssueRecord {
 }
 
 /**
- * one response that triggered a check, before grouping into issues
+ * one thing a check found, before findings are grouped into issues
  */
-interface IssueHit {
+interface IssueFinding {
   /** which check */
   category: IssueCategoryKey;
-  /** the event the response is from */
-  event: EventRecord;
-  /** team the issue is about */
-  team: string;
-  /** the other team in the response */
-  other: string;
-  /** the comment, or the scores that triggered it */
-  text: string;
-  /** the response itself */
-  response: ResponseRecord;
-}
-
-/**
- * an issue before it has an id, club, date or status
- */
-interface IssueDraft {
-  /** which check */
-  category: IssueCategoryKey;
-  /** the event it is about */
-  event: EventRecord;
-  /** team the issue is about */
-  team: string;
-  /** text for the Details cell */
-  details: string;
-  /** the flagged responses, empty when there are none */
-  responses: ResponseRecord[];
-}
-
-/**
- * one team averaging below the monitoring threshold at one tournament
- */
-interface ClubBreach {
-  /** club of the team */
-  club: string;
-  /** team that averaged below the threshold */
-  team: string;
   /** the tournament */
   event: EventRecord;
-  /** every score the team received there */
-  responses: ResponseRecord[];
-  /** the team's average there */
-  average: number;
+  /** team the issue is about */
+  team: string;
+  /** game code, "" when there is none */
+  game: string;
+  /** the other team, "" for tournament checks */
+  opponent: string;
+  /** what was found, for Details, "" when Checks says it all */
+  text: string;
+  /** the form's comment for the Comment column, in quotes, "" for none */
+  comment: string;
+  /** the form's spirit score, see _spiritText_, "" when there is not one form */
+  spirit: string;
 }
 
 /**
@@ -232,599 +223,698 @@ function _responseTotal_(response: ResponseRecord): number {
 }
 
 /**
- * scores text with the response's comment quoted below it, if it has one
+ * a form's spirit score for the Spirit column: the total, then each category in form order
+ * pure, no google calls
  *
- * @param text      the scores text
- * @param response  the response
- * @returns the text, with the comment on a new line
+ * @param scores  the five category scores, null where missing
+ * @returns e.g. "10 (2, 2, 2, 2, 2)", "" if any score is missing
  */
-function _withComment_(text: string, response: ResponseRecord): string {
-  return response.comment === "" ? text : `${text}\n"${response.comment}"`;
+function _spiritText_(scores: Record<typeof SCORE_KEYS[number], number | null>): string {
+  const values = SCORE_KEYS.map((key) => scores[key]);
+  if (values.some((v) => v === null)) return "";
+  return `${values.reduce((sum: number, v) => sum + (v ?? 0), 0)} (${values.join(", ")})`;
 }
 
 /**
- * run the per-response checks over every response
- * pure, no google calls
- * skips events not ticked for Issues
- * min category and single low score are about the receiving team
- *   not in the policy, extra checks for the committee
- *   also run for international events, for awareness
- * the comment checks skip international events
- *   comments are not available and the scoring teams are not UKU teams
+ * a comment in quotes, for the Comment column and Details
  *
- * @param responses  all responses
- * @param events     all events
- * @param settings   thresholds from the Issue Rules settings
- * @returns one hit per response per check it triggered
+ * @param comment  the comment
+ * @returns the comment in double quotes, "" for no comment
  */
-function _responseIssueHits_(
+function _quoted_(comment: string): string {
+  return comment === "" ? "" : `"${comment}"`;
+}
+
+/**
+ * names joined as readable text, e.g. "Rules, Fouls and Attitude"
+ *
+ * @param names  the names
+ * @returns the text
+ */
+function _andList_(names: string[]): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * a category score as words, e.g. "a zero", "a 4"
+ *
+ * @param score  the score
+ * @returns the text
+ */
+function _scoreWords_(score: number): string {
+  return score === 0 ? "a zero" : `a ${score}`;
+}
+
+/**
+ * which of the words a comment includes, as whole words ignoring case
+ *
+ * @param comment  the comment
+ * @param words    the words of one keyword check
+ * @returns the words found, in list order
+ */
+function _keywordsFound_(comment: string, words: string[]): string[] {
+  return words.filter((word) => _keywordPattern_([word])?.test(comment));
+}
+
+/**
+ * the Play and Scoring checks of every form
+ * pure, no google calls
+ *
+ * Play checks look at counted forms only, so a duplicate or a form for no game is never held against the opponent
+ * the comment checks skip international tournaments, comments are not available and the scorers are not UKU teams
+ *
+ * @param responses  every response, matched to games
+ * @param deleted    every deleted form
+ * @param events     events with Include Results ticked
+ * @param settings   thresholds from the Issue Rules settings
+ * @returns one finding per form per check
+ */
+function _gameFindings_(
   responses: ResponseRecord[],
+  deleted: DeletedFormRecord[],
   events: EventRecord[],
   settings: IssueSettings,
-): IssueHit[] {
-  const eventById = new Map(events.map((e) => [e.fileId, e]));
-  const commentChecks = COMMENT_KEYWORD_CHECKS.map((category) => ({
-    category,
-    pattern: _keywordPattern_(settings.commentKeywords[category]),
-  }));
-  const hits: IssueHit[] = [];
+): IssueFinding[] {
+  const eventByUrl = new Map(events.map((e) => [e.spiritFormUrl, e]));
+  const lowByReceiver = _lowScoresByReceiver_(responses, settings);
+  const findings: IssueFinding[] = [];
 
   for (const r of responses) {
-    const event = eventById.get(r.fileId);
-    if (!event || !event.issues) continue;
+    const event = eventByUrl.get(r.spiritFormUrl);
+    if (!event) continue;
+    const comment = _quoted_(r.comment);
+    const spirit = _spiritText_(r);
+    const play = (category: IssueCategoryKey, text: string) =>
+      findings.push({ category, event, team: r.receiver, game: r.game, opponent: r.scorer, text, comment, spirit });
+    const scoring = (category: IssueCategoryKey, text: string) =>
+      findings.push({ category, event, team: r.scorer, game: r.game, opponent: r.receiver, text, comment, spirit });
+
+    if (r.match === MATCH_RESULTS.SELF_SCORE) {
+      scoring("selfScore", "");
+      continue;
+    }
+    if (r.match === MATCH_RESULTS.NO_SUCH_GAME) {
+      scoring("noSuchGame", `No game against ${r.receiver} on the schedule`);
+      continue;
+    }
+    if (r.match === MATCH_RESULTS.DUPLICATE) continue;
 
     const total = _responseTotal_(r);
-
+    if (total <= settings.lowScoreAtOrBelow) {
+      const low = lowByReceiver.get(`${r.spiritFormUrl}|${_teamKey_(r.receiver)}`) ?? [];
+      play("lowScore", _lowScoreText_(r, low, settings));
+    }
     const minimums = SCORE_KEYS.filter((key) => r[key] === settings.categoryMinimum);
     if (minimums.length > 0) {
-      hits.push({
-        category: "categoryMinimum",
-        event,
-        team: r.receiver,
-        other: r.scorer,
-        text: _withComment_(minimums.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", "), r),
-        response: r,
-      });
-    }
-    if (total < settings.singleLowScoreBelow) {
-      hits.push({
-        category: "singleLowScore",
-        event,
-        team: r.receiver,
-        other: r.scorer,
-        text: _withComment_(`Total ${total}`, r),
-        response: r,
-      });
+      play(
+        "categoryMinimum",
+        `Received ${_scoreWords_(settings.categoryMinimum)} in ${
+          _andList_(minimums.map((key) => RESPONSE_HEADERS[key]))
+        }`,
+      );
     }
 
     if (event.international) continue;
 
     if (r.comment === "") {
       if (total > settings.commentTotalAbove || total < settings.commentTotalBelow) {
-        hits.push({
-          category: "totalWithoutComment",
-          event,
-          team: r.scorer,
-          other: r.receiver,
-          text: `Total ${total}`,
-          response: r,
-        });
+        scoring(
+          "totalWithoutComment",
+          `Gave a total of ${total} without a comment, `
+            + `comment required above ${settings.commentTotalAbove} or below ${settings.commentTotalBelow}`,
+        );
       }
       const flagged = SCORE_KEYS.filter((key) => settings.commentCategoryScores.includes(r[key]));
       if (flagged.length > 0) {
-        const scores = flagged.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", ");
-        hits.push({
-          category: "categoryWithoutComment",
-          event,
-          team: r.scorer,
-          other: r.receiver,
-          text: scores,
-          response: r,
-        });
+        const byScore = [...new Set(flagged.map((key) => r[key]))].map((score) =>
+          `${_scoreWords_(score)} in ${
+            _andList_(flagged.filter((key) => r[key] === score).map((key) => RESPONSE_HEADERS[key]))
+          }`
+        );
+        scoring("categoryWithoutComment", `Gave ${_andList_(byScore)} without a comment`);
       }
     } else {
-      for (const check of commentChecks) {
-        if (!check.pattern || !check.pattern.test(r.comment)) continue;
-        hits.push({
-          category: check.category,
-          event,
-          team: r.receiver,
-          other: r.scorer,
-          text: r.comment,
-          response: r,
-        });
+      for (const category of COMMENT_KEYWORD_CHECKS) {
+        const found = _keywordsFound_(r.comment, settings.commentKeywords[category]);
+        if (found.length === 0) continue;
+        const words = found.map((word) => `"${word}"`).join(", ");
+        play(
+          category,
+          `Comment includes ${KEYWORD_CHECK_NAMES[category]} keyword${found.length > 1 ? "s" : ""}: ${words}`,
+        );
       }
     }
   }
-  return hits;
+
+  findings.push(..._duplicateFindings_(responses, eventByUrl));
+  findings.push(..._deletedFindings_(deleted, responses, eventByUrl));
+  return findings;
 }
 
 /**
- * text for the Details cell of one per-response issue
- * a count, then one block per response
- *   comments are quoted in full, scores are listed
- *   "From" when the team received the response, "To" when the team gave it
- *
- * @param hits  every hit for this issue, all from the same check and event
- * @returns the details text
- */
-function _issueDetails_(hits: IssueHit[]): string {
-  const first = hits[0];
-  const isComment = (COMMENT_KEYWORD_CHECKS as readonly string[]).includes(first.category);
-  const count = `Number of ${isComment ? "comments" : "scores"}: ${hits.length}`;
-  const blocks = hits.map((hit) => {
-    const received = _teamKey_(hit.team) === _teamKey_(hit.response.receiver);
-    const text = isComment ? `"${hit.text}"` : hit.text;
-    return `${received ? "From" : "To"} ${hit.other}:\n${text}`;
-  });
-  return `${count}\n\n${blocks.join("\n\n")}`;
-}
-
-/**
- * group one event's responses by the team receiving them
+ * one Deleted Row or Redacted Comment finding per deleted form
  * pure, never modifies its arguments
  *
- * @param atEvent  responses from one event
- * @returns team key → responses received, in the order given
- */
-function _receivedByTeam_(atEvent: ResponseRecord[]): Map<string, ResponseRecord[]> {
-  const receivedBy: Map<string, ResponseRecord[]> = new Map();
-  for (const r of atEvent) {
-    const key = _teamKey_(r.receiver);
-    receivedBy.set(key, [...(receivedBy.get(key) ?? []), r]);
-  }
-  return receivedBy;
-}
-
-/**
- * text for the Details cell of an average issue
- * the average, then every score received
+ * a deleted form whose teams and submission time match a form still on Results, with a different comment,
+ * is the original of a redacted comment: REDACTED-COMMENT, in the game of the form on Results, Comment shows both versions
+ * any other deleted form was taken out: DELETED-ROW, Comment shows its comment
  *
- * @param received  every score one team received at one event
- * @returns the details text
+ * @param deleted     every deleted form
+ * @param responses   every response, to find edited comments
+ * @param eventByUrl  Spirit Form URL → included event
+ * @returns the findings
  */
-function _averageDetails_(received: ResponseRecord[]): string {
-  const totals = received.map(_responseTotal_);
-  const average = totals.reduce((a, b) => a + b, 0) / totals.length;
-  const lines = received.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
-  return `Average: ${average.toFixed(2)} from ${totals.length} scores\n\n${lines.join("\n\n")}`;
-}
-
-/**
- * the issue id for a check, event and team
- * readable, and the same every run so an issue is never added twice
- *
- * @param category  which check
- * @param event     the event
- * @param team      the team
- * @returns e.g. "LOW-AVERAGE | 2025-11-01 ELUXIR | Durham 1"
- */
-function _issueId_(category: IssueCategoryKey, event: EventRecord, team: string): string {
-  const date = event.date ? _isoDate_(event.date) : "no date";
-  return `${ISSUE_CATEGORIES[category].code} | ${date} ${event.tournament} | ${team}`;
-}
-
-/**
- * group per-response hits into drafts, one per check per team per tournament
- * pure, never modifies its arguments
- *
- * @param hits  hits from the per-response checks
- * @returns drafts in the order they were first hit
- */
-function _draftsFromHits_(hits: IssueHit[]): IssueDraft[] {
-  const hitsById: Map<string, IssueHit[]> = new Map();
-  for (const hit of hits) {
-    const id = _issueId_(hit.category, hit.event, hit.team);
-    hitsById.set(id, [...(hitsById.get(id) ?? []), hit]);
-  }
-  return [...hitsById.values()].map((grouped) => ({
-    category: grouped[0].category,
-    event: grouped[0].event,
-    team: grouped[0].team,
-    details: _issueDetails_(grouped),
-    responses: grouped.map((hit) => hit.response),
-  }));
-}
-
-/**
- * run the per-tournament checks for every team at every event ticked for Issues
- * pure, no google calls
- * low scores and low average also run for international events, for awareness
- * scores not submitted is skipped for international events
- *   the scoring teams there are not UKU teams
- *
- * @param responses  all responses, in date order
- * @param events     all events, in date order
- * @param settings   thresholds from the Issue Rules settings
- * @returns one draft per check per team per event that triggered
- */
-function _teamEventIssueDrafts_(
+function _deletedFindings_(
+  deleted: DeletedFormRecord[],
   responses: ResponseRecord[],
-  events: EventRecord[],
-  settings: IssueSettings,
-): IssueDraft[] {
-  const drafts: IssueDraft[] = [];
+  eventByUrl: Map<string, EventRecord>,
+): IssueFinding[] {
+  const formKey = (f: { spiritFormUrl: string; scorer: string; receiver: string; timestamp: Date | null }) =>
+    `${f.spiritFormUrl}|${_teamKey_(f.scorer)}|${_teamKey_(f.receiver)}|${f.timestamp?.getTime() ?? ""}`;
+  const kept = new Map(responses.filter((r) => r.timestamp !== null).map((r) => [formKey(r), r]));
 
-  for (const event of events.filter((e) => e.issues)) {
-    const atEvent = responses.filter((r) => r.fileId === event.fileId);
-
-    for (const received of _receivedByTeam_(atEvent).values()) {
-      const team = received[0].receiver;
-      const totals = received.map(_responseTotal_);
-
-      const low = received.filter((r) => _responseTotal_(r) <= settings.lowScoreAtOrBelow);
-      if (low.length >= settings.lowScoreCount) {
-        const lines = low.map((r) => `From ${r.scorer}:\nTotal ${_responseTotal_(r)}`);
-        drafts.push({
-          category: "twoLowScores",
-          event,
-          team,
-          details: `Number of scores: ${low.length}\n\n${lines.join("\n\n")}`,
-          responses: low,
-        });
-      }
-
-      const average = totals.reduce((a, b) => a + b, 0) / totals.length;
-      if (average < settings.lowAverageBelow) {
-        drafts.push({
-          category: "lowAverage",
-          event,
-          team,
-          details: _averageDetails_(received),
-          responses: received,
-        });
-      }
-
-      if (!event.international) {
-        const key = _teamKey_(team);
-        const submitted = atEvent.filter((r) => _teamKey_(r.scorer) === key);
-        const missing: string[] = [];
-        for (const opponent of new Set(received.map((r) => _teamKey_(r.scorer)))) {
-          const from = received.filter((r) => _teamKey_(r.scorer) === opponent);
-          const to = submitted.filter((r) => _teamKey_(r.receiver) === opponent).length;
-          for (let i = to; i < from.length; i++) missing.push(from[0].scorer);
-        }
-        if (missing.length > 0) {
-          const heading = `Received ${received.length}, submitted ${submitted.length}`;
-          drafts.push({
-            category: "notSubmitted",
-            event,
-            team,
-            details: `${heading}\n\nMissing for:\n${missing.join("\n")}`,
-            responses: [],
-          });
-        }
-      }
-    }
-  }
-  return drafts;
-}
-
-/**
- * one event's responses, indexed for the score columns
- */
-interface EventScores {
-  /** receiving team key → every response the team received there, in order */
-  received: Map<string, ResponseRecord[]>;
-  /** "scorer key|receiver key" → every response from that scorer to that receiver there, in order */
-  pairs: Map<string, ResponseRecord[]>;
-}
-
-/**
- * index every response by event, receiving team and scorer → receiver pair
- * built once per refresh, so each issue looks up its scores instead of searching every response
- * pure, never modifies its arguments
- *
- * @param responses  all responses
- * @returns file id → that event's responses, indexed
- */
-function _eventScores_(responses: ResponseRecord[]): Map<string, EventScores> {
-  const byEvent: Map<string, EventScores> = new Map();
-  for (const r of responses) {
-    let scores = byEvent.get(r.fileId);
-    if (!scores) {
-      scores = { received: new Map(), pairs: new Map() };
-      byEvent.set(r.fileId, scores);
-    }
-    const receiver = _teamKey_(r.receiver);
-    const pair = `${_teamKey_(r.scorer)}|${receiver}`;
-    const received = scores.received.get(receiver);
-    if (received) received.push(r);
-    else scores.received.set(receiver, [r]);
-    const between = scores.pairs.get(pair);
-    if (between) between.push(r);
-    else scores.pairs.set(pair, [r]);
-  }
-  return byEvent;
-}
-
-/**
- * the Received, Given and Tournament Average cells for one draft
- * received and given have one value per flagged response, comma separated
- * tournament average has one value per team that received a flagged score
- * all blank when nothing was flagged
- * pure, never modifies its arguments
- *
- * received: total of the flagged response
- * given: total of the reply, the receiver scoring the scorer at the same tournament
- *   a pair that played twice is matched first to first, second to second
- * tournament average: average received at the tournament by each team that received a flagged score
- *   the flagged responses are left out, except for average issues where the full average is the point
- *
- * @param draft   the draft
- * @param scores  every event's responses, from _eventScores_
- * @returns the three cells
- */
-function _issueScoreColumns_(
-  draft: IssueDraft,
-  scores: Map<string, EventScores>,
-): { received: string; given: string; tournamentAverage: string } {
-  if (draft.responses.length === 0) return { received: "", given: "", tournamentAverage: "" };
-
-  const atEvent = scores.get(draft.event.fileId);
-  const between = (scorer: string, receiver: string) =>
-    atEvent?.pairs.get(`${_teamKey_(scorer)}|${_teamKey_(receiver)}`) ?? [];
-  const isAverage = draft.category === "lowAverage" || draft.category === "monitoringBreach";
-  const excluded: Set<ResponseRecord> = new Set(isAverage ? [] : draft.responses);
-
-  const received = draft.responses.map((r) => String(_responseTotal_(r)));
-
-  const given = draft.responses.map((r) => {
-    const index = between(r.scorer, r.receiver).indexOf(r);
-    const reply = between(r.receiver, r.scorer)[index];
-    return reply ? String(_responseTotal_(reply)) : "–";
-  });
-
-  const receivers = [...new Set(draft.responses.map((r) => _teamKey_(r.receiver)))];
-  const tournamentAverage = receivers.map((key) => {
-    const totals = (atEvent?.received.get(key) ?? [])
-      .filter((x) => !excluded.has(x))
-      .map(_responseTotal_);
-    return totals.length === 0 ? "–" : (totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(2);
-  });
-
-  return { received: received.join(", "), given: given.join(", "), tournamentAverage: tournamentAverage.join(", ") };
-}
-
-/**
- * turn drafts into Issues rows
- * pure, never modifies its arguments
- * INTERNATIONAL is put above the details for international tournaments
- *
- * @param drafts     drafts from every check
- * @param responses  all responses, for the score columns
- * @param clubOf     team key → club, from the Teams tab
- * @param today      date to record as the Issue Date
- * @param settings   thresholds, for the Issue Category text
- * @returns issues in the order given
- */
-function _issueRecords_(
-  drafts: IssueDraft[],
-  responses: ResponseRecord[],
-  clubOf: Map<string, string>,
-  today: Date,
-  settings: IssueSettings,
-): IssueRecord[] {
-  const scores = _eventScores_(responses);
-  return drafts.map((draft) => ({
-    issueId: _issueId_(draft.category, draft.event, draft.team),
-    dateCreated: today,
-    club: clubOf.get(_teamKey_(draft.team)) ?? "",
-    category: ISSUE_CATEGORIES[draft.category].label(settings),
-    team: draft.team,
-    tournaments: draft.event.tournament,
-    tournamentDate: draft.event.date,
-    details: `${draft.event.international ? "INTERNATIONAL\n\n" : ""}${draft.details}`,
-    ..._issueScoreColumns_(draft, scores),
-    status: ISSUE_STATUSES[0],
-    email: "",
-    committeeMember: "",
-    notes: "",
-  }));
-}
-
-/**
- * find every monitoring breach, grouped by club
- * pure, no google calls
- * a breach is a team averaging below the threshold at a tournament
- *   two teams from one club at the same tournament are two breaches
- * skips events not ticked for Issues, and international events
- *
- * @param responses  all responses
- * @param events     all events, in date order
- * @param clubOf     team key → club, from the Teams tab
- * @param settings   thresholds from the Issue Rules settings
- * @returns club → its breaches in date order, teams without a club are skipped
- */
-function _clubBreaches_(
-  responses: ResponseRecord[],
-  events: EventRecord[],
-  clubOf: Map<string, string>,
-  settings: IssueSettings,
-): Map<string, ClubBreach[]> {
-  const breachesByClub: Map<string, ClubBreach[]> = new Map();
-  for (const event of events.filter((e) => e.issues && !e.international)) {
-    const atEvent = responses.filter((r) => r.fileId === event.fileId);
-    for (const [key, received] of _receivedByTeam_(atEvent)) {
-      const club = clubOf.get(key) ?? "";
-      const average = received.map(_responseTotal_).reduce((a, b) => a + b, 0) / received.length;
-      if (club === "" || average >= settings.monitoringAverageBelow) continue;
-      const breach = { club, team: received[0].receiver, event, responses: received, average };
-      breachesByClub.set(club, [...(breachesByClub.get(club) ?? []), breach]);
-    }
-  }
-  return breachesByClub;
-}
-
-/**
- * Issues rows for the club monitoring list
- * pure, never modifies its arguments
- * a club goes on the list at its second breach, one MONITORING row lists those breaches
- * every later breach gets its own MONITORING-BREACH row
- * a hub covers one season, so the MONITORING id is just the club
- *
- * @param breachesByClub  from _clubBreaches_
- * @param responses       all responses, for the score columns of breach rows
- * @param clubOf          team key → club, from the Teams tab
- * @param today           date to record as the Issue Date
- * @param settings        thresholds and which checks are enabled
- * @returns MONITORING rows, then MONITORING-BREACH rows
- */
-function _monitoringIssues_(
-  breachesByClub: Map<string, ClubBreach[]>,
-  responses: ResponseRecord[],
-  clubOf: Map<string, string>,
-  today: Date,
-  settings: IssueSettings,
-): IssueRecord[] {
-  if (!settings.enabled.monitoring) return [];
-  const needed = settings.monitoringBreaches;
-  const dateOf = (b: ClubBreach) => (b.event.date ? _isoDate_(b.event.date) : "no date");
-  const listed: IssueRecord[] = [];
-  const later: IssueDraft[] = [];
-
-  for (const [club, breaches] of breachesByClub) {
-    if (breaches.length < needed) continue;
-    const first = breaches.slice(0, needed);
-    const blocks = first.map((b) =>
-      `${b.event.tournament} (${dateOf(b)}):\n${b.team} averaged ${
-        b.average.toFixed(2)
-      } from ${b.responses.length} scores`
-    );
-    listed.push({
-      issueId: `${ISSUE_CATEGORIES.monitoring.code} | ${club}`,
-      dateCreated: today,
-      club,
-      category: ISSUE_CATEGORIES.monitoring.label(settings),
-      team: first.map((b) => b.team).join(", "),
-      tournaments: first.map((b) => b.event.tournament).join(", "),
-      tournamentDate: first.map(dateOf).join(", "),
-      details: `Number of breaches: ${first.length}\n\n${blocks.join("\n\n")}`,
-      received: "",
-      given: "",
-      tournamentAverage: first.map((b) => b.average.toFixed(2)).join(", "),
-      status: ISSUE_STATUSES[0],
-      email: "",
-      committeeMember: "",
-      notes: "",
+  const findings: IssueFinding[] = [];
+  for (const f of deleted) {
+    const event = eventByUrl.get(f.spiritFormUrl);
+    if (!event) continue;
+    const reason = f.reason === "" ? "no reason given" : f.reason;
+    const edited = f.timestamp === null ? undefined : kept.get(formKey(f));
+    const isEdit = edited !== undefined && edited.comment !== f.comment;
+    findings.push({
+      category: isEdit ? "redactedComment" : "deletedRow",
+      event,
+      team: f.scorer,
+      game: isEdit ? edited.game : "",
+      opponent: f.receiver,
+      text: `${isEdit ? "Comment redacted" : "Deleted row"}: ${reason}`,
+      comment: isEdit
+        ? `Original comment: ${_quoted_(f.comment) || "\"\""}\n\nRedacted comment: ${
+          _quoted_(edited.comment) || "\"\""
+        }`
+        : _quoted_(f.comment),
+      spirit: _spiritText_(f),
     });
-    for (const b of settings.enabled.monitoringBreach ? breaches.slice(needed) : []) {
-      later.push({
-        category: "monitoringBreach",
-        event: b.event,
-        team: b.team,
-        details: _averageDetails_(b.responses),
-        responses: b.responses,
-      });
+  }
+  return findings;
+}
+
+/**
+ * one Duplicate finding per scoring team → receiving team with a duplicate, listing every form for that pair
+ * pure, never modifies its arguments
+ *
+ * @param responses   every response, matched to games
+ * @param eventByUrl  Spirit Form URL → included event
+ * @returns the findings
+ */
+function _duplicateFindings_(responses: ResponseRecord[], eventByUrl: Map<string, EventRecord>): IssueFinding[] {
+  const pairs: Map<string, ResponseRecord[]> = new Map();
+  for (const r of responses) {
+    if (r.match !== MATCH_RESULTS.OK && r.match !== MATCH_RESULTS.DUPLICATE) continue;
+    const key = `${r.spiritFormUrl}|${_teamKey_(r.scorer)}|${_teamKey_(r.receiver)}`;
+    pairs.set(key, [...(pairs.get(key) ?? []), r]);
+  }
+  const findings: IssueFinding[] = [];
+  for (const forms of pairs.values()) {
+    const event = eventByUrl.get(forms[0].spiritFormUrl);
+    if (!event || !forms.some((r) => r.match === MATCH_RESULTS.DUPLICATE)) continue;
+    const lines = forms.map((r) => [_spiritText_(r), _quoted_(r.comment)].filter((x) => x !== "").join(" "));
+    findings.push({
+      category: "duplicate",
+      event,
+      team: forms[0].scorer,
+      game: "",
+      opponent: forms[0].receiver,
+      text: "More responses submitted than games played.\n\n"
+        + `Games played: ${forms.filter((r) => r.counted).length}.\n\n`
+        + `Responses:\n${lines.join("\n")}`,
+      comment: "",
+      spirit: "",
+    });
+  }
+  return findings;
+}
+
+/**
+ * every counted total at or below the low score threshold, by tournament and receiving team
+ * pure, never modifies its arguments
+ *
+ * @param responses  every response
+ * @param settings   thresholds
+ * @returns "Spirit Form URL|receiver key" → its low scores in the order given
+ */
+function _lowScoresByReceiver_(responses: ResponseRecord[], settings: IssueSettings): Map<string, ResponseRecord[]> {
+  const low: Map<string, ResponseRecord[]> = new Map();
+  for (const r of responses) {
+    if (!r.counted || _responseTotal_(r) > settings.lowScoreAtOrBelow) continue;
+    const key = `${r.spiritFormUrl}|${_teamKey_(r.receiver)}`;
+    low.set(key, [...(low.get(key) ?? []), r]);
+  }
+  return low;
+}
+
+/**
+ * Details text of a low score, with the team's other low scores at the tournament when it has any,
+ * as two or more meets the policy
+ *
+ * @param r         the low score
+ * @param allLow    every low score the team received at the tournament, including this one
+ * @param settings  thresholds
+ * @returns the text
+ */
+function _lowScoreText_(r: ResponseRecord, allLow: ResponseRecord[], settings: IssueSettings): string {
+  const text = `Received a total of ${settings.lowScoreAtOrBelow} or below`;
+  const others = allLow.filter((x) => x !== r);
+  if (others.length === 0) return text;
+  const list = others.map((x) => `${_responseTotal_(x)} from ${x.scorer}${x.game === "" ? "" : ` (${x.game})`}`);
+  const met = allLow.length >= settings.lowScoreCount ? `, ${settings.lowScoreCount} or more is policy` : "";
+  return `${text}\n\nAlso received ${list.join(", ")}: ${allLow.length} at this tournament${met}`;
+}
+
+/**
+ * one team's average at one tournament
+ */
+interface TeamAverage {
+  /** the tournament */
+  event: EventRecord;
+  /** the team */
+  team: string;
+  /** counted totals it received */
+  totals: number[];
+  /** their average */
+  average: number;
+}
+
+/**
+ * every team's average at every tournament, from counted scores
+ * pure, never modifies its arguments
+ *
+ * @param responses  every response
+ * @param events     events with Include Results ticked
+ * @returns one average per team per tournament
+ */
+function _teamAverages_(responses: ResponseRecord[], events: EventRecord[]): TeamAverage[] {
+  const averages: TeamAverage[] = [];
+  for (const event of events) {
+    const received: Map<string, ResponseRecord[]> = new Map();
+    for (const r of responses) {
+      if (r.spiritFormUrl !== event.spiritFormUrl || !r.counted) continue;
+      const key = _teamKey_(r.receiver);
+      received.set(key, [...(received.get(key) ?? []), r]);
+    }
+    for (const forms of received.values()) {
+      const totals = forms.map(_responseTotal_);
+      const average = totals.reduce((a, b) => a + b, 0) / totals.length;
+      averages.push({ event, team: forms[0].receiver, totals, average });
     }
   }
-  return [...listed, ..._issueRecords_(later, responses, clubOf, today, settings)];
+  return averages;
+}
+
+/**
+ * Details text of an average issue: the average, then the club's earlier averages below either threshold
+ * earlier means a tournament with an earlier start date
+ *
+ * @param average   the team's average at the tournament
+ * @param all       every team's average at every tournament
+ * @param clubOf    team key → club
+ * @param settings  thresholds
+ * @returns the text
+ */
+function _averageText_(
+  average: TeamAverage,
+  all: TeamAverage[],
+  clubOf: Map<string, string>,
+  settings: IssueSettings,
+): string {
+  const below = average.average < settings.immediateAverageBelow
+    ? settings.immediateAverageBelow
+    : settings.monitoringAverageBelow;
+  const text = `Average of ${average.average.toFixed(2)} from ${average.totals.length} scores, below ${below}`
+    + `\n\nScores: ${average.totals.join(", ")}`;
+  const club = clubOf.get(_teamKey_(average.team)) ?? "";
+  const start = average.event.startDate;
+  if (club === "" || !start) return text;
+  const earlier = all
+    .filter((a) =>
+      a.event.startDate !== null
+      && a.event.startDate.getTime() < start.getTime()
+      && clubOf.get(_teamKey_(a.team)) === club
+      && a.average < settings.monitoringAverageBelow
+    )
+    .sort((a, b) => _compareDates_(a.event.startDate, b.event.startDate));
+  if (earlier.length === 0) {
+    return `${text}\n\nNo earlier averages below ${settings.monitoringAverageBelow} this season for ${club}`;
+  }
+  const lines = earlier.map((a) =>
+    `- ${a.average < settings.immediateAverageBelow ? "Immediate" : "Monitoring"}: ${a.team} averaged `
+    + `${a.average.toFixed(2)} at ${a.event.eventName} (${a.event.startDate ? _isoDate_(a.event.startDate) : ""})`
+  );
+  return `${text}\n\nEarlier this season for ${club}:\n${lines.join("\n")}`;
+}
+
+/**
+ * the Tournament checks of every team at every tournament
+ * pure, no google calls
+ *
+ * submission checks need the tournament's schedule, and skip international tournaments
+ *   a team's games are the played games on the tournament's schedule,
+ *   the teams are those in the tournament's responses, so divisions sharing a schedule stay apart
+ * average checks use counted scores, a team gets at most one of Immediate and Monitoring,
+ *   with the club's earlier averages below either threshold this season as context
+ *
+ * @param responses  every response, matched to games
+ * @param games      every game, with who submitted
+ * @param events     events with Include Results ticked, in date order
+ * @param clubOf     team key → club, from the Teams tab
+ * @param settings   thresholds from the Issue Rules settings
+ * @returns one finding per team per check
+ */
+function _tournamentFindings_(
+  responses: ResponseRecord[],
+  games: GameRecord[],
+  events: EventRecord[],
+  clubOf: Map<string, string>,
+  settings: IssueSettings,
+): IssueFinding[] {
+  const findings: IssueFinding[] = [];
+  const averages = _teamAverages_(responses, events);
+
+  for (const event of events) {
+    const atEvent = responses.filter((r) => r.spiritFormUrl === event.spiritFormUrl);
+    const teams: Map<string, string> = new Map();
+    for (const r of atEvent) {
+      if (!teams.has(_teamKey_(r.receiver))) teams.set(_teamKey_(r.receiver), r.receiver);
+      if (!event.international && !teams.has(_teamKey_(r.scorer))) teams.set(_teamKey_(r.scorer), r.scorer);
+    }
+    const scheduled = atEvent.some((r) => r.match !== MATCH_RESULTS.NO_SCHEDULE);
+    const eventGames = games.filter((g) => g.scheduleUrl === event.scheduleUrl && g.played);
+
+    for (const [key, team] of teams) {
+      const tournament = (category: IssueCategoryKey, text: string) =>
+        findings.push({ category, event, team, game: "", opponent: "", text, comment: "", spirit: "" });
+
+      if (scheduled && !event.international) {
+        const isTeam1 = (g: GameRecord) => _teamKey_(g.team1) === key;
+        const played = eventGames.filter((g) => isTeam1(g) || _teamKey_(g.team2) === key);
+        const missing = played.filter((g) => !(isTeam1(g) ? g.team1Submitted : g.team2Submitted));
+        const submitted = played.length - missing.length;
+        const percent = played.length === 0 ? 100 : (100 * submitted) / played.length;
+        if (played.length > 0 && (submitted === 0 || percent < settings.submittedPercentBelow)) {
+          const opponentOf = (g: GameRecord) => (isTeam1(g) ? g.team2 : g.team1);
+          const done = played.filter((g) => !missing.includes(g)).map(opponentOf);
+          const missingList = `Missing: ${missing.map(opponentOf).join(", ")}`;
+          if (submitted === 0) {
+            tournament("noScores", `0/${played.length} spirit scores submitted\n\n${missingList}`);
+          } else {
+            tournament(
+              "underSubmitted",
+              `${submitted}/${played.length} spirit scores submitted, ${Math.round(percent)}%. `
+                + `Less than ${settings.submittedPercentBelow}%\n\nSubmitted: ${done.join(", ")}\n\n${missingList}`,
+            );
+          }
+        }
+      }
+
+      const average = averages.find((a) => a.event === event && _teamKey_(a.team) === key);
+      if (!average) continue;
+      if (average.average < settings.immediateAverageBelow) {
+        tournament("immediateAverage", _averageText_(average, averages, clubOf, settings));
+      } else if (average.average < settings.monitoringAverageBelow) {
+        tournament("monitoringAverage", _averageText_(average, averages, clubOf, settings));
+      }
+    }
+  }
+  return findings;
+}
+
+/**
+ * the issue id of a finding
+ * readable, and the same every run, so a finding always joins the same issue
+ *
+ * @param finding  the finding
+ * @returns e.g. "PLAY | 2026-10-31 NUXIR 2026-27 | A1vA3 | Durham 1", "SCORING | ... | v York 1 | Leeds 2"
+ *   or "NO-SCORES | 2026-10-31 NUXIR 2026-27 | Durham 1"
+ */
+function _issueId_(finding: IssueFinding): string {
+  const check = ISSUE_CATEGORIES[finding.category];
+  const date = finding.event.startDate ? _isoDate_(finding.event.startDate) : "no date";
+  const where = `${date} ${finding.event.eventName}`;
+  if (check.level === ISSUE_LEVELS.TOURNAMENT) return `${check.code} | ${where} | ${finding.team}`;
+  const game = finding.game === "" ? `v ${finding.opponent}` : finding.game;
+  return `${check.level.toUpperCase()} | ${where} | ${game} | ${finding.team}`;
+}
+
+/**
+ * Details for some findings of one issue: each finding's text, a blank line between them
+ * pure, never modifies its arguments
+ *
+ * @param findings  findings of the issue
+ * @returns the text
+ */
+function _findingsDetails_(findings: IssueFinding[]): string {
+  return [...new Set(findings.map((f) => f.text).filter((text) => text !== ""))].join("\n\n");
+}
+
+/**
+ * an issue found now, with its findings by check code
+ */
+interface FoundIssue {
+  /** the issue as it would be added */
+  issue: IssueRecord;
+  /** check code → its findings */
+  findings: Map<string, IssueFinding[]>;
+}
+
+/**
+ * a game's result from one team's side
+ * pure, no google calls
+ *
+ * @param game  the game, undefined when there is none
+ * @param team  the team the result is for
+ * @returns e.g. "15-12W", "12-15L" or "10-10D", "" without a game or both scores
+ */
+function _scoreText_(game: GameRecord | undefined, team: string): string {
+  if (!game || game.score1 === null || game.score2 === null) return "";
+  const isTeam1 = _teamKey_(game.team1) === _teamKey_(team);
+  const own = isTeam1 ? game.score1 : game.score2;
+  const other = isTeam1 ? game.score2 : game.score1;
+  return `${own}-${other}${own > other ? "W" : own < other ? "L" : "D"}`;
+}
+
+/**
+ * group findings into issues, one per Issue ID
+ * pure, never modifies its arguments
+ *
+ * @param findings  every finding, from enabled checks
+ * @param games     every game, for the Score column
+ * @param clubOf    team key → club, from the Teams tab
+ * @param today     date to record as the Issue Date
+ * @returns issues in the order first found
+ */
+function _issuesFromFindings_(
+  findings: IssueFinding[],
+  games: GameRecord[],
+  clubOf: Map<string, string>,
+  today: Date,
+): FoundIssue[] {
+  const gameOf = new Map(games.map((g) => [`${g.scheduleUrl}|${g.game}`, g]));
+  const byId: Map<string, IssueFinding[]> = new Map();
+  for (const f of findings) {
+    const id = _issueId_(f);
+    byId.set(id, [...(byId.get(id) ?? []), f]);
+  }
+  return [...byId].map(([issueId, grouped]) => {
+    const byCode: Map<string, IssueFinding[]> = new Map();
+    for (const f of grouped) {
+      const code = ISSUE_CATEGORIES[f.category].code;
+      byCode.set(code, [...(byCode.get(code) ?? []), f]);
+    }
+    const first = grouped[0];
+    return {
+      issue: {
+        issueId,
+        dateCreated: today,
+        level: ISSUE_CATEGORIES[first.category].level,
+        checks: [...byCode.keys()].join(", "),
+        tournament: first.event.eventName,
+        tournamentDate: first.event.startDate,
+        game: first.game,
+        opponent: first.opponent,
+        score: first.game === "" ? "" : _scoreText_(gameOf.get(`${first.event.scheduleUrl}|${first.game}`), first.team),
+        spirit: grouped.find((f) => f.spirit !== "")?.spirit ?? "",
+        comment: grouped.find((f) => f.comment !== "")?.comment ?? "",
+        team: first.team,
+        club: clubOf.get(_teamKey_(first.team)) ?? "",
+        details: `${first.event.international ? "INTERNATIONAL\n\n" : ""}${_findingsDetails_(grouped)}`,
+        status: ISSUE_STATUSES[0],
+        emailAddress: "",
+        emailSubject: "",
+        emailBody: "",
+        committeeMember: "",
+        notes: "",
+      },
+      findings: byCode,
+    };
+  });
+}
+
+/**
+ * the codes in a Checks cell
+ *
+ * @param checks  e.g. "LOW-SCORE, DANGEROUS-PLAY"
+ * @returns the codes
+ */
+function _checkCodes_(checks: unknown): string[] {
+  return String(checks ?? "").split(",").map((code) => code.trim()).filter((code) => code !== "");
+}
+
+/**
+ * the Checks, Details and Status of existing issues after adding newly found checks
+ * pure, never modifies its arguments
+ * an issue with a new check gets it added to Checks and its section to Details, and goes back to NEW if CLOSED
+ *
+ * @param existing  existing issues by row: Issue ID, Checks, Details and Status
+ * @param found     Issue ID → findings by check code, for every issue found now
+ * @returns the three columns for every existing row, and how many issues changed
+ */
+function _mergeIssues_(
+  existing: { issueId: string; checks: string; details: string; status: string }[],
+  found: Map<string, Map<string, IssueFinding[]>>,
+): { rows: { checks: string; details: string; status: string }[]; updated: number } {
+  let updated = 0;
+  const rows = existing.map((row) => {
+    const findings = found.get(row.issueId);
+    if (!findings) return row;
+    const have = new Set(_checkCodes_(row.checks));
+    const added = [...findings].filter(([code]) => !have.has(code));
+    if (added.length === 0) return row;
+    updated++;
+    return {
+      checks: [..._checkCodes_(row.checks), ...added.map(([code]) => code)].join(", "),
+      details: [row.details, _findingsDetails_(added.flatMap(([, f]) => f))].filter((t) => t !== "").join("\n\n"),
+      status: row.status.trim().toUpperCase() === "CLOSED" ? ISSUE_STATUSES[0] : row.status,
+    };
+  });
+  return { rows, updated };
+}
+
+/**
+ * formula for the Club cell of one Issues row: the team's club on the Teams tab
+ * a formula, so a Club Override or Name Rule change shows on every issue straight away
+ *
+ * @param row  1-based sheet row the formula is for
+ * @returns the formula
+ */
+function _issueClubFormula_(row: number): string {
+  const team = `$${_columnLetter_(ISSUE_KEYS.indexOf("team") + 1)}${row}`;
+  const teams = (key: keyof typeof TEAM_HEADERS) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
+  return `=IFERROR(XLOOKUP(${team}, ${teams("team")}, ${teams("club")}), "")`;
 }
 
 /**
  * @returns the Issues tab, created on first use
  */
 function _getIssuesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const headers: readonly string[] = Object.values(ISSUE_HEADERS);
-  _upgradeIssuesEmailColumn_(ss.getSheetByName(ISSUES_SHEET));
-  return _getOrCreateSheet_(ss, ISSUES_SHEET, headers, ISSUES_INFO);
+  return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), ISSUES_SHEET, headers, ISSUES_INFO);
 }
 
 /**
- * add the Email column after Status on hubs before 0.13, and update the info row
- * does nothing to a tab that already has it, or does not exist
+ * add new issues, add newly found checks to existing ones, then put the tab back in ISSUE_SORT order
+ * existing rows only ever have Checks, Details and Status written, see _mergeIssues_
  *
- * @param sheet  the Issues tab, null if it does not exist yet
+ * @param found  every issue found now
+ * @returns how many issues were added and how many were updated
  */
-function _upgradeIssuesEmailColumn_(sheet: GoogleAppsScript.Spreadsheet.Sheet | null) {
-  if (!sheet) return;
-  const column = ISSUE_KEYS.indexOf("email") + 1;
-  if (
-    sheet.getMaxColumns() < column
-    || sheet.getRange(HEADER_ROW, column).getValue() !== ISSUE_HEADERS.committeeMember
-  ) return;
-  sheet.insertColumnBefore(column);
-  sheet.getRange(HEADER_ROW, column).setValue(ISSUE_HEADERS.email).setFontWeight("bold");
-  const rows = sheet.getMaxRows() - HEADER_ROW;
-  // a new column copies its neighbour's formatting, including the Status dropdown
-  if (rows > 0) sheet.getRange(DATA_ROW, column, rows, 1).clearDataValidations().clearContent();
-  sheet.getRange(INFO_ROW, 1).setValue(ISSUES_INFO);
-  const lastRow = sheet.getLastRow();
-  _applyFilter_(sheet, Math.max(lastRow - HEADER_ROW, 0), ISSUE_KEYS.length);
-}
-
-/**
- * add issues that are not already on the Issues tab, at the bottom
- * existing rows are never read back or rewritten, only their Issue IDs are checked
- *
- * @param issues  every issue that should exist
- * @returns how many new issues were added
- */
-function _appendIssues_(issues: IssueRecord[]): number {
+function _writeIssues_(found: FoundIssue[]): { added: number; updated: number } {
   const sheet = _getIssuesSheet_();
   const lastRow = sheet.getLastRow();
-  const idColumn = ISSUE_KEYS.indexOf("issueId") + 1;
-  const existingIds = new Set(
-    lastRow < DATA_ROW
-      ? []
-      : sheet.getRange(DATA_ROW, idColumn, lastRow - HEADER_ROW, 1).getValues().map((r) => String(r[0])),
-  );
-
-  const added = issues.filter((issue) => !existingIds.has(issue.issueId));
-  if (added.length === 0) return 0;
-
-  const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
-  _fitSheet_(sheet, firstNew + added.length - 1, ISSUE_KEYS.length);
-  sheet.getRange(firstNew, 1, added.length, ISSUE_KEYS.length).setValues(
-    added.map((issue) => ISSUE_KEYS.map((key) => issue[key] ?? "")),
-  );
-
   const column = (key: keyof typeof ISSUE_HEADERS) => ISSUE_KEYS.indexOf(key) + 1;
-  const statusRule = SpreadsheetApp.newDataValidation().requireValueInList([...ISSUE_STATUSES], true).build();
-  sheet.getRange(firstNew, column("status"), added.length, 1).setDataValidation(statusRule);
-  for (const key of ["dateCreated", "tournamentDate"] as const) {
-    sheet.getRange(firstNew, column(key), added.length, 1).setNumberFormat("yyyy-mm-dd");
+  const rowCount = Math.max(lastRow - HEADER_ROW, 0);
+  const read = (key: keyof typeof ISSUE_HEADERS) =>
+    rowCount === 0 ? [] : sheet.getRange(DATA_ROW, column(key), rowCount, 1).getValues().map((r) => String(r[0]));
+  const ids = read("issueId");
+  const checks = read("checks");
+  const details = read("details");
+  const statuses = read("status");
+
+  const merged = _mergeIssues_(
+    ids.map((issueId, i) => ({ issueId, checks: checks[i], details: details[i], status: statuses[i] })),
+    new Map(found.map((f) => [f.issue.issueId, f.findings])),
+  );
+  if (merged.updated > 0) {
+    for (const key of ["checks", "details", "status"] as const) {
+      sheet.getRange(DATA_ROW, column(key), rowCount, 1).setValues(merged.rows.map((r) => [r[key]]));
+    }
   }
-  _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, ISSUE_KEYS.length);
-  return added.length;
+
+  const existingIds = new Set(ids);
+  const added = found.map((f) => f.issue).filter((issue) => !existingIds.has(issue.issueId));
+  if (added.length > 0) {
+    const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
+    _fitSheet_(sheet, firstNew + added.length - 1, ISSUE_KEYS.length);
+    sheet.getRange(firstNew, 1, added.length, ISSUE_KEYS.length).setValues(
+      added.map((issue, i) =>
+        ISSUE_KEYS.map((key) => {
+          if (key === "club") return _issueClubFormula_(firstNew + i);
+          if (key === "emailAddress") return _emailAddressFormula_(firstNew + i);
+          return issue[key] ?? "";
+        })
+      ),
+    );
+    const statusRule = SpreadsheetApp.newDataValidation().requireValueInList([...ISSUE_STATUSES], true).build();
+    sheet.getRange(firstNew, column("status"), added.length, 1).setDataValidation(statusRule);
+    for (const key of ["dateCreated", "tournamentDate"] as const) {
+      sheet.getRange(firstNew, column(key), added.length, 1).setNumberFormat("yyyy-mm-dd");
+    }
+    _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, ISSUE_KEYS.length);
+    _styleRows_(sheet, firstNew, added.length, ISSUE_KEYS.length, ISSUE_EDITABLE);
+  }
+  _styleRows_(sheet, HEADER_ROW, 1, ISSUE_KEYS.length, ISSUE_EDITABLE);
+  const total = rowCount + added.length;
+  if (total > 1) {
+    sheet
+      .getRange(DATA_ROW, 1, total, ISSUE_KEYS.length)
+      .sort(ISSUE_SORT.map((key) => ({ column: column(key), ascending: true })));
+  }
+  return { added: added.length, updated: merged.updated };
 }
 
 /**
- * run every check on what is already in the spreadsheet and add the new issues, no files are read
- * use after Refresh Results, or after changing Issues, International, a club override or an issue rule
- * tabs may have been sorted by hand, so events and responses are put back in date order first
+ * run every check on what is already in the spreadsheet, then add new issues and new checks to existing issues
+ * no files are read, run by Refresh Results and Issues straight after importing
  * reads the clubs from the Teams tab and the thresholds from the Issue Rules settings, disabled checks add nothing
  *
  * @returns a one-line summary
  */
 function _refreshIssues_(): string {
-  const { events, responses, settings, clubOf } = _timed_("read for issues", () => {
-    const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
-    const responses = _sortResponses_(_readResponses_(_getResponsesSheet_()), events);
-    return { events, responses, settings: _readIssueSettings_(), clubOf: _readTeamClubs_() };
+  const { events, responses, games, deleted, settings, clubOf } = _timed_("read for issues", () => {
+    const events = _sortEvents_(_readEvents_(_getEventsSheet_())).filter((e) => e.includeResults);
+    return {
+      events,
+      responses: _sortResponses_(_readResponses_(_getResponsesSheet_()), events),
+      games: _readGames_(_getGamesSheet_()),
+      deleted: _readDeletedForms_(_getDeletedFormsSheet_()),
+      settings: _readIssueSettings_(),
+      clubOf: _readTeamClubs_(),
+    };
   });
-  if (responses.length === 0) return "No results found: run Refresh Results first";
+  if (responses.length === 0) return "No results to check: tick Include Results on the Tournaments tab";
 
-  const issues = _timed_("check issues", () => {
-    const drafts = [
-      ..._draftsFromHits_(_responseIssueHits_(responses, events, settings)),
-      ..._teamEventIssueDrafts_(responses, events, settings),
-    ].filter((draft) => settings.enabled[draft.category]);
-    const today = new Date();
-    const breaches = _clubBreaches_(responses, events, clubOf, settings);
-    return [
-      ..._issueRecords_(drafts, responses, clubOf, today, settings),
-      ..._monitoringIssues_(breaches, responses, clubOf, today, settings),
-    ];
+  const found = _timed_("check issues", () => {
+    const findings = [
+      ..._gameFindings_(responses, deleted, events, settings),
+      ..._tournamentFindings_(responses, games, events, clubOf, settings),
+    ].filter((f) => settings.enabled[f.category]);
+    return _issuesFromFindings_(findings, games, clubOf, new Date());
   });
-  const added = _timed_("write issues", () => _appendIssues_(issues));
-  const emails = _timed_("email links", () => {
+  const { added, updated } = _timed_("write issues", () => _writeIssues_(found));
+  const emails = _timed_("email drafts", () => {
     try {
-      return _updateEmailLinks_();
+      return _updateEmailDrafts_();
     } catch (e) {
-      return `email links not updated: ${e instanceof Error ? e.message : String(e)}`;
+      return `email drafts not updated: ${e instanceof Error ? e.message : String(e)}`;
     }
   });
-  return `${added} new issue(s); ${emails}`;
+  return `${added} new issue(s), ${updated} updated; ${emails}`;
 }

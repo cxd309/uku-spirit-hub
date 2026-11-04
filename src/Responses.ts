@@ -8,9 +8,12 @@ const RESPONSES_SHEET = "Results";
  * what the tab is, what to edit, how it refreshes
  */
 const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
-  + "DO NOT EDIT, this is all regenerated on refresh. Sort and filter is safe but will be overwritten on refresh\n\n"
+  + "Each form is matched to a game on the Games tab. Counted is unticked for forms that do not count: "
+  + "Match says Duplicate (more forms than games, the one with a comment then the latest counts), "
+  + "Self score or No such game. No schedule means the tournament's schedule was not imported, so nothing is matched\n\n"
+  + "DO NOT EDIT, this is all regenerated on refresh. Filters are kept through a refresh, sorting is put back to the hub's order\n\n"
   + "Report Team is the Receiving Team without trailing brackets, e.g. Birmingham 1 (WW4) is Birmingham 1, for the Club Report\n\n"
-  + "To Refresh run \"Refresh Results\"";
+  + "To Refresh run \"Refresh Results and Issues\"";
 
 /**
  * responses tab columns, in order
@@ -20,12 +23,11 @@ const RESPONSES_INFO = "All spirit scores across all tournaments\n\n"
  */
 const RESPONSE_HEADERS = Object.freeze(
   {
+    spiritFormUrl: "Spirit Form URL",
     date: "Date",
-    fileId: "File ID",
     tournament: "Tournament",
     sourceRow: "Source Row",
-    spiritAward: "Spirit Award",
-    countsForAward: "Counts for Award",
+    timestamp: "Timestamp",
     scorer: "Scoring Team",
     scorerClub: "Scoring Club",
     receiver: "Receiving Team",
@@ -37,6 +39,11 @@ const RESPONSE_HEADERS = Object.freeze(
     communication: "Communication",
     total: "Total",
     comment: "Comment",
+    game: "Game",
+    counted: "Counted",
+    match: "Match",
+    spiritAward: "Spirit Award",
+    countsForAward: "Counts for Award",
     reportTeam: "Report Team",
   } as const,
 );
@@ -57,21 +64,23 @@ const RESPONSE_FORMULAS: Readonly<
   Partial<Record<keyof typeof RESPONSE_HEADERS, (row: number) => string>>
 > = Object.freeze({
   date: (row: number) => {
-    const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
+    const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("spiritFormUrl") + 1)}${row}`;
     const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("date")}), "")`;
+    return `=IFERROR(XLOOKUP(${id}, ${events("spiritFormUrl")}, ${events("startDate")}), "")`;
   },
   scorerClub: (row: number) => _responseClubFormula_(row, "scorer"),
   receiverClub: (row: number) => _responseClubFormula_(row, "receiver"),
   tournament: _tournamentFormula_,
   spiritAward: (row: number) => {
-    const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
+    const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("spiritFormUrl") + 1)}${row}`;
     const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-    return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("spiritAward")}), FALSE)`;
+    const lookup = (key: keyof typeof EVENT_HEADERS) => `XLOOKUP(${id}, ${events("spiritFormUrl")}, ${events(key)})`;
+    const international = _readAwardSettings_().includeInternational ? "TRUE" : `NOT(${lookup("international")})`;
+    return `=IFERROR(AND(${lookup("includeResults")}, ${international}), FALSE)`;
   },
   countsForAward: (row: number) => {
     const cell = (key: keyof typeof RESPONSE_HEADERS) => `$${_columnLetter_(RESPONSE_KEYS.indexOf(key) + 1)}${row}`;
-    return `=AND(${cell("spiritAward")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
+    return `=AND(${cell("spiritAward")}, ${cell("counted")}, ${cell("scorerClub")}<>${cell("receiverClub")})`;
   },
   reportTeam: (row: number) => {
     const receiver = `$${_columnLetter_(RESPONSE_KEYS.indexOf("receiver") + 1)}${row}`;
@@ -89,13 +98,15 @@ const RESPONSE_FORMULAS: Readonly<
 const RESPONSE_KEYS = Object.keys(RESPONSE_HEADERS) as (keyof typeof RESPONSE_HEADERS)[];
 
 /**
- * one row of the responses tab aone team's scores for one opponent at one event
+ * one row of the responses tab: one team's scores for one opponent at one event
  */
 interface ResponseRecord {
-  /** file ID of the event (links to the Events tab) */
-  fileId: string;
-  /** row in the source breakdown tab */
+  /** link to the tournament's Form Responses (links to the Events tab) */
+  spiritFormUrl: string;
+  /** row in the Form Responses' responses tab */
   sourceRow: number;
+  /** when the form was submitted, null if blank */
+  timestamp: Date | null;
   /** team giving the score */
   scorer: string;
   /** team receiving the score */
@@ -112,6 +123,12 @@ interface ResponseRecord {
   communication: number;
   /** comment; "" if none */
   comment: string;
+  /** game code it was matched to, "" if none */
+  game: string;
+  /** whether this form counts, false for duplicates, self scores and forms with no game */
+  counted: boolean;
+  /** one of MATCH_RESULTS */
+  match: string;
 }
 
 /**
@@ -121,8 +138,9 @@ interface ResponseRecord {
 function _responseFromRow_(row: unknown[]): ResponseRecord {
   const cell = (key: keyof typeof RESPONSE_HEADERS) => row[RESPONSE_KEYS.indexOf(key)];
   return {
-    fileId: String(cell("fileId")),
+    spiritFormUrl: String(cell("spiritFormUrl")),
     sourceRow: Number(cell("sourceRow")),
+    timestamp: cell("timestamp") instanceof Date ? cell("timestamp") as Date : null,
     scorer: String(cell("scorer")),
     receiver: String(cell("receiver")),
     rules: Number(cell("rules")),
@@ -131,6 +149,9 @@ function _responseFromRow_(row: unknown[]): ResponseRecord {
     attitude: Number(cell("attitude")),
     communication: Number(cell("communication")),
     comment: String(cell("comment")),
+    game: String(cell("game")),
+    counted: cell("counted") === true,
+    match: String(cell("match")),
   };
 }
 
@@ -139,15 +160,19 @@ function _responseFromRow_(row: unknown[]): ResponseRecord {
  * @returns values in RESPONSE_KEYS order, "" in formula columns (filled by _fillFormulaColumns_)
  */
 function _responseToRow_(response: ResponseRecord): unknown[] {
-  return RESPONSE_KEYS.map((key) => RESPONSE_FORMULAS[key] ? "" : response[key as keyof ResponseRecord]);
+  return RESPONSE_KEYS.map((key) => {
+    if (RESPONSE_FORMULAS[key]) return "";
+    const value = response[key as keyof ResponseRecord];
+    return value === null ? "" : value;
+  });
 }
 /**
  * the parts of a response that say which teams played at which tournament
  */
-type ResponseTeams = Pick<ResponseRecord, "fileId" | "scorer" | "receiver">;
+type ResponseTeams = Pick<ResponseRecord, "spiritFormUrl" | "scorer" | "receiver">;
 
 /**
- * read only the File ID, Scoring Team and Receiving Team columns of the Responses tab
+ * read only the Spirit Form URL, Scoring Team and Receiving Team columns of the Responses tab
  * plain values, so this never waits for the tab's formulas to calculate
  *
  * @param sheet  the Responses tab
@@ -158,12 +183,12 @@ function _readResponseTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): Respons
   if (rowCount < 1) return [];
   const column = (key: keyof typeof RESPONSE_HEADERS) =>
     sheet.getRange(DATA_ROW, RESPONSE_KEYS.indexOf(key) + 1, rowCount, 1).getValues().map((row) => String(row[0]));
-  const fileIds = column("fileId");
+  const urls = column("spiritFormUrl");
   const scorers = column("scorer");
   const receivers = column("receiver");
-  return fileIds
-    .map((fileId, i) => ({ fileId, scorer: scorers[i], receiver: receivers[i] }))
-    .filter((r) => r.fileId !== "");
+  return urls
+    .map((spiritFormUrl, i) => ({ spiritFormUrl, scorer: scorers[i], receiver: receivers[i] }))
+    .filter((r) => r.spiritFormUrl !== "");
 }
 
 /**
@@ -171,35 +196,7 @@ function _readResponseTeams_(sheet: GoogleAppsScript.Spreadsheet.Sheet): Respons
  */
 function _getResponsesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
   const headers: readonly string[] = Object.values(RESPONSE_HEADERS);
-  const existing = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESPONSES_SHEET);
-  if (existing) _upgradeResponsesSheet_(existing);
   return _getOrCreateSheet_(SpreadsheetApp.getActiveSpreadsheet(), RESPONSES_SHEET, headers, RESPONSES_INFO);
-}
-
-/**
- * bring a Results tab from before 0.12 up to the current columns
- * the Included column is renamed Spirit Award, it already looks up the same Tournaments column
- * the Report Team column is added at the end and filled
- * does nothing to a tab that is already current
- *
- * @param sheet  the Responses tab
- */
-function _upgradeResponsesSheet_(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
-  const spiritAward = RESPONSE_KEYS.indexOf("spiritAward") + 1;
-  const reportTeam = RESPONSE_KEYS.indexOf("reportTeam") + 1;
-  const headers = sheet.getRange(HEADER_ROW, 1, 1, Math.min(sheet.getMaxColumns(), reportTeam)).getValues()[0];
-  if (headers[spiritAward - 1] === "Included") {
-    sheet.getRange(HEADER_ROW, spiritAward).setValue(RESPONSE_HEADERS.spiritAward);
-  }
-  if (headers.length === reportTeam - 1 && headers[reportTeam - 2] === RESPONSE_HEADERS.comment) {
-    sheet.insertColumnAfter(reportTeam - 1);
-    sheet.getRange(HEADER_ROW, reportTeam).setValue(RESPONSE_HEADERS.reportTeam).setFontWeight("bold");
-    const rows = sheet.getLastRow() - HEADER_ROW;
-    if (rows > 0) {
-      sheet.getRange(DATA_ROW, reportTeam, rows, 1).setFormula(RESPONSE_FORMULAS.reportTeam!(DATA_ROW));
-    }
-    _applyFilter_(sheet, Math.max(rows, 0), RESPONSE_KEYS.length);
-  }
 }
 
 /**
@@ -213,7 +210,7 @@ function _readResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet): ResponseRec
     .getRange(DATA_ROW, 1, rowCount, RESPONSE_KEYS.length)
     .getValues()
     .map(_responseFromRow_)
-    .filter((r) => r.fileId !== "");
+    .filter((r) => r.spiritFormUrl !== "");
 }
 
 /**
@@ -228,20 +225,26 @@ function _writeResponses_(sheet: GoogleAppsScript.Spreadsheet.Sheet, responses: 
   _timed_("results formulas", () => _fillFormulaColumns_(sheet, RESPONSE_KEYS, RESPONSE_FORMULAS, responses.length));
   if (responses.length > 0) {
     sheet.getRange(DATA_ROW, RESPONSE_KEYS.indexOf("date") + 1, responses.length, 1).setNumberFormat("yyyy-mm-dd");
+    sheet
+      .getRange(DATA_ROW, RESPONSE_KEYS.indexOf("timestamp") + 1, responses.length, 1)
+      .setNumberFormat("yyyy-mm-dd hh:mm:ss");
+    sheet
+      .getRange(DATA_ROW, RESPONSE_KEYS.indexOf("counted") + 1, responses.length, 1)
+      .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   }
 }
 
 /**
  * tournament formula for one Responses row
- * looks the event up by file id on the Events tab
+ * looks the event up by its Spirit Form URL on the Events tab
  *
  * @param row  1-based sheet row the formula is for
  * @returns the formula
  */
 function _tournamentFormula_(row: number): string {
-  const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("fileId") + 1)}${row}`;
+  const id = `$${_columnLetter_(RESPONSE_KEYS.indexOf("spiritFormUrl") + 1)}${row}`;
   const events = (key: keyof typeof EVENT_HEADERS) => _columnBelowHeader_(EVENTS_SHEET, EVENT_KEYS.indexOf(key) + 1);
-  return `=IFERROR(XLOOKUP(${id}, ${events("fileId")}, ${events("tournament")}), "(unknown event)")`;
+  return `=IFERROR(XLOOKUP(${id}, ${events("spiritFormUrl")}, ${events("eventName")}), "(unknown event)")`;
 }
 
 /**
@@ -270,13 +273,13 @@ function _responseClubFormula_(row: number, side: "scorer" | "receiver"): string
  * @returns responses in date order
  */
 function _sortResponses_(responses: ResponseRecord[], events: EventRecord[]): ResponseRecord[] {
-  const eventById = new Map(events.map((e) => [e.fileId, e]));
+  const eventById = new Map(events.map((e) => [e.spiritFormUrl, e]));
   return [...responses].sort((a, b) => {
-    const ea = eventById.get(a.fileId);
-    const eb = eventById.get(b.fileId);
-    return _compareDates_(ea?.date ?? null, eb?.date ?? null)
-      || (ea?.tournament ?? "").localeCompare(eb?.tournament ?? "")
-      || a.fileId.localeCompare(b.fileId)
+    const ea = eventById.get(a.spiritFormUrl);
+    const eb = eventById.get(b.spiritFormUrl);
+    return _compareDates_(ea?.startDate ?? null, eb?.startDate ?? null)
+      || (ea?.eventName ?? "").localeCompare(eb?.eventName ?? "")
+      || a.spiritFormUrl.localeCompare(b.spiritFormUrl)
       || a.sourceRow - b.sourceRow;
   });
 }

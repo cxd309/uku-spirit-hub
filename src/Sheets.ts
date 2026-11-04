@@ -104,7 +104,7 @@ function _columnBelowHeader_(sheetName: string, column: number): string {
 
 /**
  * compare two dates for sorting, oldest first
- * null (invalid folder name) sorts last
+ * null (no date) sorts last
  *
  * @param a  first date
  * @param b  second date
@@ -116,16 +116,69 @@ function _compareDates_(a: Date | null, b: Date | null): number {
 }
 
 /**
- * write rows below the header, resize the tab to fit, and put a filter on the table
- *
- * @param sheet    tab to write
- * @param rows     data rows, formulas included
- * @param columns  number of columns in the table
+ * background of columns the script fills, light grey 1 as on the Schedule Manager
+ * columns a person edits are left white
  */
-function _writeTable_(sheet: GoogleAppsScript.Spreadsheet.Sheet, rows: unknown[][], columns: number) {
+const GENERATED_BACKGROUND = "#d9d9d9";
+
+/**
+ * whether a column holds links, which are clipped rather than wrapped so rows stay short
+ *
+ * @param header  the column's header text
+ * @returns true when the header ends in URL
+ */
+function _isUrlColumn_(header: unknown): boolean {
+  return /URL$/.test(String(header).trim());
+}
+
+/**
+ * style rows of a table: generated columns grey and columns a person edits white,
+ * link columns clipped and every other column wrapped
+ * link columns are found from the header row, one call each for the backgrounds and the wrapping
+ *
+ * @param sheet     tab to style
+ * @param firstRow  first row to style, e.g. the header row
+ * @param rowCount  how many rows
+ * @param columns   number of columns in the table
+ * @param editable  0-based columns a person edits
+ */
+function _styleRows_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  firstRow: number,
+  rowCount: number,
+  columns: number,
+  editable: readonly number[],
+) {
+  if (rowCount < 1) return;
+  const range = sheet.getRange(firstRow, 1, rowCount, columns);
+  const shading = Array.from({ length: columns }, (_, i) => (editable.includes(i) ? null : GENERATED_BACKGROUND));
+  range.setBackgrounds(Array.from({ length: rowCount }, () => shading));
+  const headers = sheet.getRange(HEADER_ROW, 1, 1, columns).getValues()[0];
+  const wrapping = headers.map((header) =>
+    _isUrlColumn_(header) ? SpreadsheetApp.WrapStrategy.CLIP : SpreadsheetApp.WrapStrategy.WRAP
+  );
+  range.setWrapStrategies(Array.from({ length: rowCount }, () => wrapping));
+}
+
+/**
+ * write rows below the header, resize the tab to fit, put a filter on the table,
+ * and style the header and data rows, see _styleRows_
+ *
+ * @param sheet     tab to write
+ * @param rows      data rows, formulas included
+ * @param columns   number of columns in the table
+ * @param editable  0-based columns a person edits, left white, every other column is shaded
+ */
+function _writeTable_(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  rows: unknown[][],
+  columns: number,
+  editable: readonly number[] = [],
+) {
   _fitSheet_(sheet, HEADER_ROW + rows.length, columns);
   if (rows.length > 0) sheet.getRange(DATA_ROW, 1, rows.length, columns).setValues(rows);
   _applyFilter_(sheet, rows.length, columns);
+  _styleRows_(sheet, HEADER_ROW, 1 + rows.length, columns, editable);
 }
 
 /**
@@ -152,16 +205,32 @@ function _fillFormulaColumns_<K extends string>(
 }
 
 /**
- * put a fresh filter over the header row and data rows
- * any existing filter is removed first, so people's filter settings are reset on each write
+ * put a fresh filter over the header row and data rows, keeping what people had filtered
+ * a filter cannot grow with the table, so the old one is removed and a new one made,
+ * each column's criteria are carried over to the column with the same header text
  *
  * @param sheet     tab to filter
  * @param dataRows  number of data rows
  * @param columns   number of columns in the table
  */
 function _applyFilter_(sheet: GoogleAppsScript.Spreadsheet.Sheet, dataRows: number, columns: number) {
-  sheet.getFilter()?.remove();
-  sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
+  const headers = sheet.getRange(HEADER_ROW, 1, 1, columns).getValues()[0].map((h) => String(h).trim());
+  const kept: Map<string, GoogleAppsScript.Spreadsheet.FilterCriteria> = new Map();
+  const old = sheet.getFilter();
+  if (old) {
+    const range = old.getRange();
+    for (let column = range.getColumn(); column <= range.getLastColumn(); column++) {
+      const criteria = old.getColumnFilterCriteria(column);
+      const header = headers[column - 1];
+      if (criteria && header) kept.set(header, criteria.copy().build());
+    }
+    old.remove();
+  }
+  const filter = sheet.getRange(HEADER_ROW, 1, 1 + Math.max(dataRows, 1), columns).createFilter();
+  headers.forEach((header, i) => {
+    const criteria = kept.get(header);
+    if (criteria) filter.setColumnFilterCriteria(i + 1, criteria);
+  });
 }
 
 /**
@@ -173,4 +242,15 @@ function _applyFilter_(sheet: GoogleAppsScript.Spreadsheet.Sheet, dataRows: numb
 function _isoDate_(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * date and time as yyyy-mm-dd hh:mm, using the date's own calendar day and clock
+ *
+ * @param date  the date
+ * @returns e.g. "2025-11-01 14:05"
+ */
+function _isoDateTime_(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${_isoDate_(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

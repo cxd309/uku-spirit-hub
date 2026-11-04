@@ -11,7 +11,7 @@ const TEAMS_INFO = "Every team that has given or recieved a spirit score\n"
   + "Teams scoring at tournaments ticked International are left out, only the receiving UK teams are listed\n\n"
   + "Suggested Club name is generated using the enabled Name Rules on the Settings tab, this is the default \"best guess\" at a club\n\n"
   + "To override the club use the Club Override column\n\n"
-  + "This table is refreshed by Refresh Tournaments, Refresh Results, and whenever International is ticked or unticked";
+  + "This table is refreshed by Refresh Tournaments, Refresh Results and Issues, and whenever International is ticked or unticked";
 
 /**
  * teams tab columns, in order
@@ -147,6 +147,7 @@ function _writeTeams_(
       });
     }),
     TEAM_KEYS.length,
+    [TEAM_KEYS.indexOf("clubOverride")],
   );
   _fillFormulaColumns_(sheet, TEAM_KEYS, TEAM_FORMULAS, teams.length);
   return _teamClubPairs_(teams, regexes);
@@ -171,25 +172,25 @@ function _tournamentsPlayed_(
   const internationalIds = _internationalIds_(events);
   const idsByGroup: Map<string, Set<string>> = new Map();
   for (const r of responses) {
-    for (const team of internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver]) {
+    for (const team of internationalIds.has(r.spiritFormUrl) ? [r.receiver] : [r.scorer, r.receiver]) {
       const group = groupOf(team);
-      if (group !== "") idsByGroup.set(group, (idsByGroup.get(group) ?? new Set()).add(r.fileId));
+      if (group !== "") idsByGroup.set(group, (idsByGroup.get(group) ?? new Set()).add(r.spiritFormUrl));
     }
   }
   return new Map([...idsByGroup].map(([group, ids]) => {
-    const names = events.filter((e) => ids.has(e.fileId) && e.tournament !== "").map((e) => e.tournament);
+    const names = events.filter((e) => ids.has(e.spiritFormUrl) && e.eventName !== "").map((e) => e.eventName);
     return [group, { names: [...new Set(names)], count: ids.size }];
   }));
 }
 
 /**
- * file ids of the events ticked International
+ * Spirit Form URLs of the events ticked International
  *
  * @param events  all events
- * @returns their file ids
+ * @returns their Spirit Form URLs
  */
 function _internationalIds_(events: EventRecord[]): Set<string> {
-  return new Set(events.filter((e) => e.international).map((e) => e.fileId));
+  return new Set(events.filter((e) => e.international).map((e) => e.spiritFormUrl));
 }
 
 /**
@@ -239,13 +240,13 @@ function _teamKey_(name: string): string {
  * first spelling seen is kept
  *
  * @param responses         all responses
- * @param internationalIds  file ids of international events
+ * @param internationalIds  Spirit Form URLs of international events
  * @returns team names in order of first appearance
  */
 function _teamNamesFromResponses_(responses: ResponseTeams[], internationalIds: Set<string>): string[] {
   const byKey: Map<string, string> = new Map();
   for (const r of responses) {
-    const names = internationalIds.has(r.fileId) ? [r.receiver] : [r.scorer, r.receiver];
+    const names = internationalIds.has(r.spiritFormUrl) ? [r.receiver] : [r.scorer, r.receiver];
     for (const name of names) {
       const key = _teamKey_(name);
       if (!byKey.has(key)) byKey.set(key, name);

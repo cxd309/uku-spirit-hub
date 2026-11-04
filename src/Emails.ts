@@ -6,7 +6,7 @@ const CLUB_CONTACTS_SHEET = "Club Contacts";
 /**
  * text for the info row above the Club Contacts table
  */
-const CLUB_CONTACTS_INFO = "Email address for each club, used by Draft Emails\n\n"
+const CLUB_CONTACTS_INFO = "Email address for each club, looked up by the Email Address column of the Issues tab\n\n"
   + "User editable columns:\n"
   + "- Email: one address, or several separated by commas.\n"
   + "- Notes\n\n"
@@ -30,6 +30,13 @@ const CLUB_CONTACT_HEADERS = Object.freeze(
 const CLUB_CONTACT_KEYS = Object.keys(CLUB_CONTACT_HEADERS) as (keyof typeof CLUB_CONTACT_HEADERS)[];
 
 /**
+ * 0-based Club Contacts columns a person edits, left white, the Club column is shaded
+ */
+const CLUB_CONTACT_EDITABLE = Object.freeze(
+  (["email", "notes"] as const).map((key) => CLUB_CONTACT_KEYS.indexOf(key)),
+);
+
+/**
  * name of the Email Templates tab
  */
 const EMAIL_TEMPLATES_SHEET = "Email Templates";
@@ -41,13 +48,18 @@ const EMAIL_PLACEHOLDERS = Object.freeze(
   {
     club_name: "Club column of the issue",
     team_name: "Team column of the issue",
-    tournament_name: "Tournament(s) column of the issue",
+    tournament_name: "Tournament column of the issue",
     tournament_date: "Tournament Date, e.g. 1 November 2025",
-    issue_category: "Issue Category column of the issue",
+    game: "Game column of the issue, blank for tournament issues and forms with no game",
+    opponent: "Opponent column of the issue",
+    score: "Score column of the issue, e.g. 15-12W",
+    spirit: "Spirit column of the issue, e.g. 10 (2, 2, 2, 2, 2)",
+    comment: "Comment column of the issue, in quotes",
+    checks: "Checks column of the issue",
     details: "Details column of the issue",
     committee_member: "Committee Member column of the issue",
-    missing_count: "NOT-SUBMITTED only: how many scores were not submitted",
-    missing_opponents: "NOT-SUBMITTED only: who they were for, e.g. Durham 1 (2 games) and York 2",
+    missing_count: "NO-SCORES and UNDER-SUBMITTED only: how many scores were not submitted",
+    missing_opponents: "NO-SCORES and UNDER-SUBMITTED only: who they were for, e.g. Durham 1 (2 games) and York 2",
   } as const,
 );
 
@@ -59,7 +71,10 @@ type EmailPlaceholder = keyof typeof EMAIL_PLACEHOLDERS;
 /**
  * text for the info row above the Email Templates table
  */
-const EMAIL_TEMPLATES_INFO = "One email template per policy issue check, used by Draft Emails\n\n"
+const EMAIL_TEMPLATES_INFO =
+  "One email template per issue check, filling Email Subject and Email Body on the Issues tab\n"
+  + "An issue with one check uses that check's template, one with several uses MULTIPLE, one with none uses MANUAL\n"
+  + "Only NEW issues are filled, by Refresh Results and Issues and whenever this tab or a Status is edited\n\n"
   + "User editable columns: Enabled, Subject and Body. Do not change the Issue Code column. "
   + "Only issues whose template is ticked Enabled get a draft. Missing templates are added back with starter wording\n\n"
   + "Placeholders, replaced from the issue row:\n"
@@ -84,10 +99,17 @@ const EMAIL_TEMPLATE_HEADERS = Object.freeze(
 const EMAIL_TEMPLATE_KEYS = Object.keys(EMAIL_TEMPLATE_HEADERS) as (keyof typeof EMAIL_TEMPLATE_HEADERS)[];
 
 /**
+ * 0-based Email Templates columns a person edits, left white, the Issue Code column is shaded
+ */
+const EMAIL_TEMPLATE_EDITABLE = Object.freeze(
+  (["enabled", "subject", "body"] as const).map((key) => EMAIL_TEMPLATE_KEYS.indexOf(key)),
+);
+
+/**
  * one row of the Email Templates tab
  */
 interface EmailTemplate {
-  /** issue check code, e.g. NOT-SUBMITTED */
+  /** issue check code, e.g. NO-SCORES, or MULTIPLE_EMAIL_CODE */
   code: string;
   /** ticked to draft emails for this check */
   enabled: boolean;
@@ -103,77 +125,138 @@ interface EmailTemplate {
 const EMAIL_SIGN_OFF = "\n\nThanks,\nUKU Spirit Committee";
 
 /**
+ * code of the template used by an issue with more than one check
+ */
+const MULTIPLE_EMAIL_CODE = "MULTIPLE";
+
+/**
  * starter wording written for each check when its template is missing
- * only NOT-SUBMITTED is enabled to begin with
+ * every template is enabled to begin with, untick Enabled to stop drafting emails for a check
  * checks left out here never get a template or an email (e.g. CHEATING and HARASSMENT, which are not policy)
  */
 const DEFAULT_EMAIL_TEMPLATES: Readonly<
   Partial<Record<IssueCategoryKey, { enabled: boolean; subject: string; body: string }>>
-> =
-  Object.freeze({
-    totalWithoutComment: {
-      enabled: false,
-      subject: "Spirit score without a comment - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "At {tournament_name}, {team_name} gave a spirit score total that the UKU SOTG Policy says needs a comment, "
-        + "but no comment was given.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    categoryWithoutComment: {
-      enabled: false,
-      subject: "Spirit score without a comment - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "At {tournament_name}, {team_name} gave a category score that the UKU SOTG Policy says needs a comment, "
-        + "but no comment was given.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    dangerousPlay: {
-      enabled: false,
-      subject: "Spirit comment received - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "A spirit score comment received by {team_name} at {tournament_name} mentions dangerous play.\n\n{details}" + EMAIL_SIGN_OFF,
-    },
-    notSubmitted: {
-      enabled: true,
-      subject: "Missing spirit scores - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} did not submit {missing_count} spirit score(s) at {tournament_name}, "
-        + "for games against {missing_opponents}.\n\n"
-        + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
-        + EMAIL_SIGN_OFF,
-    },
-    twoLowScores: {
-      enabled: false,
-      subject: "Low spirit scores - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received several low spirit scores at {tournament_name}.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    lowAverage: {
-      enabled: false,
-      subject: "Low spirit average - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received a low average spirit score at {tournament_name}.\n\n{details}"
-        + EMAIL_SIGN_OFF,
-    },
-    categoryMinimum: {
-      enabled: false,
-      subject: "Spirit score received - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received a 0 in a spirit category at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
-    },
-    singleLowScore: {
-      enabled: false,
-      subject: "Low spirit score - {tournament_name}",
-      body: "Dear {club_name},\n\n"
-        + "{team_name} received a low spirit score at {tournament_name}.\n\n{details}" + EMAIL_SIGN_OFF,
-    }
-  });
+> = Object.freeze({
+  lowScore: {
+    enabled: true,
+    subject: "Low spirit score - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a low spirit score of {spirit} from {opponent} at {tournament_name}.\n\n"
+      + "{comment}\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  dangerousPlay: {
+    enabled: true,
+    subject: "Spirit comment received - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "A spirit score comment {team_name} received from {opponent} at {tournament_name} mentions dangerous play."
+      + "\n\n{comment}"
+      + EMAIL_SIGN_OFF,
+  },
+  categoryMinimum: {
+    enabled: true,
+    subject: "Spirit score received - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a spirit score of {spirit} from {opponent} at {tournament_name}. {details}.\n\n{comment}"
+      + EMAIL_SIGN_OFF,
+  },
+  totalWithoutComment: {
+    enabled: true,
+    subject: "Spirit score without a comment - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "At {tournament_name}, {team_name} gave {opponent} a spirit score of {spirit}. The UKU SOTG Policy says "
+      + "this total needs a comment, but no comment was given."
+      + EMAIL_SIGN_OFF,
+  },
+  categoryWithoutComment: {
+    enabled: true,
+    subject: "Spirit score without a comment - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "At {tournament_name}, {team_name} gave {opponent} a spirit score of {spirit}. The UKU SOTG Policy says "
+      + "a 0 or 4 in a category needs a comment, but no comment was given."
+      + EMAIL_SIGN_OFF,
+  },
+  redactedComment: {
+    enabled: true,
+    subject: "Spirit comment redacted - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "The spirit comment {team_name} gave {opponent} at {tournament_name} has been redacted by the UKU Spirit "
+      + "Committee before the results were published.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  noScores: {
+    enabled: true,
+    subject: "No spirit scores submitted - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} did not submit any spirit scores at {tournament_name}, "
+      + "for games against {missing_opponents}.\n\n"
+      + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
+      + EMAIL_SIGN_OFF,
+  },
+  underSubmitted: {
+    enabled: true,
+    subject: "Missing spirit scores - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} did not submit {missing_count} spirit score(s) at {tournament_name}, "
+      + "for games against {missing_opponents}.\n\n"
+      + "Please do not submit them now, but make sure your captains submit scores after every game at future events."
+      + EMAIL_SIGN_OFF,
+  },
+  immediateAverage: {
+    enabled: true,
+    subject: "Low spirit average - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received a low average spirit score at {tournament_name}.\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+  monitoringAverage: {
+    enabled: true,
+    subject: "Spirit average - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "{team_name} received an average spirit score at {tournament_name} that counts towards monitoring."
+      + "\n\n{details}"
+      + EMAIL_SIGN_OFF,
+  },
+});
 
 /**
- * text of the Email cell when the club has no address on the Club Contacts tab
+ * starter wording for an issue with more than one check, to be filled in by hand
+ */
+const DEFAULT_MULTIPLE_EMAIL_TEMPLATE = Object.freeze({
+  enabled: true,
+  subject: "Spirit - {tournament_name}",
+  body: "Dear {club_name},\n\n"
+    + "We are getting in touch about {team_name} at {tournament_name}, in the game against {opponent}.\n\n"
+    + "Spirit: {spirit}\n{comment}\n\n{details}"
+    + EMAIL_SIGN_OFF,
+});
+
+/**
+ * code of the template used by an issue with no checks, e.g. one added by hand
+ */
+const MANUAL_EMAIL_CODE = "MANUAL";
+
+/**
+ * starter wording for an issue with no checks, to be filled in by hand
+ */
+const DEFAULT_MANUAL_EMAIL_TEMPLATE = Object.freeze({
+  enabled: true,
+  subject: "Spirit - {tournament_name}",
+  body: "Dear {club_name},\n\n"
+    + "We are getting in touch about {team_name} at {tournament_name}.\n\n{details}"
+    + EMAIL_SIGN_OFF,
+});
+
+/**
+ * text of the Email Address cell when the club has no address on the Club Contacts tab
  */
 const NO_CLUB_EMAIL = "No email for club";
+
+/**
+ * text of the Email Address, Subject and Body cells when DELETED-ROW is the issue's only check
+ * a form can be deleted for something either team did, so no email is drafted and neither club's address is given
+ */
+const UNKNOWN_RECIPIENT = "n/a";
 
 /**
  * one drafted email, for one Issues row
@@ -181,8 +264,6 @@ const NO_CLUB_EMAIL = "No email for club";
 interface EmailDraft {
   /** index of the issue in the rows given to _draftEmails_ */
   index: number;
-  /** club's email, "" if it has none */
-  to: string;
   /** filled subject */
   subject: string;
   /** filled body */
@@ -190,18 +271,21 @@ interface EmailDraft {
 }
 
 /**
- * the Email cell for a draft: an Open in mail link, or a note that the club has no email
- * pure
- * subject and body are percent-encoded and quotes are dropped from addresses, so the formula never contains a quote
+ * formula for the Email Address cell of one Issues row: the club's email from the Club Contacts tab
+ * a formula, so a changed address shows straight away and a row added by hand can copy it down
+ * shown whatever the Status, so issues can be searched by address
+ * an issue whose only check is DELETED-ROW gives no address, see UNKNOWN_RECIPIENT
  *
- * @param draft  the drafted email
- * @returns a formula, or the no email text
+ * @param row  1-based sheet row the formula is for
+ * @returns the formula
  */
-function _emailCell_(draft: EmailDraft): string {
-  if (draft.to === "") return NO_CLUB_EMAIL;
-  const to = draft.to.split(",").map((address) => address.trim().replace(/[\s"?&]/g, "")).join(",");
-  const url = `mailto:${to}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
-  return `=HYPERLINK("${url}","Open in mail")`;
+function _emailAddressFormula_(row: number): string {
+  const cell = (key: keyof typeof ISSUE_HEADERS) => `$${_columnLetter_(ISSUE_KEYS.indexOf(key) + 1)}${row}`;
+  const contacts = (key: keyof typeof CLUB_CONTACT_HEADERS) =>
+    _columnBelowHeader_(CLUB_CONTACTS_SHEET, CLUB_CONTACT_KEYS.indexOf(key) + 1);
+  return `=IF(TRIM(${cell("checks")})="${ISSUE_CATEGORIES.deletedRow.code}", "${UNKNOWN_RECIPIENT}", `
+    + `LET(address, IFERROR(XLOOKUP(${cell("club")}, ${contacts("club")}, ${contacts("email")}), ""), `
+    + `IF(TRIM(address)="", "${NO_CLUB_EMAIL}", address)))`;
 }
 
 /**
@@ -253,33 +337,26 @@ function _addClubContacts_(clubs: string[]) {
   _fitSheet_(sheet, firstNew + added.length - 1, CLUB_CONTACT_KEYS.length);
   sheet.getRange(firstNew, 1, added.length, CLUB_CONTACT_KEYS.length).setValues(added.map((club) => [club, "", ""]));
   _applyFilter_(sheet, firstNew + added.length - 1 - HEADER_ROW, CLUB_CONTACT_KEYS.length);
-}
-
-/**
- * each club's email from the Club Contacts tab
- *
- * @returns lower case club name → email, blank emails left out
- */
-function _readClubEmails_(): Map<string, string> {
-  const emails: Map<string, string> = new Map();
-  for (const row of _readClubContactRows_(_getClubContactsSheet_())) {
-    const club = String(row[0]).trim().toLowerCase();
-    const email = String(row[1]).trim();
-    if (club !== "" && email !== "" && !emails.has(club)) emails.set(club, email);
-  }
-  return emails;
+  _styleRows_(sheet, HEADER_ROW, 1, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
+  _styleRows_(sheet, firstNew, added.length, CLUB_CONTACT_KEYS.length, CLUB_CONTACT_EDITABLE);
 }
 
 /**
  * default rows for the Email Templates tab
  *
- * @returns one row per issue check that has a template, in the order of ISSUE_CATEGORIES
+ * @returns one row per issue check that has a template, in the order of ISSUE_CATEGORIES, then MULTIPLE and MANUAL
  */
 function _defaultEmailTemplateRows_(): unknown[][] {
-  return _issueCategoryKeys_().flatMap((key) => {
-    const template = DEFAULT_EMAIL_TEMPLATES[key];
-    return template ? [[ISSUE_CATEGORIES[key].code, template.enabled, template.subject, template.body]] : [];
-  });
+  const multiple = DEFAULT_MULTIPLE_EMAIL_TEMPLATE;
+  const manual = DEFAULT_MANUAL_EMAIL_TEMPLATE;
+  return [
+    ..._issueCategoryKeys_().flatMap((key) => {
+      const template = DEFAULT_EMAIL_TEMPLATES[key];
+      return template ? [[ISSUE_CATEGORIES[key].code, template.enabled, template.subject, template.body]] : [];
+    }),
+    [MULTIPLE_EMAIL_CODE, multiple.enabled, multiple.subject, multiple.body],
+    [MANUAL_EMAIL_CODE, manual.enabled, manual.subject, manual.body],
+  ];
 }
 
 /**
@@ -305,15 +382,19 @@ function _getEmailTemplatesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
       : sheet.getRange(DATA_ROW, 1, lastRow - HEADER_ROW, 1).getValues().map((row) => String(row[0]).trim()),
   );
   const missing = _defaultEmailTemplateRows_().filter((row) => !present.has(String(row[0])));
+  _styleRows_(sheet, HEADER_ROW, 1, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
   if (missing.length === 0) return sheet;
 
   const firstNew = Math.max(lastRow, HEADER_ROW) + 1;
   _fitSheet_(sheet, firstNew + missing.length - 1, EMAIL_TEMPLATE_KEYS.length);
-  sheet.getRange(firstNew, 1, missing.length, EMAIL_TEMPLATE_KEYS.length).setValues(missing).setVerticalAlignment("top");
+  sheet.getRange(firstNew, 1, missing.length, EMAIL_TEMPLATE_KEYS.length).setValues(missing).setVerticalAlignment(
+    "top",
+  );
   sheet
     .getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("enabled") + 1, missing.length, 1)
     .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
   sheet.getRange(firstNew, EMAIL_TEMPLATE_KEYS.indexOf("subject") + 1, missing.length, 2).setWrap(true);
+  _styleRows_(sheet, firstNew, missing.length, EMAIL_TEMPLATE_KEYS.length, EMAIL_TEMPLATE_EDITABLE);
   return sheet;
 }
 
@@ -367,16 +448,16 @@ function _readableList_(names: string[]): string {
 }
 
 /**
- * how many scores were not submitted and for whom, from a NOT-SUBMITTED issue's Details
+ * how many scores were not submitted and for whom, from a NO-SCORES or UNDER-SUBMITTED issue's Details
  * pure
- * Details lists one opponent per missing score below "Missing for:"
+ * Details lists one opponent per missing score on its "Missing:" line, comma separated
  *
  * @param details  the Details cell
  * @returns the count, and the opponents with a game count when more than one
  */
 function _missingScores_(details: string): { count: number; opponents: string } {
-  const [, after = ""] = details.split(/Missing for:\s*\n/);
-  const names = after.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+  const line = details.split("\n").find((l) => l.startsWith("Missing: ")) ?? "";
+  const names = line.slice("Missing: ".length).split(",").map((name) => name.trim()).filter((name) => name !== "");
   const counts: Map<string, number> = new Map();
   for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
   const opponents = [...counts].map(([name, n]) => (n > 1 ? `${name} (${n} games)` : name));
@@ -406,18 +487,16 @@ function _readIssueRows_(): IssueRow[] {
 /**
  * draft one email per NEW issue whose template is enabled
  * pure, never modifies its arguments
- * the check is the code at the start of the Issue ID
+ * an issue with one check uses that check's template, one with several MULTIPLE, one with none MANUAL
  *
  * @param issues      every Issues row
  * @param templates   issue code → template
- * @param emails      lower case club → email
  * @param formatDate  turns a tournament date into text
  * @returns the emails, and every unknown placeholder as "CODE: {name}"
  */
 function _draftEmails_(
   issues: IssueRow[],
   templates: Map<string, EmailTemplate>,
-  emails: Map<string, string>,
   formatDate: (date: Date) => string,
 ): { drafts: EmailDraft[]; unknown: string[] } {
   const drafts: EmailDraft[] = [];
@@ -426,21 +505,30 @@ function _draftEmails_(
 
   issues.forEach((issue, index) => {
     if (text(issue.status).toUpperCase() !== ISSUE_STATUSES[0]) return;
-    const code = text(issue.issueId).split(" | ")[0];
+    const codes = _checkCodes_(issue.checks);
+    const code = codes.length === 0 ? MANUAL_EMAIL_CODE : codes.length === 1 ? codes[0] : MULTIPLE_EMAIL_CODE;
+    if (code === ISSUE_CATEGORIES.deletedRow.code) {
+      drafts.push({ index, subject: UNKNOWN_RECIPIENT, body: UNKNOWN_RECIPIENT });
+      return;
+    }
     const template = templates.get(code);
     if (!template || !template.enabled) return;
 
     const details = text(issue.details);
-    const missing = code === ISSUE_CATEGORIES.notSubmitted.code
-      ? _missingScores_(details)
-      : { count: NaN, opponents: "" };
+    const missingCodes: string[] = [ISSUE_CATEGORIES.noScores.code, ISSUE_CATEGORIES.underSubmitted.code];
+    const missing = missingCodes.includes(code) ? _missingScores_(details) : { count: NaN, opponents: "" };
     const date = issue.tournamentDate;
     const values: Record<EmailPlaceholder, string> = {
       club_name: text(issue.club),
       team_name: text(issue.team),
-      tournament_name: text(issue.tournaments),
+      tournament_name: text(issue.tournament),
       tournament_date: date instanceof Date ? formatDate(date) : text(date),
-      issue_category: text(issue.category),
+      game: text(issue.game),
+      opponent: text(issue.opponent),
+      score: text(issue.score),
+      spirit: text(issue.spirit),
+      comment: text(issue.comment),
+      checks: text(issue.checks),
       details,
       committee_member: text(issue.committeeMember),
       missing_count: Number.isNaN(missing.count) ? "" : String(missing.count),
@@ -450,45 +538,36 @@ function _draftEmails_(
     const subject = _fillTemplate_(template.subject, values);
     const body = _fillTemplate_(template.body, values);
     for (const name of [...subject.unknown, ...body.unknown]) unknown.add(`${code}: ${name}`);
-
-    drafts.push({
-      index,
-      to: emails.get(values.club_name.toLowerCase()) ?? "",
-      subject: subject.text,
-      body: body.text,
-    });
+    drafts.push({ index, subject: subject.text, body: body.text });
   });
   return { drafts, unknown: [...unknown] };
 }
 
 /**
- * the whole Email column after drafting
+ * the Email Subject and Email Body columns after drafting
  * pure, never modifies its arguments
- * NEW issues get their draft's link, or blank when their template is missing or disabled
- * every other issue keeps what it had, so the link to an email already sent stays
+ * NEW issues get their draft, every other issue is blank: the drafts are only there to send the email,
+ * what was sent is kept by the committee's mail
  *
- * @param issues   every Issues row
- * @param current  the Email column as it is, formulas where there are any
- * @param drafts   from _draftEmails_
- * @returns one cell per issue, formulas start with "="
+ * @param issues  every Issues row
+ * @param drafts  from _draftEmails_
+ * @returns one subject and one body per issue
  */
-function _emailColumn_(issues: IssueRow[], current: string[], drafts: EmailDraft[]): string[] {
-  const cells = issues.map((issue, i) =>
-    String(issue.status ?? "").trim().toUpperCase() === ISSUE_STATUSES[0] ? "" : current[i] ?? ""
-  );
-  for (const draft of drafts) cells[draft.index] = _emailCell_(draft);
+function _emailColumns_(issues: IssueRow[], drafts: EmailDraft[]): { subject: string; body: string }[] {
+  const cells = issues.map(() => ({ subject: "", body: "" }));
+  for (const draft of drafts) cells[draft.index] = { subject: draft.subject, body: draft.body };
   return cells;
 }
 
 /**
- * fill the Email column of the Issues tab with an Open in mail link for every NEW issue whose template is enabled
- * reads the Issues, Email Templates and Club Contacts tabs, nothing is sent
- * only the Email column is written
+ * fill Email Subject and Email Body for every NEW issue whose template is enabled, and blank them for every other issue
+ * run by Refresh Results and Issues, whenever the Email Templates tab is edited, and whenever a Status on the Issues tab changes
+ * reads the Issues and Email Templates tabs, writes only those two columns, nothing is sent
  *
  * @returns a one-line summary
  * @throws {Error} if a template uses a placeholder that does not exist
  */
-function _updateEmailLinks_(): string {
+function _updateEmailDrafts_(): string {
   const sheet = _getIssuesSheet_();
   const issues = _readIssueRows_();
   if (issues.length === 0) return "no issues to email";
@@ -497,7 +576,6 @@ function _updateEmailLinks_(): string {
   const { drafts, unknown } = _draftEmails_(
     issues,
     _readEmailTemplates_(),
-    _readClubEmails_(),
     (date) => Utilities.formatDate(date, timeZone, "d MMMM yyyy"),
   );
   if (unknown.length > 0) {
@@ -507,13 +585,12 @@ function _updateEmailLinks_(): string {
     );
   }
 
-  const range = sheet.getRange(DATA_ROW, ISSUE_KEYS.indexOf("email") + 1, issues.length, 1);
-  const formulas = range.getFormulas();
-  const values = range.getValues();
-  const current = formulas.map((row, i) => (row[0] !== "" ? row[0] : String(values[i][0])));
-  range.setValues(_emailColumn_(issues, current, drafts).map((cell) => [cell]));
-
-  const noEmail = drafts.filter((d) => d.to === "").length;
-  const summary = `${drafts.length} email link(s)`;
-  return noEmail === 0 ? summary : `${summary}, ${noEmail} with no club email (see Club Contacts)`;
+  const columns = _emailColumns_(issues, drafts);
+  const write = (key: "emailSubject" | "emailBody", field: "subject" | "body") =>
+    sheet
+      .getRange(DATA_ROW, ISSUE_KEYS.indexOf(key) + 1, issues.length, 1)
+      .setValues(columns.map((cell) => [cell[field]]));
+  write("emailSubject", "subject");
+  write("emailBody", "body");
+  return `${drafts.length} email draft(s)`;
 }

@@ -7,25 +7,23 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("SpiritHub")
     .addItem("Refresh Tournaments", "refreshTournaments")
-    .addItem("Refresh Results", "refreshResults")
-    .addItem("Refresh Issues", "refreshIssues")
+    .addItem("Refresh Results and Issues", "refreshResultsAndIssues")
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
-    .addSeparator()
-    .addItem("Draft Emails", "draftEmails")
     .addSeparator()
     .addItem("SpiritHub Settings", "showSettings")
     .addToUi();
 }
 
 /**
- * keep Teams and Clubs up to date when a person changes something that affects club names
+ * keep Teams, Clubs and email drafts up to date when a person changes something they depend on
  * `onEdit` is a reserved name, apps script runs it after every edit by a person
  *
- * Club Override on Teams: rebuild Clubs
- * Name Rules on Settings: work out every Suggested Club again, then rebuild Clubs
+ * Club Override on Teams: rebuild Clubs, then refill email drafts, as issues look their club up on Teams
+ * Name Rules on Settings: work out every Suggested Club again, then rebuild Clubs and refill email drafts
  * International on Tournaments: rebuild Teams and Clubs, scoring teams at international events are left out
  * Club on Club Report: pick the club's first team, then fit the totals charts to their tournaments
  * Team on Club Report: fit the totals charts to their tournaments
+ * Email Templates, or Status on Issues: fill Email Subject and Email Body again, NEW issues only
  * anything else is ignored
  * skips quietly if another run holds the lock
  *   Refresh Results rebuilds Teams and Clubs anyway
@@ -61,7 +59,17 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
   const touchesReportClub = touchesReportCell(CLUB_REPORT_ROWS.club);
   const touchesReportTeam = touchesReportCell(CLUB_REPORT_ROWS.team);
 
-  if (!touchesOverride && !touchesNameRules && !touchesInternational && !touchesReportClub && !touchesReportTeam) {
+  const statusColumn = ISSUE_KEYS.indexOf("status") + 1;
+  const touchesEmailDrafts = (sheetName === EMAIL_TEMPLATES_SHEET && e.range.getLastRow() >= DATA_ROW)
+    || (sheetName === ISSUES_SHEET
+      && e.range.getLastRow() >= DATA_ROW
+      && e.range.getColumn() <= statusColumn
+      && e.range.getLastColumn() >= statusColumn);
+
+  if (
+    !touchesOverride && !touchesNameRules && !touchesInternational && !touchesReportClub && !touchesReportTeam
+    && !touchesEmailDrafts
+  ) {
     return;
   }
 
@@ -70,12 +78,23 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
   try {
     if (touchesReportClub || touchesReportTeam) {
       _fitClubReportCharts_(touchesReportClub);
+    } else if (touchesEmailDrafts) {
+      try {
+        _notify_(_updateEmailDrafts_());
+      } catch (err) {
+        _notify_(`Email drafts not updated: ${err instanceof Error ? err.message : String(err)}`);
+      }
     } else if (touchesInternational) {
       const events = _sortEvents_(_readEvents_(_getEventsSheet_()));
       _rebuildTeamsAndClubs_(_readResponseTeams_(_getResponsesSheet_()), events);
     } else {
       if (touchesNameRules) _refreshSuggestedClubs_();
       _rebuildClubsFromSheet_();
+      try {
+        _updateEmailDrafts_();
+      } catch (err) {
+        _notify_(`Email drafts not updated: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   } finally {
     lock.releaseLock();
@@ -148,24 +167,22 @@ function _runRefresh_(work: () => string) {
 }
 
 /**
- * menu: scan the category folder and update the Tournaments tab
+ * menu: read the Schedule Manager and update the Tournaments tab
  */
 function refreshTournaments() {
   _runRefresh_(_refreshTournaments_);
 }
 
 /**
- * menu: import every tournament marked NEW or REFRESH
+ * menu: import every included tournament's files marked NEW, EDITED or REFRESH, then add any new issues
+ * with nothing to import it just runs the issue checks again, e.g. after changing an Issue Rule
  */
-function refreshResults() {
-  _runRefresh_(_refreshResults_);
-}
-
-/**
- * menu: add any new issues from what is already in the spreadsheet
- */
-function refreshIssues() {
-  _runRefresh_(() => _timed_("issues", _refreshIssues_));
+function refreshResultsAndIssues() {
+  _runRefresh_(() => {
+    const results = _refreshResults_();
+    if (results.startsWith("No tournaments found")) return results;
+    return `${results}; ${_timed_("issues", _refreshIssues_)}`;
+  });
 }
 
 /**
@@ -174,16 +191,4 @@ function refreshIssues() {
  */
 function refreshClubStatistics() {
   _runRefresh_(_refreshClubStatistics_);
-}
-
-/**
- * menu: put an Open in mail link on every NEW issue whose template is enabled
- * after adding club emails or changing templates, nothing is sent
- */
-function draftEmails() {
-  _runRefresh_(() => {
-    const summary = _timed_("email links", _updateEmailLinks_);
-    _getIssuesSheet_().activate();
-    return summary;
-  });
 }
