@@ -54,18 +54,20 @@ interface PublishedTables {
 }
 
 /**
- * the Results and Breakdown tables of one tournament, from its counted forms
+ * the Results and Breakdown tables of one tournament, from its counted forms matched to a game
  * pure, never modifies its arguments
+ * a form without a game is never published, whether or not it counts
  *
  * Results: each receiving team's number of scores and averages, highest Total first,
  * ties in reverse order of team name, as the Schedule Manager's pivot table ordered them
- * Breakdown: every counted form, by receiving team, then scoring team
+ * Breakdown: every published form, by receiving team, then in the order the games were played
  *
- * @param responses  the tournament's responses, only counted ones are used
+ * @param responses  the tournament's responses, only counted ones with a game are used
+ * @param startOf    when a game code started, null if not known
  * @returns the two tables, each with its header row
  */
-function _publishedTables_(responses: ResponseRecord[]): PublishedTables {
-  const counted = responses.filter((r) => r.counted);
+function _publishedTables_(responses: ResponseRecord[], startOf: (game: string) => number | null): PublishedTables {
+  const counted = responses.filter((r) => r.counted && r.game !== "");
   const byTeam: Map<string, ResponseRecord[]> = new Map();
   for (const r of counted) byTeam.set(r.receiver, [...(byTeam.get(r.receiver) ?? []), r]);
 
@@ -79,7 +81,10 @@ function _publishedTables_(responses: ResponseRecord[]): PublishedTables {
   ]).sort((a, b) => (b[7] as number) - (a[7] as number) || String(b[0]).localeCompare(String(a[0])));
 
   const breakdown = [...counted]
-    .sort((a, b) => a.receiver.localeCompare(b.receiver) || a.scorer.localeCompare(b.scorer))
+    .sort((a, b) =>
+      a.receiver.localeCompare(b.receiver) || (startOf(a.game) ?? 0) - (startOf(b.game) ?? 0)
+      || a.sourceRow - b.sourceRow
+    )
     .map((r) => [r.scorer, r.receiver, ...SCORE_KEYS.map((key) => r[key]), r.comment]);
 
   return {
@@ -206,7 +211,7 @@ function _publishRequests_(
       })
     );
 
-  // Results: every cell bold with thin borders, numbers to 2 places, the count as a whole number
+  // Results: every cell bold with thin borders, the header left aligned, numbers to 2 places, the count whole
   prepare(resultsTab, titles.results, 0, tables.results.length);
   const resultRows = tables.results.map((row, r) => ({
     values: row.map((value, c) =>
@@ -214,7 +219,7 @@ function _publishRequests_(
         textFormat: { bold: true },
         backgroundColor: colour("white"),
         borders: { top: thin, bottom: thin, left: thin, right: thin },
-        horizontalAlignment: c === 0 ? "LEFT" : "RIGHT",
+        horizontalAlignment: r === 0 || c === 0 ? "LEFT" : "RIGHT",
         ...(r > 0 && c > 0 ? { numberFormat: { type: "NUMBER", pattern: c === 1 ? "0" : "0.00" } } : {}),
       })
     ),

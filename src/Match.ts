@@ -123,11 +123,6 @@ function _matchResponses_(
   const submitted: Set<string> = new Set();
   const deletedGame: Map<DeletedFormRecord, string> = new Map();
   const time = (f: { timestamp: Date | null }) => f.timestamp?.getTime() ?? 0;
-  const startOf = (g: GameRecord) =>
-    g.day === null
-      ? null
-      : new Date(g.day.getFullYear(), g.day.getMonth(), g.day.getDate(), 0, 0, 0, Math.round((g.time ?? 0) * 86400000))
-        .getTime();
   // whether form a counts over form b for the same game: a comment first, then the later one
   const beats = (a: ResponseRecord, b: ResponseRecord) =>
     (Number(a.comment !== "") - Number(b.comment !== "") || time(a) - time(b) || a.sourceRow - b.sourceRow) > 0;
@@ -149,7 +144,7 @@ function _matchResponses_(
     for (const form of lineUp) {
       // a form can only be for a game that had started when it was submitted
       const started = pairGames.flatMap((g, i) => {
-        const start = startOf(g);
+        const start = _gameStart_(g);
         return form.timestamp === null || start === null || start <= form.timestamp.getTime() ? [i] : [];
       });
       // a form on Results submitted before any of their games is still given one, a deleted form is not

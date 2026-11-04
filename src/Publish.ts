@@ -306,6 +306,7 @@ function _publishResults_(): string {
   const sheet = _getEventsSheet_();
   const events = _readEvents_(sheet);
   const responses = _readResponses_(_getResponsesSheet_());
+  const games = _readGames_(_getGamesSheet_());
   const hubId = SpreadsheetApp.getActiveSpreadsheet().getId();
   const nameOf = (e: EventRecord) => _publishedFileName_(settings.publishedFileName, e);
 
@@ -380,7 +381,13 @@ function _publishResults_(): string {
       return;
     }
     const tabs = _publishTabs_((books[i].body as GoogleAppsScript.Sheets.Schema.Spreadsheet).sheets ?? []);
-    const tables = _publishedTables_(responses.filter((r) => r.spiritFormUrl === event.spiritFormUrl));
+    const starts = new Map(
+      games.filter((g) => g.scheduleUrl === event.scheduleUrl).map((g) => [g.game, _gameStart_(g)]),
+    );
+    const tables = _publishedTables_(
+      responses.filter((r) => r.spiritFormUrl === event.spiritFormUrl),
+      (game) => starts.get(game) ?? null,
+    );
     const titles = { results: `${event.eventName} SOTG Results`, breakdown: `${event.eventName} SOTG Breakdown` };
     batches.push({
       event,

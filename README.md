@@ -56,8 +56,8 @@ Results and Breakdown URL links to the file when there is one.
 **SpiritHub > Publish Results** writes the Results and Breakdown file of every tournament with Include Results ticked, Event Status OK, an SOTG Folder, and Publish Status NOT PUBLISHED, OUT OF DATE or PUBLISHED EXTERNALLY:
 
 - a new Google Sheet is made in the SOTG Folder with the Published File Name and this hub's hidden label. Next time the same file is rewritten, so its link never changes
-- the file looks like the ones the Schedule Manager published: `<Event Name> SOTG Results` (each receiving team's count and averages, highest Total first, categories at or below 1.8 and totals at or below 9 coloured) and `<Event Name> SOTG Breakdown` (every form, by receiving team, red lines between teams)
-- only counted forms go in, so duplicates, self scores, forms for games that did not happen and deleted forms are left out
+- the file looks like the ones the Schedule Manager published: `<Event Name> SOTG Results` (each receiving team's count and averages, highest Total first, categories at or below 1.8 and totals at or below 9 coloured) and `<Event Name> SOTG Breakdown` (every form, by receiving team, each team's in the order its games were played, red lines between teams)
+- only counted forms matched to a game go in, so duplicates, self scores, forms for games that did not happen, forms at a tournament without a schedule and deleted forms are left out
 - a file with the published name that this hub did not make is never touched: the tournament is skipped with a note in Message. Rename it, or change the Published File Name
 - File > Share > Publish to web, and copying the link to the Schedule Manager, are still done by hand
 
