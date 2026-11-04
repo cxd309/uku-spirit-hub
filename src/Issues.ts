@@ -285,6 +285,7 @@ function _keywordsFound_(comment: string, words: string[]): string[] {
  *
  * @param responses  every response, matched to games
  * @param deleted    every deleted form
+ * @param games      every game, to put deleted forms in a game
  * @param events     events with Include Results ticked
  * @param settings   thresholds from the Issue Rules settings
  * @returns one finding per form per check
@@ -292,6 +293,7 @@ function _keywordsFound_(comment: string, words: string[]): string[] {
 function _gameFindings_(
   responses: ResponseRecord[],
   deleted: DeletedFormRecord[],
+  games: GameRecord[],
   events: EventRecord[],
   settings: IssueSettings,
 ): IssueFinding[] {
@@ -337,22 +339,10 @@ function _gameFindings_(
     if (event.international) continue;
 
     if (r.comment === "") {
-      if (total > settings.commentTotalAbove || total < settings.commentTotalBelow) {
-        scoring(
-          "totalWithoutComment",
-          `Gave a total of ${total} without a comment, `
-            + `comment required above ${settings.commentTotalAbove} or below ${settings.commentTotalBelow}`,
-        );
-      }
-      const flagged = SCORE_KEYS.filter((key) => settings.commentCategoryScores.includes(r[key]));
-      if (flagged.length > 0) {
-        const byScore = [...new Set(flagged.map((key) => r[key]))].map((score) =>
-          `${_scoreWords_(score)} in ${
-            _andList_(flagged.filter((key) => r[key] === score).map((key) => RESPONSE_HEADERS[key]))
-          }`
-        );
-        scoring("categoryWithoutComment", `Gave ${_andList_(byScore)} without a comment`);
-      }
+      const totalText = _totalWithoutCommentText_(r, settings);
+      if (totalText !== "") scoring("totalWithoutComment", totalText);
+      const categoryText = _categoryWithoutCommentText_(r, settings);
+      if (categoryText !== "") scoring("categoryWithoutComment", categoryText);
     } else {
       for (const category of COMMENT_KEYWORD_CHECKS) {
         const found = _keywordsFound_(r.comment, settings.commentKeywords[category]);
@@ -367,53 +357,140 @@ function _gameFindings_(
   }
 
   findings.push(..._duplicateFindings_(responses, eventByUrl));
-  findings.push(..._deletedFindings_(deleted, responses, eventByUrl));
+  findings.push(..._deletedFindings_(deleted, responses, games, eventByUrl, settings));
   return findings;
 }
 
 /**
- * one Deleted Row or Redacted Comment finding per deleted form
+ * Details text when a form's total needs a comment, from the TOTAL-NO-COMMENT thresholds
+ * the form's comment is not looked at, callers only ask about forms without one
+ *
+ * @param scores    the five category scores, null where missing
+ * @param settings  thresholds
+ * @returns e.g. "Gave a total of 16 without a comment, ...", "" if the total does not need a comment or is incomplete
+ */
+function _totalWithoutCommentText_(
+  scores: Record<typeof SCORE_KEYS[number], number | null>,
+  settings: IssueSettings,
+): string {
+  const values = SCORE_KEYS.map((key) => scores[key]);
+  if (values.some((v) => v === null)) return "";
+  const total = values.reduce((sum: number, v) => sum + (v ?? 0), 0);
+  if (total <= settings.commentTotalAbove && total >= settings.commentTotalBelow) return "";
+  return `Gave a total of ${total} without a comment, `
+    + `comment required above ${settings.commentTotalAbove} or below ${settings.commentTotalBelow}`;
+}
+
+/**
+ * Details text when a form's category scores need a comment, from the CATEGORY-NO-COMMENT scores
+ * the form's comment is not looked at, callers only ask about forms without one
+ *
+ * @param scores    the five category scores, null where missing
+ * @param settings  thresholds
+ * @returns e.g. "Gave a 4 in Rules and Fouls without a comment", "" if no category needs a comment
+ */
+function _categoryWithoutCommentText_(
+  scores: Record<typeof SCORE_KEYS[number], number | null>,
+  settings: IssueSettings,
+): string {
+  const flagged = SCORE_KEYS.filter((key) => {
+    const score = scores[key];
+    return score !== null && settings.commentCategoryScores.includes(score);
+  });
+  if (flagged.length === 0) return "";
+  const byScore = [...new Set(flagged.map((key) => scores[key] as number))].map((score) =>
+    `${_scoreWords_(score)} in ${
+      _andList_(flagged.filter((key) => scores[key] === score).map((key) => RESPONSE_HEADERS[key]))
+    }`
+  );
+  return `Gave ${_andList_(byScore)} without a comment`;
+}
+
+/**
+ * whether a Deleted forms reason says the form was moved for needing a comment
+ * the Schedule Manager's delete step writes "Total<6 & Comment required", "Total>14 & Comment required"
+ * or "Comment required", the check codes TOTAL-NO-COMMENT and CATEGORY-NO-COMMENT are recognised too
+ *
+ * @param reason  the "Reason for deletion" cell
+ * @returns true for any of those, ignoring case and surrounding spaces
+ */
+function _isCommentRequiredReason_(reason: string): boolean {
+  const text = reason.trim().toLowerCase();
+  return text.endsWith("comment required")
+    || [ISSUE_CATEGORIES.totalWithoutComment.code, ISSUE_CATEGORIES.categoryWithoutComment.code]
+      .some((code) => text === code.toLowerCase());
+}
+
+/**
+ * one finding per deleted form, or one per comment check it breaks
  * pure, never modifies its arguments
  *
  * a deleted form whose teams and submission time match a form still on Results, with a different comment,
- * is the original of a redacted comment: REDACTED-COMMENT, in the game of the form on Results, Comment shows both versions
+ * is the original of a redacted comment: REDACTED-COMMENT, in the game of the form on Results, Comment shows both
+ * a deleted form whose reason says it needed a comment raises TOTAL-NO-COMMENT and CATEGORY-NO-COMMENT
+ * as if it were still on Results, falling back to DELETED-ROW if its scores break neither
  * any other deleted form was taken out: DELETED-ROW, Comment shows its comment
+ * forms not on Results are put in a game when their two teams played only once there
  *
  * @param deleted     every deleted form
  * @param responses   every response, to find edited comments
+ * @param games       every game, to find the game of a deleted form
  * @param eventByUrl  Spirit Form URL → included event
+ * @param settings    thresholds from the Issue Rules settings
  * @returns the findings
  */
 function _deletedFindings_(
   deleted: DeletedFormRecord[],
   responses: ResponseRecord[],
+  games: GameRecord[],
   eventByUrl: Map<string, EventRecord>,
+  settings: IssueSettings,
 ): IssueFinding[] {
   const formKey = (f: { spiritFormUrl: string; scorer: string; receiver: string; timestamp: Date | null }) =>
     `${f.spiritFormUrl}|${_teamKey_(f.scorer)}|${_teamKey_(f.receiver)}|${f.timestamp?.getTime() ?? ""}`;
   const kept = new Map(responses.filter((r) => r.timestamp !== null).map((r) => [formKey(r), r]));
+  const onlyGame = (event: EventRecord, a: string, b: string) => {
+    const between = games.filter((g) =>
+      g.scheduleUrl === event.scheduleUrl
+      && [_teamKey_(g.team1), _teamKey_(g.team2)].sort().join("|") === [_teamKey_(a), _teamKey_(b)].sort().join("|")
+    );
+    return between.length === 1 ? between[0].game : "";
+  };
 
   const findings: IssueFinding[] = [];
   for (const f of deleted) {
     const event = eventByUrl.get(f.spiritFormUrl);
     if (!event) continue;
     const reason = f.reason === "" ? "no reason given" : f.reason;
+    const spirit = _spiritText_(f);
     const edited = f.timestamp === null ? undefined : kept.get(formKey(f));
-    const isEdit = edited !== undefined && edited.comment !== f.comment;
-    findings.push({
-      category: isEdit ? "redactedComment" : "deletedRow",
-      event,
-      team: f.scorer,
-      game: isEdit ? edited.game : "",
-      opponent: f.receiver,
-      text: `${isEdit ? "Comment redacted" : "Deleted row"}: ${reason}`,
-      comment: isEdit
-        ? `Original comment: ${_quoted_(f.comment) || "\"\""}\n\nRedacted comment: ${
+    const base = { event, team: f.scorer, opponent: f.receiver, spirit };
+
+    if (edited !== undefined && edited.comment !== f.comment) {
+      findings.push({
+        ...base,
+        category: "redactedComment",
+        game: edited.game,
+        text: `Comment redacted: ${reason}`,
+        comment: `Original comment: ${_quoted_(f.comment) || "\"\""}\n\nRedacted comment: ${
           _quoted_(edited.comment) || "\"\""
-        }`
-        : _quoted_(f.comment),
-      spirit: _spiritText_(f),
-    });
+        }`,
+      });
+      continue;
+    }
+
+    const game = onlyGame(event, f.scorer, f.receiver);
+    const comment = _quoted_(f.comment);
+    if (_isCommentRequiredReason_(f.reason) && f.comment === "" && !event.international) {
+      const totalText = _totalWithoutCommentText_(f, settings);
+      const categoryText = _categoryWithoutCommentText_(f, settings);
+      if (totalText !== "") findings.push({ ...base, category: "totalWithoutComment", game, text: totalText, comment });
+      if (categoryText !== "") {
+        findings.push({ ...base, category: "categoryWithoutComment", game, text: categoryText, comment });
+      }
+      if (totalText !== "" || categoryText !== "") continue;
+    }
+    findings.push({ ...base, category: "deletedRow", game, text: `Deleted row: ${reason}`, comment });
   }
   return findings;
 }
@@ -903,7 +980,7 @@ function _refreshIssues_(): string {
 
   const found = _timed_("check issues", () => {
     const findings = [
-      ..._gameFindings_(responses, deleted, events, settings),
+      ..._gameFindings_(responses, deleted, games, events, settings),
       ..._tournamentFindings_(responses, games, events, clubOf, settings),
     ].filter((f) => settings.enabled[f.category]);
     return _issuesFromFindings_(findings, games, clubOf, new Date());
