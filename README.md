@@ -36,9 +36,9 @@ Each file's status is **NEW** (not imported yet), **EDITED** (changed since it w
 
 A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
 
-Refresh Results reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
+Refresh Results and Issues reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
 
-Refresh Results also reads each included tournament's **Form Responses**, finding two tabs by their header row rather than their name:
+Refresh Results and Issues also reads each included tournament's **Form Responses**, finding two tabs by their header row rather than their name:
 
 - the responses tab (today `Form responses 2`): every tab with the form's headers. There must be exactly one. Its rows go onto the Results tab. Rows with a missing team or a score that is not 0–4 are left out and listed in Message, placeholder rows with "Your Team Name" as the team are skipped
 - the Deleted forms tab: the one with the form's headers and "Reason for deletion". Optional. Its rows go onto the Deleted Forms tab as they are, as a record of what the chair moved out. Some are scores taken out, others the original of a response that was edited and is still on Results, so they are never used in statistics
@@ -79,11 +79,10 @@ International tournaments will be added by hand, not through the Schedule Manage
 9. In the Hub section, paste the Schedule Manager link and set the Start Date and End Date of the tournaments this hub covers
 10. Check the other settings to see if everything looks about right
 11. Gather tournaments, from the top menu click **SpiritHub > Refresh Tournaments**
-12. Gather results, from the top menu click **SpiritHub > Refresh Results**
+12. Gather results and raise issues, from the top menu click **SpiritHub > Refresh Results and Issues**
 13. Look in the _Teams_ and _Clubs_ tabs, if you want to adjust a team's assigned club then type it in the _Club Override_ column
-14. Automatically raise issues from results, from the top menu click **SpiritHub > Refresh Issues**
-15. Generate statistics for determining Spirit Award Winner, from the top menu click **SpiritHub > Refresh Club Statistics**
-16. If you want to adjust any of the settings for how the hub functions, from the top menu click **SpiritHub > SpiritHub Settings**, this will hide all tabs except settings, select any other menu items to hide settings and unhide all content tabs
+14. Generate statistics for determining Spirit Award Winner, from the top menu click **SpiritHub > Refresh Club Statistics**
+15. If you want to adjust any of the settings for how the hub functions, from the top menu click **SpiritHub > SpiritHub Settings**, this will hide all tabs except settings, select any other menu items to hide settings and unhide all content tabs
 
 ### If using the clasp CLI
 
@@ -98,22 +97,20 @@ International tournaments will be added by hand, not through the Schedule Manage
 
 Everything runs from the **SpiritHub** menu.
 
-| Menu item               | What it does                                                                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SpiritHub Settings      | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                                                       |
-| Refresh Tournaments     | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                                                      |
-| Refresh Results         | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs. Does not add issues |
-| Refresh Issues          | Adds any new issues from what is already in the spreadsheet, no data import                                                                                                                     |
-| Refresh Club Statistics | Recalculates the Club Statistics tab, no data import                                                                                                                                            |
+| Menu item                  | What it does                                                                                                                                                                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SpiritHub Settings         | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                                                                                                                       |
+| Refresh Tournaments        | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                                                                                                                      |
+| Refresh Results and Issues | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs, and adds any new issues. With nothing to import it just runs the issue checks again |
+| Refresh Club Statistics    | Recalculates the Club Statistics tab, no data import                                                                                                                                                                                                            |
 
 A normal update after uploading tournament results:
 
 1. **Refresh Tournaments.**
 2. On the Tournaments tab, tick **Include Results** for this hub's tournaments and **International** for international events, and set any file you want re-imported to **REFRESH**.
-3. **Refresh Results.**
-4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs updates on edit.
-5. **Refresh Issues.**
-6. **Refresh Club Statistics** to calculate spirit award winners.
+3. **Refresh Results and Issues.**
+4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs updates on edit, issues already added keep the club they were added with.
+5. **Refresh Club Statistics** to calculate spirit award winners.
 
 Each tab has an info row at the top saying what it is, which columns you can edit and how it refreshes.
 
@@ -177,7 +174,7 @@ Thresholds, keywords and on/off switches are in the Issue Rules section of the S
 - Comment checks and submission checks skip international tournaments, comments are not available and scoring teams are not necessarily UK teams
 - "Earlier" averages are from tournaments with an earlier start date, among included tournaments
 
-Refresh Issues puts the tab back in order every time: club, then tournament (date, then name), team, level, checks and opponent, so a club's issues sit together. Filters are kept through every refresh, on this tab and every other.
+Refresh Results and Issues puts the tab back in order every time: club, then tournament (date, then name), team, level, checks and opponent, so a club's issues sit together. Filters are kept through every refresh, on this tab and every other.
 
 Each refresh adds issues that are not already on the tab. When it finds a new check for an existing issue, the check is added to Checks and its section to Details, and a CLOSED issue goes back to NEW. Status, Committee Member and Notes are otherwise never changed, so filter and edit freely.
 
@@ -193,13 +190,13 @@ The Issues tab drafts an email for each issue, ready to copy into whatever mail 
 
 1. Fill in each club's address on the **Club Contacts** tab (several addresses separated by commas)
 2. Check the wording on the **Email Templates** tab (open it with **SpiritHub > SpiritHub Settings**). An issue with one check uses that check's template, one with several uses **MULTIPLE**, one with none (e.g. added by hand) uses **MANUAL**. Every template is enabled to begin with, untick Enabled to stop drafting a check's emails. CHEATING, HARASSMENT, SELF-SCORE, NO-SUCH-GAME, DUPLICATE and DELETED-ROW have no template
-3. **Refresh Issues** fills Email Subject and Email Body for NEW issues whose template is enabled. Editing the Email Templates tab fills them again straight away
+3. **Refresh Results and Issues** fills Email Subject and Email Body for NEW issues whose template is enabled. Editing the Email Templates tab fills them again straight away
 4. Copy the address, subject and body into your mail, check it and send it
 5. Set the issue's Status to IN PROGRESS or CLOSED. Subject and body clear straight away, setting it back to NEW fills them again. What was sent is kept by your mail, not the hub
 
 An issue added by hand gets an Email Address by copying the formula down from the row above.
 
-Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{score}`, `{spirit}`, `{comment}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder is reported by Refresh Issues, or when the template is edited, and nothing is filled until it is fixed.
+Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{score}`, `{spirit}`, `{comment}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder is reported by Refresh Results and Issues, or when the template is edited, and nothing is filled until it is fixed.
 
 ## Club Statistics
 

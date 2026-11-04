@@ -7,8 +7,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("SpiritHub")
     .addItem("Refresh Tournaments", "refreshTournaments")
-    .addItem("Refresh Results", "refreshResults")
-    .addItem("Refresh Issues", "refreshIssues")
+    .addItem("Refresh Results and Issues", "refreshResultsAndIssues")
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
     .addSeparator()
     .addItem("SpiritHub Settings", "showSettings")
@@ -170,17 +169,15 @@ function refreshTournaments() {
 }
 
 /**
- * menu: import every tournament marked NEW or REFRESH
+ * menu: import every included tournament's files marked NEW, EDITED or REFRESH, then add any new issues
+ * with nothing to import it just runs the issue checks again, e.g. after changing an Issue Rule
  */
-function refreshResults() {
-  _runRefresh_(_refreshResults_);
-}
-
-/**
- * menu: add any new issues from what is already in the spreadsheet
- */
-function refreshIssues() {
-  _runRefresh_(() => _timed_("issues", _refreshIssues_));
+function refreshResultsAndIssues() {
+  _runRefresh_(() => {
+    const results = _refreshResults_();
+    if (results.startsWith("No tournaments found")) return results;
+    return `${results}; ${_timed_("issues", _refreshIssues_)}`;
+  });
 }
 
 /**

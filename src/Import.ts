@@ -126,7 +126,7 @@ function _readResultsFiles_(urls: string[]): Map<string, FileRead> {
 }
 
 /**
- * file statuses that Refresh Results imports
+ * file statuses that Refresh Results and Issues imports
  */
 const IMPORT_STATUSES: readonly string[] = Object.freeze([
   SOURCE_STATUS.NEW,

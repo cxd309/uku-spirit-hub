@@ -74,7 +74,7 @@ type EmailPlaceholder = keyof typeof EMAIL_PLACEHOLDERS;
 const EMAIL_TEMPLATES_INFO =
   "One email template per issue check, filling Email Subject and Email Body on the Issues tab\n"
   + "An issue with one check uses that check's template, one with several uses MULTIPLE, one with none uses MANUAL\n"
-  + "Only NEW issues are filled, by Refresh Issues and whenever this tab or a Status is edited\n\n"
+  + "Only NEW issues are filled, by Refresh Results and Issues and whenever this tab or a Status is edited\n\n"
   + "User editable columns: Enabled, Subject and Body. Do not change the Issue Code column. "
   + "Only issues whose template is ticked Enabled get a draft. Missing templates are added back with starter wording\n\n"
   + "Placeholders, replaced from the issue row:\n"
@@ -561,7 +561,7 @@ function _emailColumns_(issues: IssueRow[], drafts: EmailDraft[]): { subject: st
 
 /**
  * fill Email Subject and Email Body for every NEW issue whose template is enabled, and blank them for every other issue
- * run by Refresh Issues, whenever the Email Templates tab is edited, and whenever a Status on the Issues tab changes
+ * run by Refresh Results and Issues, whenever the Email Templates tab is edited, and whenever a Status on the Issues tab changes
  * reads the Issues and Email Templates tabs, writes only those two columns, nothing is sent
  *
  * @returns a one-line summary

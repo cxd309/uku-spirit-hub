@@ -14,7 +14,7 @@ const GAMES_INFO = "Every game on the Gamelist tab of each included tournament's
   + "unless a spirit form was matched to the game\n"
   + "Team 1 Submitted and Team 2 Submitted are ticked when that team has a counted spirit form for the game\n"
   + "Blank scores were not entered, the game still counts as played\n\n"
-  + "To Refresh run \"Refresh Results\"";
+  + "To Refresh run \"Refresh Results and Issues\"";
 
 /**
  * name of the tab in a schedule that lists every game

@@ -20,7 +20,7 @@ const EVENTS_INFO =
   + "MISSING no longer on the Schedule List, OK up to date\n"
   + "Event Status is the first of NOT INCLUDED, MISSING, ERROR, REFRESH, EDITED, NEW that either file has, "
   + "otherwise OK\n\n"
-  + "To read the Schedule Manager again run \"Refresh Tournaments\", to import results run \"Refresh Results\"";
+  + "To read the Schedule Manager again run \"Refresh Tournaments\", to import results run \"Refresh Results and Issues\"";
 
 /**
  * events table columns, in order
@@ -447,7 +447,7 @@ function _highlightDuplicateTournaments_(sheet: GoogleAppsScript.Spreadsheet.She
 /**
  * read the Schedule List of the Schedule Manager and bring the Events tab up to date
  *
- * does not import any responses, Refresh Results does that
+ * does not import any responses, Refresh Results and Issues does that
  *
  * @returns a one-line summary of the Events tab
  */

@@ -11,7 +11,7 @@ const TEAMS_INFO = "Every team that has given or recieved a spirit score\n"
   + "Teams scoring at tournaments ticked International are left out, only the receiving UK teams are listed\n\n"
   + "Suggested Club name is generated using the enabled Name Rules on the Settings tab, this is the default \"best guess\" at a club\n\n"
   + "To override the club use the Club Override column\n\n"
-  + "This table is refreshed by Refresh Tournaments, Refresh Results, and whenever International is ticked or unticked";
+  + "This table is refreshed by Refresh Tournaments, Refresh Results and Issues, and whenever International is ticked or unticked";
 
 /**
  * teams tab columns, in order

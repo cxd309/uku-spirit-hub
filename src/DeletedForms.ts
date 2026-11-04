@@ -12,7 +12,7 @@ const DELETED_FORMS_INFO = "Every row on the Deleted forms tab of each included 
   + "A record of what the chair moved out of the responses, with their reason. "
   + "Some are scores taken out, others are the original of a response that was edited and is still on Results\n"
   + "Never used in statistics\n\n"
-  + "To Refresh run \"Refresh Results\"";
+  + "To Refresh run \"Refresh Results and Issues\"";
 
 /**
  * deleted forms tab columns, in order

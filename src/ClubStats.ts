@@ -296,7 +296,7 @@ function _clubStatsCiFormula_(row: number, sign: 1 | -1): string {
 function _refreshClubStatistics_(): string {
   const events = _readEvents_(_getEventsSheet_());
   const responses = _readResponses_(_getResponsesSheet_());
-  if (responses.length === 0) return "No results found: run Refresh Results first";
+  if (responses.length === 0) return "No results found: run Refresh Results and Issues first";
 
   const clubOf = _readTeamClubs_();
   const awardSettings = _readAwardSettings_();

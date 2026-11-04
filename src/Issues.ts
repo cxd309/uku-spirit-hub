@@ -20,7 +20,7 @@ const ISSUES_INFO = "Spirit issues found in the results\n"
   + "fills them again\n\n"
   + "A refresh that finds another check for an existing issue adds it to Checks and Details, "
   + "and a CLOSED issue goes back to NEW. Nothing else on existing rows is changed\n\n"
-  + "Refresh Issues puts the tab back in order: club, tournament, team, level, checks, opponent. "
+  + "Refresh Results and Issues puts the tab back in order: club, tournament, team, level, checks, opponent. "
   + "Filters are kept, so filter freely";
 
 /**
@@ -864,8 +864,7 @@ function _writeIssues_(found: FoundIssue[]): { added: number; updated: number } 
 
 /**
  * run every check on what is already in the spreadsheet, then add new issues and new checks to existing issues
- * no files are read, use after Refresh Results, or after changing Include Results, International,
- * a club override or an issue rule
+ * no files are read, run by Refresh Results and Issues straight after importing
  * reads the clubs from the Teams tab and the thresholds from the Issue Rules settings, disabled checks add nothing
  *
  * @returns a one-line summary
@@ -882,7 +881,7 @@ function _refreshIssues_(): string {
       clubOf: _readTeamClubs_(),
     };
   });
-  if (responses.length === 0) return "No results found: run Refresh Results first";
+  if (responses.length === 0) return "No results to check: tick Include Results on the Tournaments tab";
 
   const found = _timed_("check issues", () => {
     const findings = [

@@ -159,7 +159,7 @@ function _issueRuleEditable_(code: string): number[] {
  */
 const ISSUE_RULES_SECTION = Object.freeze<SettingsSection>({
   title: "Issue Rules",
-  description: "Settings for each issue check, used by Refresh Issues. "
+  description: "Settings for each issue check, used by Refresh Results and Issues. "
     + "Untick Enabled to stop adding new issues of that type. "
     + "Value 1 and Value 2 are thresholds, the description says what each means, lists are comma separated. "
     + "Do not change the Rule column. Rules no longer used by this version can be deleted",

@@ -8,7 +8,7 @@ const CLUBS_SHEET = "Clubs";
  * what the tab is, what to edit, how it refreshes
  */
 const CLUBS_INFO = "Every known club and its teams, generated from Teams tab\n\n"
-  + "DO NOT EDIT this table, it is refreshed by Refresh Tournaments, Refresh Results, and whenever a Club Override or Name Rule changes\n\n"
+  + "DO NOT EDIT this table, it is refreshed by Refresh Tournaments, Refresh Results and Issues, and whenever a Club Override or Name Rule changes\n\n"
   + "Scores, ranks and the award are on the Club Statistics tab";
 /**
  * clubs tab columns, in order, all plain values written by the script
