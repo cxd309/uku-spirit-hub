@@ -14,6 +14,7 @@ const SCHEDULE_LIST_HEADERS = Object.freeze({
   endDate: "End date",
   scheduleUrl: "Schedule URL",
   spiritFormUrl: "SOTG Sheet",
+  sotgFolderUrl: "SOTG Folder",
 });
 
 /**
@@ -30,6 +31,8 @@ interface ScheduleListRow {
   scheduleUrl: string;
   /** link to the tournament's Form Responses spreadsheet (the key) */
   spiritFormUrl: string;
+  /** link to the Drive folder the Results and Breakdown file is published in, "" until the chair creates it */
+  sotgFolderUrl: string;
   /** 1-based row on the Schedule List, for messages */
   sourceRow: number;
 }
@@ -125,6 +128,7 @@ function _parseScheduleList_(values: unknown[][], startDate: Date, endDate: Date
       endDate: _scheduleDate_(row[columns.endDate]),
       scheduleUrl,
       spiritFormUrl,
+      sotgFolderUrl: text("sotgFolderUrl"),
       sourceRow: i + 2,
     });
   });

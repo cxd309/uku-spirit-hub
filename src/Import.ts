@@ -376,7 +376,12 @@ function _refreshResults_(): string {
   _timed_("write games", () => _writeGames_(gamesSheet, matched.games));
   _timed_("write results", () => _writeResponses_(responsesSheet, matched.responses));
   _timed_("write deleted forms", () => _writeDeletedForms_(deletedSheet, matched.deleted));
-  _timed_("write tournaments", () => _writeEvents_(eventsSheet, updatedEvents));
+  // a new import can make a published file out of date
+  const published = _timed_(
+    "check published files",
+    () => _withPublishStatus_(updatedEvents, _readHubSettings_().publishedFileName),
+  );
+  _timed_("write tournaments", () => _writeEvents_(eventsSheet, published));
 
   _rebuildTeamsAndClubs_(matched.responses, _sortEvents_(updatedEvents));
 

@@ -20,6 +20,10 @@ const EVENTS_INFO =
   + "MISSING no longer on the Schedule List, OK up to date\n"
   + "Event Status is the first of NOT INCLUDED, MISSING, ERROR, REFRESH, EDITED, NEW that either file has, "
   + "otherwise OK\n\n"
+  + "Publish Status, from the SOTG Folder on the Schedule List and the Published File Name on the Settings tab: "
+  + "NO FOLDER the Schedule Manager has no SOTG Folder yet, NOT PUBLISHED no published file in it, "
+  + "PUBLISHED the file was written after the Form Responses and schedule last changed, "
+  + "OUT OF DATE they changed after it was written, ERROR the folder cannot be read\n\n"
   + "To read the Schedule Manager again run \"Refresh Tournaments\", to import results run \"Refresh Results and Issues\"";
 
 /**
@@ -45,6 +49,9 @@ const EVENT_HEADERS = Object.freeze(
     message: "Message",
     includeResults: "Include Results",
     international: "International",
+    sotgFolderUrl: "SOTG Folder URL",
+    publishStatus: "Publish Status",
+    publishedUrl: "Results and Breakdown URL",
   } as const,
 );
 
@@ -136,7 +143,26 @@ interface EventRecord {
   includeResults: boolean;
   /** ticked for international events */
   international: boolean;
+  /** link to the Drive folder the Results and Breakdown file is published in, "" until there is one */
+  sotgFolderUrl: string;
+  /** one of PUBLISH_STATUS */
+  publishStatus: string;
+  /** link to the published Results and Breakdown file, "" if there is none */
+  publishedUrl: string;
 }
+
+/**
+ * values of the Publish Status column, see _publishStatus_
+ */
+const PUBLISH_STATUS = Object.freeze(
+  {
+    NO_FOLDER: "NO FOLDER",
+    NOT_PUBLISHED: "NOT PUBLISHED",
+    PUBLISHED: "PUBLISHED",
+    OUT_OF_DATE: "OUT OF DATE",
+    ERROR: "ERROR",
+  } as const,
+);
 
 /**
  * formula columns of the Events tab
@@ -222,6 +248,9 @@ function _eventFromRow_(row: unknown[]): EventRecord {
     message: String(cell("message")),
     includeResults: cell("includeResults") === true,
     international: cell("international") === true,
+    sotgFolderUrl: String(cell("sotgFolderUrl") ?? "").trim(),
+    publishStatus: String(cell("publishStatus") ?? "").trim().toUpperCase(),
+    publishedUrl: String(cell("publishedUrl") ?? "").trim(),
   };
   return {
     ...event,
@@ -397,6 +426,9 @@ function _syncEvents_(
       message: messages.join("; "),
       includeResults: previous?.includeResults ?? false,
       international: previous?.international ?? false,
+      sotgFolderUrl: row.sotgFolderUrl,
+      publishStatus: previous?.publishStatus ?? "",
+      publishedUrl: previous?.publishedUrl ?? "",
     };
     return { ...event, eventStatus: _eventStatus_(event) };
   });
@@ -465,7 +497,8 @@ function _refreshTournaments_(): string {
     "read file versions",
     () => _readFileVersions_(list.rows.flatMap((r) => [r.scheduleUrl, r.spiritFormUrl])),
   );
-  const events = _syncEvents_(existing, list.rows, versions);
+  const synced = _syncEvents_(existing, list.rows, versions);
+  const events = _timed_("check published files", () => _withPublishStatus_(synced, settings.publishedFileName));
   _timed_("write tournaments", () => _writeEvents_(sheet, events));
 
   // event names come from the Schedule List, so Teams and Clubs pick up any renames and International ticks

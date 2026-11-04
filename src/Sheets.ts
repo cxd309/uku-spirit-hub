@@ -2,8 +2,9 @@
  * get a tab by name, creating it if it does not exist
  * a new tab gets a wrapped info row, then a bold header row, both frozen
  *
- * if the tab exists, its header row must match `headers` exactly
- * code and sheet cannot silently disagree
+ * if the tab exists, its header row must match `headers` exactly, so code and sheet cannot silently disagree
+ * the one exception is a tab from an earlier version that lacks columns added at the end:
+ * they are added, with their headers and the new info row, and everything already on the tab is kept
  *
  * @param ss       spreadsheet to examine
  * @param name     tab name
@@ -21,12 +22,28 @@ function _getOrCreateSheet_(
 ): GoogleAppsScript.Spreadsheet.Sheet {
   const existing = ss.getSheetByName(name);
   if (existing) {
-    const actual = existing.getRange(HEADER_ROW, 1, 1, headers.length).getValues()[0].map(String);
-    if (actual.join("|") !== headers.join("|")) {
+    const width = Math.min(existing.getMaxColumns(), headers.length);
+    const actual = existing.getRange(HEADER_ROW, 1, 1, width).getValues()[0].map((cell) => String(cell).trim());
+    let present = actual.length;
+    while (present > 0 && actual[present - 1] === "") present--;
+    const matches = actual.join("|") === headers.slice(0, width).join("|");
+    const isOlder = present > 0 && present < headers.length && actual.slice(0, present).join("|")
+        === headers.slice(0, present).join("|");
+    if (matches && width === headers.length) return existing;
+    if (!isOlder) {
       throw new Error(
         `Tab "${name}" has unexpected headers: expected [${headers.join(", ")}], found [${actual.join(", ")}]`,
       );
     }
+    if (existing.getMaxColumns() < headers.length) {
+      existing.insertColumnsAfter(existing.getMaxColumns(), headers.length - existing.getMaxColumns());
+    }
+    existing
+      .getRange(HEADER_ROW, present + 1, 1, headers.length - present)
+      .setValues([headers.slice(present)])
+      .setFontWeight("bold");
+    existing.getRange(INFO_ROW, 1, 1, existing.getMaxColumns()).breakApart();
+    existing.getRange(INFO_ROW, 1, 1, headers.length).merge().setValue(info).setWrap(true).setVerticalAlignment("top");
     return existing;
   }
 

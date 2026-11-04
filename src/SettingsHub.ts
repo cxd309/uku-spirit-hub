@@ -18,6 +18,12 @@ const HUB_SETTINGS = Object.freeze({
     default: "",
     description: "Only tournaments starting on or before this date are listed",
   },
+  publishedFileName: {
+    label: "Published File Name",
+    default: "{event_name} Spirit Results and Breakdown",
+    description: "Name of the Results and Breakdown file in each tournament's SOTG Folder, {event_name} is the "
+      + "tournament's Event Name. Change it, e.g. add TEST, to publish without touching existing files",
+  },
 });
 
 /**
@@ -56,6 +62,8 @@ interface HubSettings {
   startDate: Date;
   /** last start date listed */
   endDate: Date;
+  /** name of the published Results and Breakdown file, {event_name} is replaced by the Event Name */
+  publishedFileName: string;
 }
 
 /**
@@ -82,5 +90,9 @@ function _readHubSettings_(): HubSettings {
   if (endDate.getTime() < startDate.getTime()) {
     throw new Error(`"${HUB_SETTINGS.endDate.label}" is before "${HUB_SETTINGS.startDate.label}" ${where}`);
   }
-  return { scheduleManagerUrl, startDate, endDate };
+  const publishedFileName = String(values.get(HUB_SETTINGS.publishedFileName.label) ?? "").trim();
+  if (!publishedFileName.includes(PUBLISHED_NAME_PLACEHOLDER)) {
+    throw new Error(`"${HUB_SETTINGS.publishedFileName.label}" must include ${PUBLISHED_NAME_PLACEHOLDER} ${where}`);
+  }
+  return { scheduleManagerUrl, startDate, endDate, publishedFileName };
 }

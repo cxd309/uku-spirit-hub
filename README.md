@@ -12,13 +12,14 @@ One hub covers one season, or whatever dates are set on the Settings tab.
 
 Tournaments are read from the **Schedule List** tab of the UKU Schedule Manager, set on the Settings tab. The hub reads these columns from row 1, by name:
 
-| Column       | Used for                                                  |
-| ------------ | --------------------------------------------------------- |
-| Event Name   | the tournament's name                                     |
-| Start date   | the tournament's date, and whether it is within the dates |
-| End date     | shown on the Tournaments tab                              |
-| Schedule URL | the tournament's schedule                                 |
-| SOTG Sheet   | the tournament's Form Responses, which identifies it      |
+| Column       | Used for                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| Event Name   | the tournament's name                                                                             |
+| Start date   | the tournament's date, and whether it is within the dates                                         |
+| End date     | shown on the Tournaments tab                                                                      |
+| Schedule URL | the tournament's schedule                                                                         |
+| SOTG Sheet   | the tournament's Form Responses, which identifies it                                              |
+| SOTG Folder  | the Drive folder the Results and Breakdown file is published in, blank until the chair creates it |
 
 Rows without a Schedule URL or SOTG Sheet, or starting outside the Start Date and End Date on the Settings tab, are left out.
 
@@ -35,6 +36,20 @@ On the Tournaments tab grey columns are filled on refresh and white columns are 
 Each file's status is **NEW** (not imported yet), **EDITED** (changed since it was imported), **REFRESH**, **ERROR** (cannot be read, see Message), **MISSING** (no longer on the Schedule List) or **OK**. Event Status is **NOT INCLUDED** when Include Results is unticked, otherwise the first of MISSING, ERROR, REFRESH, EDITED, NEW that either file has, otherwise OK.
 
 A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
+
+**Publish Status** says whether the tournament's Results and Breakdown file is in its SOTG Folder, looking for the **Published File Name** on the Settings tab (`{event_name} Spirit Results and Breakdown` to begin with, change it to publish test copies without touching existing files). It is checked by Refresh Tournaments and Refresh Results and Issues, reading only file names and dates:
+
+| Publish Status | Meaning                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| NO FOLDER      | the Schedule Manager has no SOTG Folder for it yet, expected until the chair creates one |
+| NOT PUBLISHED  | the folder has no file with the published name                                           |
+| PUBLISHED      | the file was written after the Form Responses and schedule last imported changed         |
+| OUT OF DATE    | the Form Responses or schedule changed after the file was written                        |
+| ERROR          | the folder link is not a Drive folder, or cannot be read, see Message                    |
+
+Results and Breakdown URL links to the file when there is one.
+
+Tabs from an earlier version that lack columns added at the end, like these three, have them added on their own, keeping everything else.
 
 Refresh Results and Issues reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
 
