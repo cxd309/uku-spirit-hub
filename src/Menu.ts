@@ -12,8 +12,15 @@ function onOpen() {
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
     .addSeparator()
     .addItem("SpiritHub Settings", "showSettings")
+    .addItem(`Version ${HUB_VERSION}`, "showVersion")
     .addToUi();
 }
+
+/**
+ * menu: the Version item, whose name shows which version of the hub this spreadsheet runs
+ * clicking it does nothing, but a menu item needs a function to run
+ */
+function showVersion() {}
 
 /**
  * keep Teams, Clubs and email drafts up to date when a person changes something they depend on
