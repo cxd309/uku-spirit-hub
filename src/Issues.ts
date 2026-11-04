@@ -493,8 +493,11 @@ function _deletedFindings_(
  *
  * a pair has a duplicate when a form on Results is a Duplicate, or the chair moved one to Deleted forms
  * with a reason mentioning "duplicate"
- * the list has every form on Results and every deleted form for the pair, deleted ones marked with their reason,
- * leaving out deleted copies of forms still on Results (edited comments)
+ * each duplicate belongs to the counted form submitted closest to it, one finding per counted form with duplicates:
+ * in that form's game, with its spirit and comment, listing only its duplicates: deleted ones marked with their reason,
+ * ones still on Results marked not counted
+ * a pair with no counted form gets one finding listing all its forms, with no game
+ * deleted copies of forms still on Results (edited comments) are left out
  *
  * @param responses   every response, matched to games
  * @param deleted     every deleted form, matched to games
@@ -519,7 +522,8 @@ function _duplicateFindings_(
   const add = (key: string, listed: Listed) => pairs.set(key, [...(pairs.get(key) ?? []), listed]);
   for (const r of responses) {
     if (r.match !== MATCH_RESULTS.OK && r.match !== MATCH_RESULTS.DUPLICATE) continue;
-    add(pairKey(r), { form: r, isDuplicate: r.match === MATCH_RESULTS.DUPLICATE, hasGame: r.counted, note: "" });
+    const isDuplicate = r.match === MATCH_RESULTS.DUPLICATE;
+    add(pairKey(r), { form: r, isDuplicate, hasGame: r.counted, note: isDuplicate ? " (not counted)" : "" });
   }
   for (const f of deleted) {
     if (isCopy(f)) continue;
@@ -532,26 +536,57 @@ function _duplicateFindings_(
     });
   }
 
+  const time = (l: Listed) => l.form.timestamp?.getTime() ?? 0;
+  const line = (l: Listed) =>
+    [_spiritText_(l.form), _quoted_(l.form.comment)].filter((x) => x !== "").join(" ") + l.note;
   const findings: IssueFinding[] = [];
   for (const listed of pairs.values()) {
     const first = listed[0].form;
     const event = eventByUrl.get(first.spiritFormUrl);
-    if (!event || !listed.some((l) => l.isDuplicate)) continue;
-    const lines = [...listed]
-      .sort((a, b) => (a.form.timestamp?.getTime() ?? 0) - (b.form.timestamp?.getTime() ?? 0))
-      .map((l) => [_spiritText_(l.form), _quoted_(l.form.comment)].filter((x) => x !== "").join(" ") + l.note);
-    findings.push({
-      category: "duplicate",
-      event,
-      team: first.scorer,
-      game: "",
-      opponent: first.receiver,
-      text: "More responses submitted than games played.\n\n"
-        + `Games played: ${listed.filter((l) => l.hasGame).length}.\n\n`
-        + `Responses:\n${lines.join("\n")}`,
-      comment: "",
-      spirit: "",
-    });
+    const duplicates = listed.filter((l) => l.isDuplicate);
+    if (!event || duplicates.length === 0) continue;
+    const intro = "More responses submitted than games played.\n\n"
+      + `Games played: ${listed.filter((l) => l.hasGame).length}.\n\n`;
+
+    // each duplicate belongs to the counted form submitted closest to it, which gives the game, spirit and comment
+    const counted = listed.filter((l) => "match" in l.form && l.form.counted);
+    if (counted.length === 0) {
+      const lines = [...listed].sort((a, b) => time(a) - time(b)).map(line);
+      findings.push({
+        category: "duplicate",
+        event,
+        team: first.scorer,
+        game: "",
+        opponent: first.receiver,
+        text: `${intro}Responses:\n${lines.join("\n")}`,
+        comment: "",
+        spirit: "",
+      });
+      continue;
+    }
+    const groups: Map<Listed, Listed[]> = new Map();
+    for (const d of duplicates) {
+      const closest = counted.reduce((
+        best,
+        c,
+      ) => (Math.abs(time(c) - time(d)) < Math.abs(time(best) - time(d)) ? c : best));
+      groups.set(closest, [...(groups.get(closest) ?? []), d]);
+    }
+    // the counted form is in the Spirit and Comment columns, so Details lists only its duplicates
+    for (const [kept, extra] of groups) {
+      const form = kept.form as ResponseRecord;
+      const lines = [...extra].sort((a, b) => time(a) - time(b)).map(line);
+      findings.push({
+        category: "duplicate",
+        event,
+        team: form.scorer,
+        game: form.game,
+        opponent: form.receiver,
+        text: `${intro}Duplicates:\n${lines.join("\n")}`,
+        comment: _quoted_(form.comment),
+        spirit: _spiritText_(form),
+      });
+    }
   }
   return findings;
 }
