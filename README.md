@@ -20,7 +20,7 @@ Tournaments are read from the **Schedule List** tab of the UKU Schedule Manager,
 | Schedule URL               | the tournament's schedule                                                                         |
 | SOTG Sheet                 | the tournament's Form Responses, which identifies it                                              |
 | SOTG Folder                | the Drive folder the Results and Breakdown file is published in, blank until the chair creates it |
-| SOTG Results and Breakdown | the published file, used when its name is the Published File Name                                 |
+| SOTG Results and Breakdown | the file the Schedule Manager published, whatever its name                                        |
 
 Rows without a Schedule URL or SOTG Sheet, or starting outside the Start Date and End Date on the Settings tab, are left out.
 
@@ -38,16 +38,16 @@ Each file's status is **NEW** (not imported yet), **EDITED** (changed since it w
 
 A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
 
-**Publish Status** says whether the tournament's Results and Breakdown file exists, named by the **Published File Name** on the Settings tab (`{event_name} Spirit Results and Breakdown` to begin with, change it to publish test copies without touching existing files). The file is the one the Schedule Manager links to when it has that name, otherwise the newest with that name in the SOTG Folder. Files this hub publishes carry a hidden label only it can read, so it can tell them from files made by the Schedule Manager, by hand or by another hub. It is checked by Refresh Tournaments and Refresh Results and Issues, reading only file names and dates:
+**Publish Status** says whether the tournament's Results and Breakdown file exists, named by the **Published File Name** on the Settings tab (`{event_name} Spirit Results and Breakdown` to begin with, change it to publish test copies without touching existing files). Files this hub publishes carry a hidden label only it can read, so it can tell them from files made by the Schedule Manager, by hand or by another hub. This hub's own file with the published name comes first, wherever it is found. Otherwise the file the Schedule Manager links to counts, whatever its name, as published files' names often differ from the Event Name, or failing that a file with the published name in the SOTG Folder. It is checked by Refresh Tournaments and Refresh Results and Issues, reading only file names and dates:
 
-| Publish Status       | Meaning                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| NO FOLDER            | the Schedule Manager has no SOTG Folder for it yet, expected until the chair creates one |
-| NOT PUBLISHED        | no file with the published name                                                          |
-| PUBLISHED            | this hub's file, written after the Form Responses and schedule last imported changed     |
-| OUT OF DATE          | this hub's file, but the Form Responses or schedule changed after it was written         |
-| PUBLISHED EXTERNALLY | a file with the published name that this hub did not create, it is never changed         |
-| ERROR                | the folder link is not a Drive folder, or cannot be read, see Message                    |
+| Publish Status       | Meaning                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| NO FOLDER            | the Schedule Manager has no SOTG Folder for it yet, expected until the chair creates one                                       |
+| NOT PUBLISHED        | no linked file, and no file with the published name in the SOTG Folder                                                         |
+| PUBLISHED            | this hub's file, written after the Form Responses and schedule last imported changed                                           |
+| OUT OF DATE          | this hub's file, but the Form Responses or schedule changed after it was written                                               |
+| PUBLISHED EXTERNALLY | a file this hub did not create: the Schedule Manager's link, or one with the published name in the folder. It is never changed |
+| ERROR                | the folder link is not a Drive folder, or cannot be read, see Message                                                          |
 
 Results and Breakdown URL links to the file when there is one.
 

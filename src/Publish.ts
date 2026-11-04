@@ -39,6 +39,8 @@ const PUBLISHED_BY_PROPERTY = "spiritHub";
 interface PublishedFile {
   /** Drive file ID */
   id: string;
+  /** file name */
+  name: string;
   /** when it was last written */
   modifiedTime: Date;
   /** whether this hub created it */
@@ -54,42 +56,47 @@ type FolderLookup = { ok: true; files: PublishedFile[] } | { ok: false; reason: 
  * a tournament's Publish Status, the link to its published file, and anything to say in Message
  * pure, no google calls
  *
- * the file is the one linked from the Schedule Manager when it has the published name,
- * otherwise the newest with that name in the SOTG Folder
- * a file this hub created is PUBLISHED, or OUT OF DATE when the Form Responses or schedule it was made from
- * changed after it was written, any other file is PUBLISHED EXTERNALLY
+ * this hub's own file comes first: one it created, with the published name, linked or in the SOTG Folder.
+ * It is PUBLISHED, or OUT OF DATE when the Form Responses or schedule it was made from changed after it was written
+ * otherwise a file the Schedule Manager links to, whatever its name, or one in the SOTG Folder with the published name,
+ * is PUBLISHED EXTERNALLY
  * without a file: NO FOLDER without a SOTG Folder, ERROR if it cannot be read, otherwise NOT PUBLISHED
  *
  * @param event   the tournament
- * @param linked  the file linked from the Schedule Manager, null when there is none or its name does not match
+ * @param name    the published file name
+ * @param linked  files the Schedule Manager or the last check linked to, that could be read
  * @param lookup  what looking in its SOTG Folder found, undefined when it was not looked in
  * @returns the status, the file's link, "" if none, and the reason for an ERROR or a note, "" if none
  */
 function _publishStatus_(
   event: EventRecord,
-  linked: PublishedFile | null,
+  name: string,
+  linked: PublishedFile[],
   lookup: FolderLookup | undefined,
 ): { status: string; url: string; reason: string } {
-  let file = linked;
-  let reason = "";
-  if (!file) {
-    if (event.sotgFolderUrl === "") return { status: PUBLISH_STATUS.NO_FOLDER, url: "", reason: "" };
-    if (_folderIdFromUrl_(event.sotgFolderUrl) === "") {
-      return { status: PUBLISH_STATUS.ERROR, url: "", reason: "SOTG Folder is not a Google Drive folder link" };
-    }
-    if (!lookup) return { status: PUBLISH_STATUS.ERROR, url: "", reason: "SOTG Folder not checked" };
-    if (!lookup.ok) return { status: PUBLISH_STATUS.ERROR, url: "", reason: lookup.reason };
-    if (lookup.files.length === 0) return { status: PUBLISH_STATUS.NOT_PUBLISHED, url: "", reason: "" };
-    file = lookup.files[0];
-    if (lookup.files.length > 1) reason = `${lookup.files.length} files with the published name, the newest is used`;
+  const inFolder = lookup && lookup.ok ? lookup.files : [];
+  const urlOf = (file: PublishedFile) => `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+
+  const own = [...linked, ...inFolder].find((f) => f.own && f.name.trim() === name);
+  if (own) {
+    const others = inFolder.filter((f) => f.id !== own.id).length;
+    const reason = others > 0 ? `${others + 1} files with the published name, this hub's is used` : "";
+    const modified = own.modifiedTime.getTime();
+    const changed = [event.scheduleImportDate, event.spiritFormImportDate]
+      .some((imported) => imported !== null && imported.getTime() > modified + VERSION_TOLERANCE_MS);
+    return { status: changed ? PUBLISH_STATUS.OUT_OF_DATE : PUBLISH_STATUS.PUBLISHED, url: urlOf(own), reason };
   }
 
-  const url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
-  if (!file.own) return { status: PUBLISH_STATUS.PUBLISHED_EXTERNALLY, url, reason };
-  const modified = file.modifiedTime.getTime();
-  const changed = [event.scheduleImportDate, event.spiritFormImportDate]
-    .some((imported) => imported !== null && imported.getTime() > modified + VERSION_TOLERANCE_MS);
-  return { status: changed ? PUBLISH_STATUS.OUT_OF_DATE : PUBLISH_STATUS.PUBLISHED, url, reason };
+  const external = linked.find((f) => !f.own) ?? inFolder.find((f) => !f.own);
+  if (external) return { status: PUBLISH_STATUS.PUBLISHED_EXTERNALLY, url: urlOf(external), reason: "" };
+
+  if (event.sotgFolderUrl === "") return { status: PUBLISH_STATUS.NO_FOLDER, url: "", reason: "" };
+  if (_folderIdFromUrl_(event.sotgFolderUrl) === "") {
+    return { status: PUBLISH_STATUS.ERROR, url: "", reason: "SOTG Folder is not a Google Drive folder link" };
+  }
+  if (!lookup) return { status: PUBLISH_STATUS.ERROR, url: "", reason: "SOTG Folder not checked" };
+  if (!lookup.ok) return { status: PUBLISH_STATUS.ERROR, url: "", reason: lookup.reason };
+  return { status: PUBLISH_STATUS.NOT_PUBLISHED, url: "", reason: "" };
 }
 
 /**
@@ -118,22 +125,22 @@ const PUBLISHED_FILE_FIELDS = "id,name,modifiedTime,trashed,appProperties";
 function _publishedFile_(details: DriveFileDetails, hubId: string): PublishedFile {
   return {
     id: details.id ?? "",
+    name: details.name ?? "",
     modifiedTime: new Date(details.modifiedTime ?? 0),
     own: details.appProperties?.[PUBLISHED_BY_PROPERTY] === hubId,
   };
 }
 
 /**
- * read the files linked from the Schedule Manager, keeping those that have the published name
+ * read linked files, as the Schedule Manager or the last check gave them
  * only file names and dates are read, which the hub's Drive permission allows
  *
- * @param wanted  the link, and the name the file must have
- * @param hubId   this hub's spreadsheet ID
- * @returns one file per entry of `wanted`, in the same order, null if it cannot be read, is in the bin
- *   or has a different name
+ * @param urls   spreadsheet links
+ * @param hubId  this hub's spreadsheet ID
+ * @returns one file per link, in the same order, null if it is not a link, cannot be read or is in the bin
  */
-function _readLinkedFiles_(wanted: { url: string; name: string }[], hubId: string): (PublishedFile | null)[] {
-  const ids = wanted.map((w) => _spreadsheetIdFromUrl_(w.url));
+function _readLinkedFiles_(urls: string[], hubId: string): (PublishedFile | null)[] {
+  const ids = urls.map((url) => _spreadsheetIdFromUrl_(url));
   const toFetch = ids.flatMap((id, i) => (id === "" ? [] : [i]));
   const responses = _fetchGoogleJson_(
     toFetch.map((i) =>
@@ -141,11 +148,10 @@ function _readLinkedFiles_(wanted: { url: string; name: string }[], hubId: strin
       + `?fields=${encodeURIComponent(PUBLISHED_FILE_FIELDS)}&supportsAllDrives=true`
     ),
   );
-  const files: (PublishedFile | null)[] = wanted.map(() => null);
+  const files: (PublishedFile | null)[] = urls.map(() => null);
   toFetch.forEach((i, j) => {
     const details = responses[j].body as DriveFileDetails;
-    if (responses[j].code !== 200 || details.trashed || details.name?.trim() !== wanted[i].name) return;
-    files[i] = _publishedFile_(details, hubId);
+    if (responses[j].code === 200 && !details.trashed) files[i] = _publishedFile_(details, hubId);
   });
   return files;
 }
@@ -179,7 +185,7 @@ function _lookUpPublishedFiles_(wanted: { folderId: string; name: string }[], hu
 
 /**
  * the events with their Publish Status, Results and Breakdown URL and Publish message brought up to date
- * the Schedule Manager's link is tried first, then the link found last time, then the SOTG Folder
+ * reads the files linked from the Schedule Manager and from the last check, and looks in every SOTG Folder
  *
  * @param events   every event
  * @param pattern  the Published File Name setting
@@ -189,13 +195,13 @@ function _lookUpPublishedFiles_(wanted: { folderId: string; name: string }[], hu
 function _withPublishStatus_(events: EventRecord[], pattern: string, links: Map<string, string>): EventRecord[] {
   const hubId = SpreadsheetApp.getActiveSpreadsheet().getId();
   const nameOf = (e: EventRecord) => _publishedFileName_(pattern, e);
-  const linkOf = (e: EventRecord) => links.get(e.spiritFormUrl) || e.publishedUrl;
+  const linksOf = (e: EventRecord) => [...new Set([links.get(e.spiritFormUrl) ?? "", e.publishedUrl])].filter((u) => u);
 
-  const withLink = events.filter((e) => linkOf(e) !== "");
-  const linkedFiles = _readLinkedFiles_(withLink.map((e) => ({ url: linkOf(e), name: nameOf(e) })), hubId);
-  const linkedOf = new Map(withLink.map((e, i) => [e, linkedFiles[i]]));
+  const urls = [...new Set(events.flatMap(linksOf))];
+  const read = _readLinkedFiles_(urls, hubId);
+  const fileAt = new Map(urls.map((url, i) => [url, read[i]]));
 
-  const searched = events.filter((e) => !linkedOf.get(e) && _folderIdFromUrl_(e.sotgFolderUrl) !== "");
+  const searched = events.filter((e) => _folderIdFromUrl_(e.sotgFolderUrl) !== "");
   const lookups = _lookUpPublishedFiles_(
     searched.map((e) => ({ folderId: _folderIdFromUrl_(e.sotgFolderUrl), name: nameOf(e) })),
     hubId,
@@ -203,7 +209,11 @@ function _withPublishStatus_(events: EventRecord[], pattern: string, links: Map<
   const lookupOf = new Map(searched.map((e, i) => [e, lookups[i]]));
 
   return events.map((event) => {
-    const { status, url, reason } = _publishStatus_(event, linkedOf.get(event) ?? null, lookupOf.get(event));
+    const linked = linksOf(event).flatMap((url) => {
+      const file = fileAt.get(url);
+      return file ? [file] : [];
+    });
+    const { status, url, reason } = _publishStatus_(event, nameOf(event), linked, lookupOf.get(event));
     return {
       ...event,
       publishStatus: status,

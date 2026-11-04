@@ -24,8 +24,8 @@ const EVENTS_INFO =
   + "NO FOLDER the Schedule Manager has no SOTG Folder yet, NOT PUBLISHED no published file in it, "
   + "PUBLISHED this hub's file was written after the Form Responses and schedule last changed, "
   + "OUT OF DATE they changed after it was written, PUBLISHED EXTERNALLY a file this hub did not create, "
-  + "ERROR the folder cannot be read. The Schedule Manager's SOTG Results and Breakdown link is used "
-  + "when its file has the published name\n\n"
+  + "ERROR the folder cannot be read. This hub's own file comes first, then the Schedule Manager's "
+  + "SOTG Results and Breakdown link whatever its name, then the folder\n\n"
   + "To read the Schedule Manager again run \"Refresh Tournaments\", to import results run \"Refresh Results and Issues\"";
 
 /**
