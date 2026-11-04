@@ -40,6 +40,8 @@ const ISSUE_HEADERS = Object.freeze(
     game: "Game",
     opponent: "Opponent",
     score: "Score",
+    spirit: "Spirit",
+    comment: "Comment",
     checks: "Checks",
     details: "Details",
     status: "Status",
@@ -86,85 +88,32 @@ const ISSUE_LEVELS = Object.freeze({ PLAY: "Play", SCORING: "Scoring", TOURNAMEN
  * every issue check
  * code goes into the Checks column, the Issue ID of tournament issues and the Rule column of the Issue Rules settings
  * level says which kind of issue it adds to
- * label opens its section of Details, built from the current settings
  */
 const ISSUE_CATEGORIES = Object.freeze({
-  lowScore: {
-    code: "LOW-SCORE",
-    level: ISSUE_LEVELS.PLAY,
-    label: (s: IssueSettings) => `Received a total of ${s.lowScoreAtOrBelow} or below`,
-  },
-  dangerousPlay: {
-    code: "DANGEROUS-PLAY",
-    level: ISSUE_LEVELS.PLAY,
-    label: (s: IssueSettings) => "Comment mentions dangerous play",
-  },
-  cheating: {
-    code: "CHEATING",
-    level: ISSUE_LEVELS.PLAY,
-    label: (s: IssueSettings) => "Comment mentions cheating",
-  },
-  harassment: {
-    code: "HARASSMENT",
-    level: ISSUE_LEVELS.PLAY,
-    label: (s: IssueSettings) => "Comment mentions harassment",
-  },
-  categoryMinimum: {
-    code: "MIN-CATEGORY",
-    level: ISSUE_LEVELS.PLAY,
-    label: (s: IssueSettings) => `Received ${s.categoryMinimum} in a category`,
-  },
-  totalWithoutComment: {
-    code: "TOTAL-NO-COMMENT",
-    level: ISSUE_LEVELS.SCORING,
-    label: (s: IssueSettings) =>
-      `Gave a total above ${s.commentTotalAbove} or below ${s.commentTotalBelow} without comment`,
-  },
-  categoryWithoutComment: {
-    code: "CATEGORY-NO-COMMENT",
-    level: ISSUE_LEVELS.SCORING,
-    label: (s: IssueSettings) => `Gave ${s.commentCategoryScores.join(" or ")} in a category without comment`,
-  },
-  deletedRow: {
-    code: "DELETED-ROW",
-    level: ISSUE_LEVELS.SCORING,
-    label: (s: IssueSettings) => "Form deleted",
-  },
-  selfScore: {
-    code: "SELF-SCORE",
-    level: ISSUE_LEVELS.SCORING,
-    label: (s: IssueSettings) => "Scored itself",
-  },
-  noSuchGame: {
-    code: "NO-SUCH-GAME",
-    level: ISSUE_LEVELS.SCORING,
-    label: (s: IssueSettings) => "Form for a game that is not on the schedule",
-  },
-  duplicate: {
-    code: "DUPLICATE",
-    level: ISSUE_LEVELS.SCORING,
-    label: (s: IssueSettings) => "More forms than games",
-  },
-  noScores: {
-    code: "NO-SCORES",
-    level: ISSUE_LEVELS.TOURNAMENT,
-    label: (s: IssueSettings) => "No spirit scores submitted",
-  },
-  underSubmitted: {
-    code: "UNDER-SUBMITTED",
-    level: ISSUE_LEVELS.TOURNAMENT,
-    label: (s: IssueSettings) => `Spirit scores submitted for fewer than ${s.submittedPercentBelow}% of games`,
-  },
-  immediateAverage: {
-    code: "IMMEDIATE-AVERAGE",
-    level: ISSUE_LEVELS.TOURNAMENT,
-    label: (s: IssueSettings) => `Average below ${s.immediateAverageBelow}`,
-  },
-  monitoringAverage: {
-    code: "MONITORING-AVERAGE",
-    level: ISSUE_LEVELS.TOURNAMENT,
-    label: (s: IssueSettings) => `Average below ${s.monitoringAverageBelow}`,
-  },
+  lowScore: { code: "LOW-SCORE", level: ISSUE_LEVELS.PLAY },
+  dangerousPlay: { code: "DANGEROUS-PLAY", level: ISSUE_LEVELS.PLAY },
+  cheating: { code: "CHEATING", level: ISSUE_LEVELS.PLAY },
+  harassment: { code: "HARASSMENT", level: ISSUE_LEVELS.PLAY },
+  categoryMinimum: { code: "MIN-CATEGORY", level: ISSUE_LEVELS.PLAY },
+  totalWithoutComment: { code: "TOTAL-NO-COMMENT", level: ISSUE_LEVELS.SCORING },
+  categoryWithoutComment: { code: "CATEGORY-NO-COMMENT", level: ISSUE_LEVELS.SCORING },
+  deletedRow: { code: "DELETED-ROW", level: ISSUE_LEVELS.SCORING },
+  selfScore: { code: "SELF-SCORE", level: ISSUE_LEVELS.SCORING },
+  noSuchGame: { code: "NO-SUCH-GAME", level: ISSUE_LEVELS.SCORING },
+  duplicate: { code: "DUPLICATE", level: ISSUE_LEVELS.SCORING },
+  noScores: { code: "NO-SCORES", level: ISSUE_LEVELS.TOURNAMENT },
+  underSubmitted: { code: "UNDER-SUBMITTED", level: ISSUE_LEVELS.TOURNAMENT },
+  immediateAverage: { code: "IMMEDIATE-AVERAGE", level: ISSUE_LEVELS.TOURNAMENT },
+  monitoringAverage: { code: "MONITORING-AVERAGE", level: ISSUE_LEVELS.TOURNAMENT },
+});
+
+/**
+ * how each comment keyword check is named in Details, e.g. Comment includes dangerous play keyword: "danger"
+ */
+const KEYWORD_CHECK_NAMES: Readonly<Record<typeof COMMENT_KEYWORD_CHECKS[number], string>> = Object.freeze({
+  dangerousPlay: "dangerous play",
+  cheating: "cheating",
+  harassment: "harassment",
 });
 
 /**
@@ -215,11 +164,15 @@ interface IssueRecord {
   opponent: string;
   /** the game's result from the team's side, e.g. 15-12W, "" without a game or scores */
   score: string;
+  /** the spirit score behind the issue, e.g. "10 (2, 2, 2, 2, 2)": received for Play, given for Scoring */
+  spirit: string;
+  /** the comment behind the issue, in quotes, from the same form as Spirit */
+  comment: string;
   /** team the issue is about */
   team: string;
   /** club of the team */
   club: string;
-  /** one section per check, then the comments */
+  /** one section per check */
   details: string;
   /** one of ISSUE_STATUSES */
   status: string;
@@ -249,10 +202,12 @@ interface IssueFinding {
   game: string;
   /** the other team, "" for tournament checks */
   opponent: string;
-  /** what was found, for Details */
+  /** what was found, for Details, "" when Checks says it all */
   text: string;
-  /** comment to quote below the sections, with who wrote it, null for none */
-  comment: { from: string; text: string } | null;
+  /** the form's comment for the Comment column, in quotes, "" for none */
+  comment: string;
+  /** the form's spirit score, see _spiritText_, "" when there is not one form */
+  spirit: string;
 }
 
 /**
@@ -266,24 +221,57 @@ function _responseTotal_(response: ResponseRecord): number {
 }
 
 /**
- * the five scores of a response as text
+ * a form's spirit score for the Spirit column: the total, then each category in form order
+ * pure, no google calls
  *
- * @param response  the response
- * @returns e.g. "Total 5 (Rules 1, Fouls 1, Fair-Mindedness 1, Attitude 1, Communication 1)"
+ * @param scores  the five category scores, null where missing
+ * @returns e.g. "10 (2, 2, 2, 2, 2)", "" if any score is missing
  */
-function _scoresText_(response: ResponseRecord): string {
-  const scores = SCORE_KEYS.map((key) => `${RESPONSE_HEADERS[key]} ${response[key]}`).join(", ");
-  return `Total ${_responseTotal_(response)} (${scores})`;
+function _spiritText_(scores: Record<typeof SCORE_KEYS[number], number | null>): string {
+  const values = SCORE_KEYS.map((key) => scores[key]);
+  if (values.some((v) => v === null)) return "";
+  return `${values.reduce((sum: number, v) => sum + (v ?? 0), 0)} (${values.join(", ")})`;
 }
 
 /**
- * where a form is, for Details
+ * a comment in quotes, for the Comment column and Details
  *
- * @param r  the response
- * @returns e.g. "A1vA3" or "no game"
+ * @param comment  the comment
+ * @returns the comment in double quotes, "" for no comment
  */
-function _gameText_(r: { game: string }): string {
-  return r.game === "" ? "no game" : r.game;
+function _quoted_(comment: string): string {
+  return comment === "" ? "" : `"${comment}"`;
+}
+
+/**
+ * names joined as readable text, e.g. "Rules, Fouls and Attitude"
+ *
+ * @param names  the names
+ * @returns the text
+ */
+function _andList_(names: string[]): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * a category score as words, e.g. "a zero", "a 4"
+ *
+ * @param score  the score
+ * @returns the text
+ */
+function _scoreWords_(score: number): string {
+  return score === 0 ? "a zero" : `a ${score}`;
+}
+
+/**
+ * which of the words a comment includes, as whole words ignoring case
+ *
+ * @param comment  the comment
+ * @param words    the words of one keyword check
+ * @returns the words found, in list order
+ */
+function _keywordsFound_(comment: string, words: string[]): string[] {
+  return words.filter((word) => _keywordPattern_([word])?.test(comment));
 }
 
 /**
@@ -306,28 +294,25 @@ function _gameFindings_(
   settings: IssueSettings,
 ): IssueFinding[] {
   const eventByUrl = new Map(events.map((e) => [e.spiritFormUrl, e]));
-  const keywordChecks = COMMENT_KEYWORD_CHECKS.map((category) => ({
-    category,
-    pattern: _keywordPattern_(settings.commentKeywords[category]),
-  }));
   const lowByReceiver = _lowScoresByReceiver_(responses, settings);
   const findings: IssueFinding[] = [];
 
   for (const r of responses) {
     const event = eventByUrl.get(r.spiritFormUrl);
     if (!event) continue;
-    const comment = r.comment === "" ? null : { from: r.scorer, text: r.comment };
+    const comment = _quoted_(r.comment);
+    const spirit = _spiritText_(r);
     const play = (category: IssueCategoryKey, text: string) =>
-      findings.push({ category, event, team: r.receiver, game: r.game, opponent: r.scorer, text, comment });
+      findings.push({ category, event, team: r.receiver, game: r.game, opponent: r.scorer, text, comment, spirit });
     const scoring = (category: IssueCategoryKey, text: string) =>
-      findings.push({ category, event, team: r.scorer, game: r.game, opponent: r.receiver, text, comment });
+      findings.push({ category, event, team: r.scorer, game: r.game, opponent: r.receiver, text, comment, spirit });
 
     if (r.match === MATCH_RESULTS.SELF_SCORE) {
-      scoring("selfScore", `${r.scorer} gave itself ${_scoresText_(r)}`);
+      scoring("selfScore", "");
       continue;
     }
     if (r.match === MATCH_RESULTS.NO_SUCH_GAME) {
-      scoring("noSuchGame", `${r.scorer} gave ${r.receiver} ${_scoresText_(r)}, but they have no game on the schedule`);
+      scoring("noSuchGame", `No game against ${r.receiver} on the schedule`);
       continue;
     }
     if (r.match === MATCH_RESULTS.DUPLICATE) continue;
@@ -341,7 +326,9 @@ function _gameFindings_(
     if (minimums.length > 0) {
       play(
         "categoryMinimum",
-        `From ${r.scorer}: ${minimums.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", ")}`,
+        `Received ${_scoreWords_(settings.categoryMinimum)} in ${
+          _andList_(minimums.map((key) => RESPONSE_HEADERS[key]))
+        }`,
       );
     }
 
@@ -349,35 +336,81 @@ function _gameFindings_(
 
     if (r.comment === "") {
       if (total > settings.commentTotalAbove || total < settings.commentTotalBelow) {
-        scoring("totalWithoutComment", `To ${r.receiver}: Total ${total}`);
+        scoring(
+          "totalWithoutComment",
+          `Gave a total of ${total} without a comment, `
+            + `comment required above ${settings.commentTotalAbove} or below ${settings.commentTotalBelow}`,
+        );
       }
       const flagged = SCORE_KEYS.filter((key) => settings.commentCategoryScores.includes(r[key]));
       if (flagged.length > 0) {
-        scoring(
-          "categoryWithoutComment",
-          `To ${r.receiver}: ${flagged.map((key) => `${RESPONSE_HEADERS[key]} ${r[key]}`).join(", ")}`,
+        const byScore = [...new Set(flagged.map((key) => r[key]))].map((score) =>
+          `${_scoreWords_(score)} in ${
+            _andList_(flagged.filter((key) => r[key] === score).map((key) => RESPONSE_HEADERS[key]))
+          }`
         );
+        scoring("categoryWithoutComment", `Gave ${_andList_(byScore)} without a comment`);
       }
     } else {
-      for (const check of keywordChecks) {
-        if (check.pattern && check.pattern.test(r.comment)) play(check.category, `From ${r.scorer}`);
+      for (const category of COMMENT_KEYWORD_CHECKS) {
+        const found = _keywordsFound_(r.comment, settings.commentKeywords[category]);
+        if (found.length === 0) continue;
+        const words = found.map((word) => `"${word}"`).join(", ");
+        play(
+          category,
+          `Comment includes ${KEYWORD_CHECK_NAMES[category]} keyword${found.length > 1 ? "s" : ""}: ${words}`,
+        );
       }
     }
   }
 
   findings.push(..._duplicateFindings_(responses, eventByUrl));
+  findings.push(..._deletedFindings_(deleted, responses, eventByUrl));
+  return findings;
+}
 
+/**
+ * one Deleted Row finding per deleted form
+ * pure, never modifies its arguments
+ *
+ * a deleted form whose teams and submission time match a form still on Results, with a different comment,
+ * is the original of an edited comment: Details says "Comment edited" and Comment shows both versions
+ * any other deleted form was taken out: Details says "Deleted row" and Comment shows its comment
+ *
+ * @param deleted     every deleted form
+ * @param responses   every response, to find edited comments
+ * @param eventByUrl  Spirit Form URL → included event
+ * @returns the findings
+ */
+function _deletedFindings_(
+  deleted: DeletedFormRecord[],
+  responses: ResponseRecord[],
+  eventByUrl: Map<string, EventRecord>,
+): IssueFinding[] {
+  const formKey = (f: { spiritFormUrl: string; scorer: string; receiver: string; timestamp: Date | null }) =>
+    `${f.spiritFormUrl}|${_teamKey_(f.scorer)}|${_teamKey_(f.receiver)}|${f.timestamp?.getTime() ?? ""}`;
+  const kept = new Map(responses.filter((r) => r.timestamp !== null).map((r) => [formKey(r), r]));
+
+  const findings: IssueFinding[] = [];
   for (const f of deleted) {
     const event = eventByUrl.get(f.spiritFormUrl);
     if (!event) continue;
+    const reason = f.reason === "" ? "no reason given" : f.reason;
+    const edited = f.timestamp === null ? undefined : kept.get(formKey(f));
+    const isEdit = edited !== undefined && edited.comment !== f.comment;
     findings.push({
       category: "deletedRow",
       event,
       team: f.scorer,
       game: "",
       opponent: f.receiver,
-      text: f.reason === "" ? "No reason given" : f.reason,
-      comment: null,
+      text: `${isEdit ? "Comment edited" : "Deleted row"}: ${reason}`,
+      comment: isEdit
+        ? `Original comment: ${_quoted_(f.comment) || "\"\""}\n\nRedacted comment: ${
+          _quoted_(edited.comment) || "\"\""
+        }`
+        : _quoted_(f.comment),
+      spirit: _spiritText_(f),
     });
   }
   return findings;
@@ -402,18 +435,18 @@ function _duplicateFindings_(responses: ResponseRecord[], eventByUrl: Map<string
   for (const forms of pairs.values()) {
     const event = eventByUrl.get(forms[0].spiritFormUrl);
     if (!event || !forms.some((r) => r.match === MATCH_RESULTS.DUPLICATE)) continue;
-    const lines = forms.map((r) =>
-      `${r.timestamp ? _isoDateTime_(r.timestamp) : "no time"}: ${_scoresText_(r)}, `
-      + `${r.counted ? `counted for ${_gameText_(r)}` : "duplicate"}${r.comment === "" ? "" : `\n"${r.comment}"`}`
-    );
+    const lines = forms.map((r) => [_spiritText_(r), _quoted_(r.comment)].filter((x) => x !== "").join(" "));
     findings.push({
       category: "duplicate",
       event,
       team: forms[0].scorer,
       game: "",
       opponent: forms[0].receiver,
-      text: `${forms.length} forms to ${forms[0].receiver}:\n${lines.join("\n")}`,
-      comment: null,
+      text: "More responses submitted than games played.\n\n"
+        + `Games played: ${forms.filter((r) => r.counted).length}.\n\n`
+        + `Responses:\n${lines.join("\n")}`,
+      comment: "",
+      spirit: "",
     });
   }
   return findings;
@@ -438,7 +471,8 @@ function _lowScoresByReceiver_(responses: ResponseRecord[], settings: IssueSetti
 }
 
 /**
- * Details text of a low score: the score, the team's other low scores at the tournament, and whether policy is met
+ * Details text of a low score, with the team's other low scores at the tournament when it has any,
+ * as two or more meets the policy
  *
  * @param r         the low score
  * @param allLow    every low score the team received at the tournament, including this one
@@ -446,20 +480,12 @@ function _lowScoresByReceiver_(responses: ResponseRecord[], settings: IssueSetti
  * @returns the text
  */
 function _lowScoreText_(r: ResponseRecord, allLow: ResponseRecord[], settings: IssueSettings): string {
+  const text = `Received a total of ${settings.lowScoreAtOrBelow} or below`;
   const others = allLow.filter((x) => x !== r);
-  const lines = [`From ${r.scorer}: ${_scoresText_(r)}`];
-  if (others.length > 0) {
-    lines.push(
-      `Also ${settings.lowScoreAtOrBelow} or below at this tournament: `
-        + others.map((x) => `${_responseTotal_(x)} from ${x.scorer} (${_gameText_(x)})`).join(", "),
-    );
-  }
-  const met = allLow.length >= settings.lowScoreCount;
-  lines.push(
-    `${allLow.length} score(s) of ${settings.lowScoreAtOrBelow} or below at this tournament `
-      + `(policy: ${settings.lowScoreCount} or more${met ? ", reached" : ""})`,
-  );
-  return lines.join("\n");
+  if (others.length === 0) return text;
+  const list = others.map((x) => `${_responseTotal_(x)} from ${x.scorer}${x.game === "" ? "" : ` (${x.game})`}`);
+  const met = allLow.length >= settings.lowScoreCount ? `, ${settings.lowScoreCount} or more is policy` : "";
+  return `${text}\n\nAlso received ${list.join(", ")}: ${allLow.length} at this tournament${met}`;
 }
 
 /**
@@ -518,9 +544,11 @@ function _averageText_(
   clubOf: Map<string, string>,
   settings: IssueSettings,
 ): string {
-  const text = `Average ${average.average.toFixed(2)} from ${average.totals.length} scores: ${
-    average.totals.join(", ")
-  }`;
+  const below = average.average < settings.immediateAverageBelow
+    ? settings.immediateAverageBelow
+    : settings.monitoringAverageBelow;
+  const text = `Average of ${average.average.toFixed(2)} from ${average.totals.length} scores, below ${below}`
+    + `\n\nScores: ${average.totals.join(", ")}`;
   const club = clubOf.get(_teamKey_(average.team)) ?? "";
   const start = average.event.startDate;
   if (club === "" || !start) return text;
@@ -581,7 +609,7 @@ function _tournamentFindings_(
 
     for (const [key, team] of teams) {
       const tournament = (category: IssueCategoryKey, text: string) =>
-        findings.push({ category, event, team, game: "", opponent: "", text, comment: null });
+        findings.push({ category, event, team, game: "", opponent: "", text, comment: "", spirit: "" });
 
       if (scheduled && !event.international) {
         const isTeam1 = (g: GameRecord) => _teamKey_(g.team1) === key;
@@ -591,10 +619,17 @@ function _tournamentFindings_(
         const percent = played.length === 0 ? 100 : (100 * submitted) / played.length;
         if (played.length > 0 && (submitted === 0 || percent < settings.submittedPercentBelow)) {
           const opponentOf = (g: GameRecord) => (isTeam1(g) ? g.team2 : g.team1);
-          const text = `Submitted ${submitted} of ${played.length} games (${Math.round(percent)}%)\n\n`
-            + `Missing for:\n${missing.map(opponentOf).join("\n")}\n\n`
-            + `Games: ${missing.map((g) => `${g.game} v ${opponentOf(g)}`).join(", ")}`;
-          tournament(submitted === 0 ? "noScores" : "underSubmitted", text);
+          const done = played.filter((g) => !missing.includes(g)).map(opponentOf);
+          const missingList = `Missing: ${missing.map(opponentOf).join(", ")}`;
+          if (submitted === 0) {
+            tournament("noScores", `0/${played.length} spirit scores submitted\n\n${missingList}`);
+          } else {
+            tournament(
+              "underSubmitted",
+              `${submitted}/${played.length} spirit scores submitted, ${Math.round(percent)}%. `
+                + `Less than ${settings.submittedPercentBelow}%\n\nSubmitted: ${done.join(", ")}\n\n${missingList}`,
+            );
+          }
         }
       }
 
@@ -628,21 +663,14 @@ function _issueId_(finding: IssueFinding): string {
 }
 
 /**
- * Details sections for some findings of one issue: one per finding, then each comment quoted once
+ * Details for some findings of one issue: each finding's text, a blank line between them
  * pure, never modifies its arguments
  *
  * @param findings  findings of the issue
- * @param settings  thresholds, for the labels
  * @returns the text
  */
-function _findingsDetails_(findings: IssueFinding[], settings: IssueSettings): string {
-  const sections = findings.map((f) =>
-    `${ISSUE_CATEGORIES[f.category].code}: ${ISSUE_CATEGORIES[f.category].label(settings)}\n${f.text}`
-  );
-  const comments: Map<string, { from: string; text: string }> = new Map();
-  for (const f of findings) if (f.comment) comments.set(`${f.comment.from}|${f.comment.text}`, f.comment);
-  const quoted = [...comments.values()].map((c) => `Comment from ${c.from}:\n"${c.text}"`);
-  return [...sections, ...quoted].join("\n\n");
+function _findingsDetails_(findings: IssueFinding[]): string {
+  return [...new Set(findings.map((f) => f.text).filter((text) => text !== ""))].join("\n\n");
 }
 
 /**
@@ -679,7 +707,6 @@ function _scoreText_(game: GameRecord | undefined, team: string): string {
  * @param games     every game, for the Score column
  * @param clubOf    team key → club, from the Teams tab
  * @param today     date to record as the Issue Date
- * @param settings  thresholds, for the labels
  * @returns issues in the order first found
  */
 function _issuesFromFindings_(
@@ -687,7 +714,6 @@ function _issuesFromFindings_(
   games: GameRecord[],
   clubOf: Map<string, string>,
   today: Date,
-  settings: IssueSettings,
 ): FoundIssue[] {
   const gameOf = new Map(games.map((g) => [`${g.scheduleUrl}|${g.game}`, g]));
   const byId: Map<string, IssueFinding[]> = new Map();
@@ -713,9 +739,11 @@ function _issuesFromFindings_(
         game: first.game,
         opponent: first.opponent,
         score: first.game === "" ? "" : _scoreText_(gameOf.get(`${first.event.scheduleUrl}|${first.game}`), first.team),
+        spirit: grouped.find((f) => f.spirit !== "")?.spirit ?? "",
+        comment: grouped.find((f) => f.comment !== "")?.comment ?? "",
         team: first.team,
         club: clubOf.get(_teamKey_(first.team)) ?? "",
-        details: `${first.event.international ? "INTERNATIONAL\n\n" : ""}${_findingsDetails_(grouped, settings)}`,
+        details: `${first.event.international ? "INTERNATIONAL\n\n" : ""}${_findingsDetails_(grouped)}`,
         status: ISSUE_STATUSES[0],
         emailAddress: "",
         emailSubject: "",
@@ -745,13 +773,11 @@ function _checkCodes_(checks: unknown): string[] {
  *
  * @param existing  existing issues by row: Issue ID, Checks, Details and Status
  * @param found     Issue ID → findings by check code, for every issue found now
- * @param settings  thresholds, for the labels
  * @returns the three columns for every existing row, and how many issues changed
  */
 function _mergeIssues_(
   existing: { issueId: string; checks: string; details: string; status: string }[],
   found: Map<string, Map<string, IssueFinding[]>>,
-  settings: IssueSettings,
 ): { rows: { checks: string; details: string; status: string }[]; updated: number } {
   let updated = 0;
   const rows = existing.map((row) => {
@@ -763,7 +789,7 @@ function _mergeIssues_(
     updated++;
     return {
       checks: [..._checkCodes_(row.checks), ...added.map(([code]) => code)].join(", "),
-      details: `${row.details}\n\n${_findingsDetails_(added.flatMap(([, f]) => f), settings)}`,
+      details: [row.details, _findingsDetails_(added.flatMap(([, f]) => f))].filter((t) => t !== "").join("\n\n"),
       status: row.status.trim().toUpperCase() === "CLOSED" ? ISSUE_STATUSES[0] : row.status,
     };
   });
@@ -782,11 +808,10 @@ function _getIssuesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
  * add new issues, add newly found checks to existing ones, then put the tab back in ISSUE_SORT order
  * existing rows only ever have Checks, Details and Status written, see _mergeIssues_
  *
- * @param found     every issue found now
- * @param settings  thresholds, for the labels
+ * @param found  every issue found now
  * @returns how many issues were added and how many were updated
  */
-function _writeIssues_(found: FoundIssue[], settings: IssueSettings): { added: number; updated: number } {
+function _writeIssues_(found: FoundIssue[]): { added: number; updated: number } {
   const sheet = _getIssuesSheet_();
   const lastRow = sheet.getLastRow();
   const column = (key: keyof typeof ISSUE_HEADERS) => ISSUE_KEYS.indexOf(key) + 1;
@@ -801,7 +826,6 @@ function _writeIssues_(found: FoundIssue[], settings: IssueSettings): { added: n
   const merged = _mergeIssues_(
     ids.map((issueId, i) => ({ issueId, checks: checks[i], details: details[i], status: statuses[i] })),
     new Map(found.map((f) => [f.issue.issueId, f.findings])),
-    settings,
   );
   if (merged.updated > 0) {
     for (const key of ["checks", "details", "status"] as const) {
@@ -864,9 +888,9 @@ function _refreshIssues_(): string {
       ..._gameFindings_(responses, deleted, events, settings),
       ..._tournamentFindings_(responses, games, events, clubOf, settings),
     ].filter((f) => settings.enabled[f.category]);
-    return _issuesFromFindings_(findings, games, clubOf, new Date(), settings);
+    return _issuesFromFindings_(findings, games, clubOf, new Date());
   });
-  const { added, updated } = _timed_("write issues", () => _writeIssues_(found, settings));
+  const { added, updated } = _timed_("write issues", () => _writeIssues_(found));
   const emails = _timed_("email drafts", () => {
     try {
       return _updateEmailDrafts_();

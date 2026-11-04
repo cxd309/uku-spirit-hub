@@ -146,9 +146,9 @@ Issues are about one team, at one of three levels:
 | Scoring    | team in a game       | the form the team gave for that game      |
 | Tournament | team at a tournament | the whole tournament                      |
 
-Columns run Issue ID, Issue Date, Level, Club, Team, Tournament, Tournament Date, Game, Opponent, Score, Checks, Details, Status, Committee Member, Notes, then the email columns. Score is the game's result from the team's side, e.g. 15-12W, 12-15L or 10-10D, blank without a game.
+Columns run Issue ID, Issue Date, Level, Club, Team, Tournament, Tournament Date, Game, Opponent, Score, Spirit, Comment, Checks, Details, Status, Committee Member, Notes, then the email columns. Score is the game's result from the team's side, e.g. 15-12W, 12-15L or 10-10D, blank without a game. Spirit is the spirit score behind the issue as total (rules, fouls, fair-mindedness, attitude, communication), e.g. 10 (2, 2, 2, 2, 2): the score the team received for Play issues, the score it gave for Scoring issues, blank for Tournament issues and duplicates. Comment is the comment from the same form, in quotes. For a DELETED-ROW whose comment was edited it shows both: Original comment and Redacted comment.
 
-Everything found for the same issue goes into it: the Checks column lists every check, and Details has a section for each, then the comments. When a form has no game (a duplicate, a deleted form, or a tournament without a schedule) the issue is for the opponent instead of the game.
+Everything found for the same issue goes into it: the Checks column lists every check, and Details has a short line for each, e.g. "Received a zero in Rules and Fair-Mindedness". A deleted form counts as an edit when a form with the same teams and submission time is still on Results with a different comment, its Details then say "Comment edited", otherwise "Deleted row". When a form has no game (a duplicate, a deleted form, or a tournament without a schedule) the issue is for the opponent instead of the game.
 
 | Check               | Level      | Raised when                                                                                                                           | Source |
 | ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
@@ -198,7 +198,7 @@ The Issues tab drafts an email for each issue, ready to copy into whatever mail 
 
 An issue added by hand gets an Email Address by copying the formula down from the row above.
 
-Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder is reported by Refresh Issues, or when the template is edited, and nothing is filled until it is fixed.
+Templates use placeholders such as `{club_name}`, `{team_name}`, `{tournament_name}`, `{game}`, `{opponent}`, `{score}`, `{spirit}`, `{comment}`, `{checks}`, `{missing_count}` and `{missing_opponents}`; the full list is in the tab's info row. An unknown placeholder is reported by Refresh Issues, or when the template is edited, and nothing is filled until it is fixed.
 
 ## Club Statistics
 

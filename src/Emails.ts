@@ -52,6 +52,9 @@ const EMAIL_PLACEHOLDERS = Object.freeze(
     tournament_date: "Tournament Date, e.g. 1 November 2025",
     game: "Game column of the issue, blank for tournament issues and forms with no game",
     opponent: "Opponent column of the issue",
+    score: "Score column of the issue, e.g. 15-12W",
+    spirit: "Spirit column of the issue, e.g. 10 (2, 2, 2, 2, 2)",
+    comment: "Comment column of the issue, in quotes",
     checks: "Checks column of the issue",
     details: "Details column of the issue",
     committee_member: "Committee Member column of the issue",
@@ -138,7 +141,8 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
     enabled: false,
     subject: "Low spirit score - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "{team_name} received a low spirit score from {opponent} at {tournament_name}.\n\n{details}"
+      + "{team_name} received a low spirit score of {spirit} from {opponent} at {tournament_name}.\n\n"
+      + "{comment}\n\n{details}"
       + EMAIL_SIGN_OFF,
   },
   dangerousPlay: {
@@ -146,30 +150,30 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
     subject: "Spirit comment received - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "A spirit score comment {team_name} received from {opponent} at {tournament_name} mentions dangerous play."
-      + "\n\n{details}"
+      + "\n\n{comment}"
       + EMAIL_SIGN_OFF,
   },
   categoryMinimum: {
     enabled: false,
     subject: "Spirit score received - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "{team_name} received a 0 in a spirit category from {opponent} at {tournament_name}.\n\n{details}"
+      + "{team_name} received a spirit score of {spirit} from {opponent} at {tournament_name}. {details}.\n\n{comment}"
       + EMAIL_SIGN_OFF,
   },
   totalWithoutComment: {
     enabled: false,
     subject: "Spirit score without a comment - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "At {tournament_name}, {team_name} gave {opponent} a spirit score total that the UKU SOTG Policy says "
-      + "needs a comment, but no comment was given.\n\n{details}"
+      + "At {tournament_name}, {team_name} gave {opponent} a spirit score of {spirit}. The UKU SOTG Policy says "
+      + "this total needs a comment, but no comment was given."
       + EMAIL_SIGN_OFF,
   },
   categoryWithoutComment: {
     enabled: false,
     subject: "Spirit score without a comment - {tournament_name}",
     body: "Dear {club_name},\n\n"
-      + "At {tournament_name}, {team_name} gave {opponent} a category score that the UKU SOTG Policy says "
-      + "needs a comment, but no comment was given.\n\n{details}"
+      + "At {tournament_name}, {team_name} gave {opponent} a spirit score of {spirit}. The UKU SOTG Policy says "
+      + "a 0 or 4 in a category needs a comment, but no comment was given."
       + EMAIL_SIGN_OFF,
   },
   noScores: {
@@ -215,7 +219,7 @@ const DEFAULT_MULTIPLE_EMAIL_TEMPLATE = Object.freeze({
   subject: "Spirit - {tournament_name}",
   body: "Dear {club_name},\n\n"
     + "We are getting in touch about {team_name} at {tournament_name}, in the game against {opponent}.\n\n"
-    + "{checks}\n\n{details}"
+    + "Spirit: {spirit}\n{comment}\n\n{details}"
     + EMAIL_SIGN_OFF,
 });
 
@@ -438,14 +442,14 @@ function _readableList_(names: string[]): string {
 /**
  * how many scores were not submitted and for whom, from a NO-SCORES or UNDER-SUBMITTED issue's Details
  * pure
- * Details lists one opponent per missing score below "Missing for:", up to the next blank line
+ * Details lists one opponent per missing score on its "Missing:" line, comma separated
  *
  * @param details  the Details cell
  * @returns the count, and the opponents with a game count when more than one
  */
 function _missingScores_(details: string): { count: number; opponents: string } {
-  const [, after = ""] = details.split(/Missing for:\s*\n/);
-  const names = after.split(/\n\s*\n/)[0].split("\n").map((line) => line.trim()).filter((line) => line !== "");
+  const line = details.split("\n").find((l) => l.startsWith("Missing: ")) ?? "";
+  const names = line.slice("Missing: ".length).split(",").map((name) => name.trim()).filter((name) => name !== "");
   const counts: Map<string, number> = new Map();
   for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
   const opponents = [...counts].map(([name, n]) => (n > 1 ? `${name} (${n} games)` : name));
@@ -509,6 +513,9 @@ function _draftEmails_(
       tournament_date: date instanceof Date ? formatDate(date) : text(date),
       game: text(issue.game),
       opponent: text(issue.opponent),
+      score: text(issue.score),
+      spirit: text(issue.spirit),
+      comment: text(issue.comment),
       checks: text(issue.checks),
       details,
       committee_member: text(issue.committeeMember),
