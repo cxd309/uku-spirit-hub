@@ -8,11 +8,19 @@ function onOpen() {
     .createMenu("SpiritHub")
     .addItem("Refresh Tournaments", "refreshTournaments")
     .addItem("Refresh Results and Issues", "refreshResultsAndIssues")
+    .addItem("Publish Results", "publishResults")
     .addItem("Refresh Club Statistics", "refreshClubStatistics")
     .addSeparator()
     .addItem("SpiritHub Settings", "showSettings")
+    .addItem(`Version ${HUB_VERSION}`, "showVersion")
     .addToUi();
 }
+
+/**
+ * menu: the Version item, whose name shows which version of the hub this spreadsheet runs
+ * clicking it does nothing, but a menu item needs a function to run
+ */
+function showVersion() {}
 
 /**
  * keep Teams, Clubs and email drafts up to date when a person changes something they depend on
@@ -183,6 +191,13 @@ function refreshResultsAndIssues() {
     if (results.startsWith("No tournaments found")) return results;
     return `${results}; ${_timed_("issues", _refreshIssues_)}`;
   });
+}
+
+/**
+ * menu: write the Results and Breakdown file of every tournament ready to publish
+ */
+function publishResults() {
+  _runRefresh_(_publishResults_);
 }
 
 /**

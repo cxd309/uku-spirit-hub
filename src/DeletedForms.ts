@@ -11,7 +11,9 @@ const DELETED_FORMS_INFO = "Every row on the Deleted forms tab of each included 
   + "DO NOT EDIT, this is all regenerated on refresh. Filters are kept through a refresh, sorting is put back to the hub's order\n\n"
   + "A record of what the chair moved out of the responses, with their reason. "
   + "Some are scores taken out, others are the original of a response that was edited and is still on Results\n"
-  + "Never used in statistics\n\n"
+  + "Never used in statistics\n"
+  + "Game is the game the form was for: lined up with the forms on Results in timestamp order, "
+  + "the game of the edited form for an original, blank for a duplicate\n\n"
   + "To Refresh run \"Refresh Results and Issues\"";
 
 /**
@@ -29,6 +31,7 @@ const DELETED_FORM_HEADERS = Object.freeze(
     timestamp: "Timestamp",
     scorer: "Scoring Team",
     receiver: "Receiving Team",
+    game: "Game",
     rules: "Rules",
     fouls: "Fouls",
     fairMindedness: "Fair-Mindedness",
@@ -59,6 +62,8 @@ interface DeletedFormRecord {
   scorer: string;
   /** team receiving the score */
   receiver: string;
+  /** game code the form was for, set by _matchResponses_, "" if none */
+  game: string;
   /** rules Knowledge and Use, null if missing */
   rules: number | null;
   /** fouls and Body Contact, null if missing */
@@ -127,6 +132,7 @@ function _deletedFormRecord_(spiritFormUrl: string, form: DeletedForm): DeletedF
     timestamp: form.timestamp,
     scorer: form.scorer,
     receiver: form.receiver,
+    game: "",
     ...form.scores,
     total: scores.every((s) => s !== null) ? scores.reduce((a: number, b) => a + (b ?? 0), 0) : null,
     comment: form.comment,
@@ -149,6 +155,7 @@ function _deletedFormFromRow_(row: unknown[]): DeletedFormRecord {
     timestamp: cell("timestamp") instanceof Date ? cell("timestamp") as Date : null,
     scorer: String(cell("scorer")),
     receiver: String(cell("receiver")),
+    game: String(cell("game")),
     rules: score("rules"),
     fouls: score("fouls"),
     fairMindedness: score("fairMindedness"),

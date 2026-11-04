@@ -6,19 +6,21 @@ It collects data from individual tournament results, maps teams to clubs, tracks
 
 One hub covers one season, or whatever dates are set on the Settings tab.
 
-> **In progress:** international tournaments will be added by hand, not through the Schedule Manager, and publishing Results and Breakdown from the hub is still to come.
+> **In progress:** international tournaments will be added by hand, not through the Schedule Manager.
 
 ## Schedule Manager
 
 Tournaments are read from the **Schedule List** tab of the UKU Schedule Manager, set on the Settings tab. The hub reads these columns from row 1, by name:
 
-| Column       | Used for                                                  |
-| ------------ | --------------------------------------------------------- |
-| Event Name   | the tournament's name                                     |
-| Start date   | the tournament's date, and whether it is within the dates |
-| End date     | shown on the Tournaments tab                              |
-| Schedule URL | the tournament's schedule                                 |
-| SOTG Sheet   | the tournament's Form Responses, which identifies it      |
+| Column                     | Used for                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Event Name                 | the tournament's name                                                                             |
+| Start date                 | the tournament's date, and whether it is within the dates                                         |
+| End date                   | shown on the Tournaments tab                                                                      |
+| Schedule URL               | the tournament's schedule                                                                         |
+| SOTG Sheet                 | the tournament's Form Responses, which identifies it                                              |
+| SOTG Folder                | the Drive folder the Results and Breakdown file is published in, blank until the chair creates it |
+| SOTG Results and Breakdown | the file the Schedule Manager published, whatever its name                                        |
 
 Rows without a Schedule URL or SOTG Sheet, or starting outside the Start Date and End Date on the Settings tab, are left out.
 
@@ -36,6 +38,31 @@ Each file's status is **NEW** (not imported yet), **EDITED** (changed since it w
 
 A tournament that leaves the Schedule List is removed, unless something was imported from it, then it stays as MISSING.
 
+**Publish Status** says whether the tournament's Results and Breakdown file exists, named by the **Published File Name** on the Settings tab (`{event_name} Spirit Results and Breakdown` to begin with, change it to publish test copies without touching existing files). Files this hub publishes carry a hidden label only it can read, so it can tell them from files made by the Schedule Manager, by hand or by another hub. This hub's own file with the published name comes first, wherever it is found. Otherwise the file the Schedule Manager links to counts, whatever its name, as published files' names often differ from the Event Name, or failing that a file with the published name in the SOTG Folder. It is checked by Refresh Tournaments and Refresh Results and Issues, reading only file names and dates:
+
+| Publish Status       | Meaning                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| NO FOLDER            | the Schedule Manager has no SOTG Folder for it yet, expected until the chair creates one                                       |
+| NOT PUBLISHED        | no linked file, and no file with the published name in the SOTG Folder                                                         |
+| PUBLISHED            | this hub's file, written after the Form Responses and schedule last imported changed                                           |
+| OUT OF DATE          | this hub's file, but the Form Responses or schedule changed after it was written                                               |
+| PUBLISHED EXTERNALLY | a file this hub did not create: the Schedule Manager's link, or one with the published name in the folder. It is never changed |
+| ERROR                | the folder link is not a Drive folder, or cannot be read, see Message                                                          |
+
+Results and Breakdown URL links to the file when there is one.
+
+### Publishing
+
+**SpiritHub > Publish Results** writes the Results and Breakdown file of every tournament with Include Results ticked, Event Status OK, an SOTG Folder, and Publish Status NOT PUBLISHED, OUT OF DATE or PUBLISHED EXTERNALLY:
+
+- a new Google Sheet is made in the SOTG Folder with the Published File Name and this hub's hidden label. Next time the same file is rewritten, so its link never changes
+- the file looks like the ones the Schedule Manager published: `<Event Name> SOTG Results` (each receiving team's count and averages, highest Total first, categories at or below 1.8 and totals at or below 9 coloured) and `<Event Name> SOTG Breakdown` (every form, by receiving team, each team's in the order its games were played, red lines between teams)
+- only counted forms matched to a game go in, so duplicates, self scores, forms for games that did not happen, forms at a tournament without a schedule and deleted forms are left out
+- a file with the published name that this hub did not make is never touched: the tournament is skipped with a note in Message. Rename it, or change the Published File Name
+- File > Share > Publish to web, and copying the link to the Schedule Manager, are still done by hand
+
+Tabs from an earlier version that lack columns added at the end, like these three, have them added on their own, keeping everything else.
+
 Refresh Results and Issues reads the **Gamelist** tab of each included tournament's schedule onto the Games tab. Columns are read by position, as both team columns are headed "Team" and the score columns have no header: A Game, C Day, D Time, E Pitch, F and J the teams, G and I the scores. Games without both teams are left out, and 1-0 results are kept with Played unticked.
 
 Refresh Results and Issues also reads each included tournament's **Form Responses**, finding two tabs by their header row rather than their name:
@@ -43,13 +70,15 @@ Refresh Results and Issues also reads each included tournament's **Form Response
 - the responses tab (today `Form responses 2`): every tab with the form's headers. There must be exactly one. Its rows go onto the Results tab. Rows with a missing team or a score that is not 0–4 are left out and listed in Message, placeholder rows with "Your Team Name" as the team are skipped
 - the Deleted forms tab: the one with the form's headers and "Reason for deletion". Optional. Its rows go onto the Deleted Forms tab as they are, as a record of what the chair moved out. Some are scores taken out, others the original of a response that was edited and is still on Results, so they are never used in statistics
 
-Then every response is **matched to its game**, for tournaments whose schedule has been imported and is not ERROR or MISSING. For each scoring team → receiving team at a tournament:
+Then every response and deleted form is **matched to its game**, for tournaments whose schedule has been imported and is not ERROR or MISSING. For each scoring team → receiving team at a tournament, the forms on Results and on Deleted Forms are taken in the order they were submitted:
 
-- as many forms count as the two teams played games: forms with a comment first, then the latest. Counted forms go to the games in timestamp order, the earliest to the earliest game
-- forms beyond that are **Duplicate**, a team scoring itself is **Self score**, and a form with no game between the two teams is **No such game**. None of these count
+- a form can only be for a game that had started when it was submitted, and takes the earliest such game without a form
+- with no game free, a form on Results takes the game of a deleted form, as a resubmission, or of a form on Results it beats (a comment first, then the later one)
+- forms on Results left without a game are **Duplicate**, a team scoring itself is **Self score**, and a form with no game between the two teams is **No such game**. None of these count
+- deleted forms never count, but take their game, so the forms on Results go to the right games. A deleted form that is a copy of a form still on Results (an edited comment, same submission time) takes that form's game, and one whose reason mentions "duplicate" takes none
 - without a usable schedule every form is **No schedule** and counts as it is
 
-Results shows the Game, a Counted tick and the Match. Only counted forms go into Counts for Award, Club Statistics and the Club Report. On Games, Team 1 Submitted and Team 2 Submitted are ticked when that team has a counted form for the game, and a 1-0 game is Played if anyone submitted for it
+Results and Deleted Forms show the Game, and Results a Counted tick and the Match. Only counted forms go into Counts for Award, Club Statistics and the Club Report. On Games, Team 1 Submitted and Team 2 Submitted are ticked when that team has a form for the game, counted or deleted, as a team whose form was deleted did submit, and a 1-0 game is Played if anyone submitted for it
 
 International tournaments will be added by hand, not through the Schedule Manager. Not built yet.
 
@@ -71,6 +100,7 @@ International tournaments will be added by hand, not through the Schedule Manage
       - view and edit this spreadsheet only
       - see your Google Sheets, to read the results files (never to change them)
       - see information about your Google Drive files (names and dates, not their contents), to spot files that changed since they were imported
+      - see, edit, create and delete only the specific Google Drive files you use with this app, to publish each tournament's Results and Breakdown file. It cannot open or change any other file
       - connect to an external service, to read all the results files at once from Google's own Drive and Sheets APIs
    5. The menu item does not carry on after approving: click **SpiritHub > SpiritHub Settings** again
 
@@ -100,8 +130,10 @@ Everything runs from the **SpiritHub** menu.
 | Menu item                  | What it does                                                                                                                                                                                                                                                    |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SpiritHub Settings         | Creates any missing tabs, then shows only the Settings tab. Safe to rerun                                                                                                                                                                                       |
+| Version x.y.z              | Its name shows the version this hub runs, clicking it does nothing                                                                                                                                                                                              |
 | Refresh Tournaments        | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                                                                                                                      |
 | Refresh Results and Issues | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs, and adds any new issues. With nothing to import it just runs the issue checks again |
+| Publish Results            | Writes the Results and Breakdown file of every tournament ready to publish, see [publishing](#publishing)                                                                                                                                                       |
 | Refresh Club Statistics    | Recalculates the Club Statistics tab, no data import                                                                                                                                                                                                            |
 
 A normal update after uploading tournament results:
@@ -118,20 +150,21 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 
 ## Tabs
 
-| Tab             | What it's for                                                                                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Issues          | A working tracker of automatically flagged spirit issues. Each row is one team in one game, or one team at one tournament, see [issues](#issues) for more detail                                               |
-| Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                       |
-| Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                  |
-| Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                   |
-| Deleted Forms   | Every row of each included tournament's Deleted forms tab, with the chair's reason. A record only, never used in statistics                                                                                    |
-| Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                             |
-| Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                         |
-| Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                               |
-| Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team |
-| Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                         |
-| Email Templates | Hidden while refreshing. One subject and body per issue check, plus MULTIPLE for issues with several checks, with placeholders filled from the issue                                                           |
-| Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                      |
+| Tab             | What it's for                                                                                                                                                                                                           |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instructions    | The first tab, always shown: the steps after a tournament weekend, what each Deleted forms reason raises, and where to look when something says ERROR. Rewritten by SpiritHub Settings, so it matches the hub's version |
+| Issues          | A working tracker of automatically flagged spirit issues. Each row is one team in one game, or one team at one tournament, see [issues](#issues) for more detail                                                        |
+| Tournaments     | The tournaments found by the tool, their metadata and tournament level controls. Duplicate or blank tournament names are highlighted red                                                                                |
+| Games           | Every game on the Gamelist of each included schedule, one import per schedule even when divisions share it. Played is unticked for 1-0 results (forfeits and cancelled games)                                           |
+| Results         | All spirit results imported into a single table, this is automatically generated and used as the data source                                                                                                            |
+| Deleted Forms   | Every row of each included tournament's Deleted forms tab, with the chair's reason. A record only, never used in statistics                                                                                             |
+| Teams           | Every team seen in results and its club. Based on Name Rules a club is suggested but can be overridden here if suggestion is wrong                                                                                      |
+| Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                                  |
+| Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                                        |
+| Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team          |
+| Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                                  |
+| Email Templates | Hidden while refreshing. One subject and body per issue check, plus MULTIPLE for issues with several checks, with placeholders filled from the issue                                                                    |
+| Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                               |
 
 ## Issues
 
@@ -143,28 +176,28 @@ Issues are about one team, at one of three levels:
 | Scoring    | team in a game       | the form the team gave for that game      |
 | Tournament | team at a tournament | the whole tournament                      |
 
-Columns run Issue ID, Issue Date, Level, Club, Team, Tournament, Tournament Date, Game, Opponent, Score, Spirit, Comment, Checks, Details, Status, Committee Member, Notes, then the email columns. Score is the game's result from the team's side, e.g. 15-12W, 12-15L or 10-10D, blank without a game. Spirit is the spirit score behind the issue as total (rules, fouls, fair-mindedness, attitude, communication), e.g. 10 (2, 2, 2, 2, 2): the score the team received for Play issues, the score it gave for Scoring issues, blank for Tournament issues and duplicates. Comment is the comment from the same form, in quotes. For a REDACTED-COMMENT it shows both: Original comment and Redacted comment.
+Columns run Issue ID, Issue Date, Level, Club, Team, Tournament, Tournament Date, Game, Opponent, Score, Spirit, Comment, Checks, Details, Status, Committee Member, Notes, then the email columns. Score is the game's result from the team's side, e.g. 15-12W, 12-15L or 10-10D, blank without a game. Spirit is the spirit score behind the issue as total (rules, fouls, fair-mindedness, attitude, communication), e.g. 10 (2, 2, 2, 2, 2): the score the team received for Play issues, the score it gave for Scoring issues, blank for Tournament issues. For a DUPLICATE they are the counted form's. Comment is the comment from the same form, in quotes. For a REDACTED-COMMENT it shows both: Original comment and Redacted comment.
 
-Everything found for the same issue goes into it: the Checks column lists every check, and Details has a short line for each, e.g. "Received a zero in Rules and Fair-Mindedness". A deleted form is a REDACTED-COMMENT when a form with the same teams and submission time is still on Results with a different comment, otherwise a DELETED-ROW. When a form has no game (a duplicate, a deleted form, or a tournament without a schedule) the issue is for the opponent instead of the game.
+Everything found for the same issue goes into it: the Checks column lists every check, and Details has a short line for each, e.g. "Received a zero in Rules and Fair-Mindedness". A deleted form is a REDACTED-COMMENT when a form with the same teams and submission time is still on Results with a different comment. When its reason is one the Schedule Manager's delete step writes for a missing comment ("Total>14 & Comment required", "Total<6 & Comment required", "Comment required") or the check code itself, it raises TOTAL-NO-COMMENT or CATEGORY-NO-COMMENT as if it were still on Results. Otherwise it is a DELETED-ROW. Deleted forms use the game they were matched to. When a form has no game (a duplicate, a deleted form submitted before the teams played, or a tournament without a schedule) the issue is for the opponent instead of the game.
 
-| Check               | Level      | Raised when                                                                                                                           | Source |
-| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| LOW-SCORE           | Play       | received a total of 6 or below. Details list the team's other low scores at the tournament and say when policy's 2 or more is reached | policy |
-| DANGEROUS-PLAY      | Play       | comment received mentions dangerous play                                                                                              | policy |
-| CHEATING            | Play       | comment received mentions cheating                                                                                                    | extra  |
-| HARASSMENT          | Play       | comment received mentions harassment or abuse                                                                                         | extra  |
-| MIN-CATEGORY        | Play       | received 0 in a category                                                                                                              | extra  |
-| TOTAL-NO-COMMENT    | Scoring    | gave a total above 14 or below 6 without a comment                                                                                    | policy |
-| CATEGORY-NO-COMMENT | Scoring    | gave a 0 or 4 in a category without a comment                                                                                         | policy |
-| DELETED-ROW         | Scoring    | a form was taken out and is on the Deleted Forms tab, the details are the chair's reason                                              | extra  |
-| REDACTED-COMMENT    | Scoring    | a comment was redacted: Comment shows the original and redacted versions, the details are the chair's reason                          | extra  |
-| SELF-SCORE          | Scoring    | a team scored itself                                                                                                                  | extra  |
-| NO-SUCH-GAME        | Scoring    | a form for two teams with no game on the schedule                                                                                     | extra  |
-| DUPLICATE           | Scoring    | more forms to an opponent than games, every form is listed                                                                            | extra  |
-| NO-SCORES           | Tournament | a team submitted no scores                                                                                                            | policy |
-| UNDER-SUBMITTED     | Tournament | a team submitted for fewer than 50% of the games it played                                                                            | policy |
-| IMMEDIATE-AVERAGE   | Tournament | a team averaged below 8. Details list the club's earlier averages below 9 this season                                                 | policy |
-| MONITORING-AVERAGE  | Tournament | a team averaged below 9, but not below 8. Same details                                                                                | policy |
+| Check               | Level      | Raised when                                                                                                                                                                                                                                                                                                                                           | Source |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| LOW-SCORE           | Play       | received a total of 6 or below. Details list the team's other low scores at the tournament and say when policy's 2 or more is reached                                                                                                                                                                                                                 | policy |
+| DANGEROUS-PLAY      | Play       | comment received mentions dangerous play                                                                                                                                                                                                                                                                                                              | policy |
+| CHEATING            | Play       | comment received mentions cheating                                                                                                                                                                                                                                                                                                                    | extra  |
+| HARASSMENT          | Play       | comment received mentions harassment or abuse                                                                                                                                                                                                                                                                                                         | extra  |
+| MIN-CATEGORY        | Play       | received 0 in a category                                                                                                                                                                                                                                                                                                                              | extra  |
+| TOTAL-NO-COMMENT    | Scoring    | gave a total above 14 or below 6 without a comment                                                                                                                                                                                                                                                                                                    | policy |
+| CATEGORY-NO-COMMENT | Scoring    | gave a 0 or 4 in a category without a comment                                                                                                                                                                                                                                                                                                         | policy |
+| DELETED-ROW         | Scoring    | a form was taken out and is on the Deleted Forms tab for any other reason, the details are the chair's reason                                                                                                                                                                                                                                         | extra  |
+| REDACTED-COMMENT    | Scoring    | a comment was redacted: Comment shows the original and redacted versions, the details are the chair's reason                                                                                                                                                                                                                                          | extra  |
+| SELF-SCORE          | Scoring    | a team scored itself                                                                                                                                                                                                                                                                                                                                  | extra  |
+| NO-SUCH-GAME        | Scoring    | a form for two teams with no game on the schedule                                                                                                                                                                                                                                                                                                     | extra  |
+| DUPLICATE           | Scoring    | more forms to an opponent than games, or a form the chair moved to Deleted forms with "duplicate" in the reason. The issue is in the game of the counted form the duplicate is closest to in time, with that form's Score, Spirit and Comment. Details list only the duplicates, deleted ones with their reason, ones still on Results as not counted | extra  |
+| NO-SCORES           | Tournament | a team submitted no scores                                                                                                                                                                                                                                                                                                                            | policy |
+| UNDER-SUBMITTED     | Tournament | a team submitted for fewer than 50% of the games it played                                                                                                                                                                                                                                                                                            | policy |
+| IMMEDIATE-AVERAGE   | Tournament | a team averaged below 8. Details list the club's earlier averages below 9 this season                                                                                                                                                                                                                                                                 | policy |
+| MONITORING-AVERAGE  | Tournament | a team averaged below 9, but not below 8. Same details                                                                                                                                                                                                                                                                                                | policy |
 
 Thresholds, keywords and on/off switches are in the Issue Rules section of the Settings tab. Rules added in later versions appear there on their own, rules from earlier versions can be deleted.
 

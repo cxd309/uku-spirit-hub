@@ -205,6 +205,20 @@ function _writeGames_(sheet: GoogleAppsScript.Spreadsheet.Sheet, games: GameReco
 }
 
 /**
+ * when a game started, from its Day and Time
+ * pure, no google calls
+ *
+ * @param game  the game
+ * @returns the start in milliseconds, null without a Day
+ */
+function _gameStart_(game: GameRecord): number | null {
+  if (game.day === null) return null;
+  const { day, time } = game;
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, Math.round((time ?? 0) * 86400000))
+    .getTime();
+}
+
+/**
  * games in tournament order, then as they are on the Gamelist
  * pure, returns a new array
  *
