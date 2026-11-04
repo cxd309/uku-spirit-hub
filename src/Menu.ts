@@ -18,8 +18,8 @@ function onOpen() {
  * keep Teams, Clubs and email drafts up to date when a person changes something they depend on
  * `onEdit` is a reserved name, apps script runs it after every edit by a person
  *
- * Club Override on Teams: rebuild Clubs
- * Name Rules on Settings: work out every Suggested Club again, then rebuild Clubs
+ * Club Override on Teams: rebuild Clubs, then refill email drafts, as issues look their club up on Teams
+ * Name Rules on Settings: work out every Suggested Club again, then rebuild Clubs and refill email drafts
  * International on Tournaments: rebuild Teams and Clubs, scoring teams at international events are left out
  * Club on Club Report: pick the club's first team, then fit the totals charts to their tournaments
  * Team on Club Report: fit the totals charts to their tournaments
@@ -90,6 +90,11 @@ function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit) {
     } else {
       if (touchesNameRules) _refreshSuggestedClubs_();
       _rebuildClubsFromSheet_();
+      try {
+        _updateEmailDrafts_();
+      } catch (err) {
+        _notify_(`Email drafts not updated: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   } finally {
     lock.releaseLock();

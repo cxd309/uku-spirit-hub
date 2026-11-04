@@ -109,7 +109,7 @@ A normal update after uploading tournament results:
 1. **Refresh Tournaments.**
 2. On the Tournaments tab, tick **Include Results** for this hub's tournaments and **International** for international events, and set any file you want re-imported to **REFRESH**.
 3. **Refresh Results and Issues.**
-4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs updates on edit, issues already added keep the club they were added with.
+4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs, and the Club column of Issues, update on edit.
 5. **Refresh Club Statistics** to calculate spirit award winners.
 
 Each tab has an info row at the top saying what it is, which columns you can edit and how it refreshes.

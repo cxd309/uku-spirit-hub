@@ -15,6 +15,7 @@ const ISSUES_INFO = "Spirit issues found in the results\n"
   + "- Status: NEW, IN PROGRESS or CLOSED. Change it once you have sent the email\n"
   + "- Committee Member: who is handling it\n"
   + "- Notes\n\n"
+  + "Club looks the team up on Teams, so it follows Club Overrides. "
   + "Email Address looks the club up on Club Contacts. Email Subject and Email Body are only filled while the issue "
   + "is NEW, ready to copy into an email. Changing Status clears them straight away, setting it back to NEW "
   + "fills them again\n\n"
@@ -171,7 +172,7 @@ interface IssueRecord {
   comment: string;
   /** team the issue is about */
   team: string;
-  /** club of the team */
+  /** club of the team, written as a formula looking it up on Teams, see _issueClubFormula_ */
   club: string;
   /** one section per check */
   details: string;
@@ -798,6 +799,19 @@ function _mergeIssues_(
 }
 
 /**
+ * formula for the Club cell of one Issues row: the team's club on the Teams tab
+ * a formula, so a Club Override or Name Rule change shows on every issue straight away
+ *
+ * @param row  1-based sheet row the formula is for
+ * @returns the formula
+ */
+function _issueClubFormula_(row: number): string {
+  const team = `$${_columnLetter_(ISSUE_KEYS.indexOf("team") + 1)}${row}`;
+  const teams = (key: keyof typeof TEAM_HEADERS) => _columnBelowHeader_(TEAMS_SHEET, TEAM_KEYS.indexOf(key) + 1);
+  return `=IFERROR(XLOOKUP(${team}, ${teams("team")}, ${teams("club")}), "")`;
+}
+
+/**
  * @returns the Issues tab, created on first use
  */
 function _getIssuesSheet_(): GoogleAppsScript.Spreadsheet.Sheet {
@@ -841,7 +855,11 @@ function _writeIssues_(found: FoundIssue[]): { added: number; updated: number } 
     _fitSheet_(sheet, firstNew + added.length - 1, ISSUE_KEYS.length);
     sheet.getRange(firstNew, 1, added.length, ISSUE_KEYS.length).setValues(
       added.map((issue, i) =>
-        ISSUE_KEYS.map((key) => (key === "emailAddress" ? _emailAddressFormula_(firstNew + i) : issue[key] ?? ""))
+        ISSUE_KEYS.map((key) => {
+          if (key === "club") return _issueClubFormula_(firstNew + i);
+          if (key === "emailAddress") return _emailAddressFormula_(firstNew + i);
+          return issue[key] ?? "";
+        })
       ),
     );
     const statusRule = SpreadsheetApp.newDataValidation().requireValueInList([...ISSUE_STATUSES], true).build();
