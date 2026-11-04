@@ -375,7 +375,7 @@ function _gameFindings_(
  * pure, never modifies its arguments
  *
  * a deleted form whose teams and submission time match a form still on Results, with a different comment,
- * is the original of a redacted comment: REDACTED-COMMENT, Comment shows both versions
+ * is the original of a redacted comment: REDACTED-COMMENT, in the game of the form on Results, Comment shows both versions
  * any other deleted form was taken out: DELETED-ROW, Comment shows its comment
  *
  * @param deleted     every deleted form
@@ -403,7 +403,7 @@ function _deletedFindings_(
       category: isEdit ? "redactedComment" : "deletedRow",
       event,
       team: f.scorer,
-      game: "",
+      game: isEdit ? edited.game : "",
       opponent: f.receiver,
       text: `${isEdit ? "Comment redacted" : "Deleted row"}: ${reason}`,
       comment: isEdit
