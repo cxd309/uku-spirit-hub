@@ -52,7 +52,12 @@ const DEFAULT_ISSUE_RULES: Readonly<
   deletedRow: {
     value1: "",
     value2: "",
-    description: "Scoring: a form is on the Deleted Forms tab, with the chair's reason",
+    description: "Scoring: a form was taken out and is on the Deleted Forms tab, with the chair's reason",
+  },
+  redactedComment: {
+    value1: "",
+    value2: "",
+    description: "Scoring: a comment was redacted, the original is on the Deleted Forms tab with the chair's reason",
   },
   selfScore: {
     value1: "",

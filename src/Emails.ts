@@ -131,14 +131,14 @@ const MULTIPLE_EMAIL_CODE = "MULTIPLE";
 
 /**
  * starter wording written for each check when its template is missing
- * only NO-SCORES and UNDER-SUBMITTED are enabled to begin with
+ * every template is enabled to begin with, untick Enabled to stop drafting emails for a check
  * checks left out here never get a template or an email (e.g. CHEATING and HARASSMENT, which are not policy)
  */
 const DEFAULT_EMAIL_TEMPLATES: Readonly<
   Partial<Record<IssueCategoryKey, { enabled: boolean; subject: string; body: string }>>
 > = Object.freeze({
   lowScore: {
-    enabled: false,
+    enabled: true,
     subject: "Low spirit score - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "{team_name} received a low spirit score of {spirit} from {opponent} at {tournament_name}.\n\n"
@@ -146,7 +146,7 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
       + EMAIL_SIGN_OFF,
   },
   dangerousPlay: {
-    enabled: false,
+    enabled: true,
     subject: "Spirit comment received - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "A spirit score comment {team_name} received from {opponent} at {tournament_name} mentions dangerous play."
@@ -154,14 +154,14 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
       + EMAIL_SIGN_OFF,
   },
   categoryMinimum: {
-    enabled: false,
+    enabled: true,
     subject: "Spirit score received - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "{team_name} received a spirit score of {spirit} from {opponent} at {tournament_name}. {details}.\n\n{comment}"
       + EMAIL_SIGN_OFF,
   },
   totalWithoutComment: {
-    enabled: false,
+    enabled: true,
     subject: "Spirit score without a comment - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "At {tournament_name}, {team_name} gave {opponent} a spirit score of {spirit}. The UKU SOTG Policy says "
@@ -169,11 +169,19 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
       + EMAIL_SIGN_OFF,
   },
   categoryWithoutComment: {
-    enabled: false,
+    enabled: true,
     subject: "Spirit score without a comment - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "At {tournament_name}, {team_name} gave {opponent} a spirit score of {spirit}. The UKU SOTG Policy says "
       + "a 0 or 4 in a category needs a comment, but no comment was given."
+      + EMAIL_SIGN_OFF,
+  },
+  redactedComment: {
+    enabled: true,
+    subject: "Spirit comment redacted - {tournament_name}",
+    body: "Dear {club_name},\n\n"
+      + "The spirit comment {team_name} gave {opponent} at {tournament_name} has been redacted by the UKU Spirit "
+      + "Committee before the results were published.\n\n{details}"
       + EMAIL_SIGN_OFF,
   },
   noScores: {
@@ -195,14 +203,14 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
       + EMAIL_SIGN_OFF,
   },
   immediateAverage: {
-    enabled: false,
+    enabled: true,
     subject: "Low spirit average - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "{team_name} received a low average spirit score at {tournament_name}.\n\n{details}"
       + EMAIL_SIGN_OFF,
   },
   monitoringAverage: {
-    enabled: false,
+    enabled: true,
     subject: "Spirit average - {tournament_name}",
     body: "Dear {club_name},\n\n"
       + "{team_name} received an average spirit score at {tournament_name} that counts towards monitoring."
@@ -215,7 +223,7 @@ const DEFAULT_EMAIL_TEMPLATES: Readonly<
  * starter wording for an issue with more than one check, to be filled in by hand
  */
 const DEFAULT_MULTIPLE_EMAIL_TEMPLATE = Object.freeze({
-  enabled: false,
+  enabled: true,
   subject: "Spirit - {tournament_name}",
   body: "Dear {club_name},\n\n"
     + "We are getting in touch about {team_name} at {tournament_name}, in the game against {opponent}.\n\n"
@@ -232,7 +240,7 @@ const MANUAL_EMAIL_CODE = "MANUAL";
  * starter wording for an issue with no checks, to be filled in by hand
  */
 const DEFAULT_MANUAL_EMAIL_TEMPLATE = Object.freeze({
-  enabled: false,
+  enabled: true,
   subject: "Spirit - {tournament_name}",
   body: "Dear {club_name},\n\n"
     + "We are getting in touch about {team_name} at {tournament_name}.\n\n{details}"
@@ -245,10 +253,10 @@ const DEFAULT_MANUAL_EMAIL_TEMPLATE = Object.freeze({
 const NO_CLUB_EMAIL = "No email for club";
 
 /**
- * text of the Email Address cell when DELETED-ROW is the issue's only check
- * a form can be deleted for something either team did, so neither club's address is given
+ * text of the Email Address, Subject and Body cells when DELETED-ROW is the issue's only check
+ * a form can be deleted for something either team did, so no email is drafted and neither club's address is given
  */
-const UNKNOWN_RECIPIENT = "Could not be determined";
+const UNKNOWN_RECIPIENT = "n/a";
 
 /**
  * one drafted email, for one Issues row
@@ -499,6 +507,10 @@ function _draftEmails_(
     if (text(issue.status).toUpperCase() !== ISSUE_STATUSES[0]) return;
     const codes = _checkCodes_(issue.checks);
     const code = codes.length === 0 ? MANUAL_EMAIL_CODE : codes.length === 1 ? codes[0] : MULTIPLE_EMAIL_CODE;
+    if (code === ISSUE_CATEGORIES.deletedRow.code) {
+      drafts.push({ index, subject: UNKNOWN_RECIPIENT, body: UNKNOWN_RECIPIENT });
+      return;
+    }
     const template = templates.get(code);
     if (!template || !template.enabled) return;
 

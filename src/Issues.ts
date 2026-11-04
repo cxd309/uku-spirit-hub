@@ -98,6 +98,7 @@ const ISSUE_CATEGORIES = Object.freeze({
   totalWithoutComment: { code: "TOTAL-NO-COMMENT", level: ISSUE_LEVELS.SCORING },
   categoryWithoutComment: { code: "CATEGORY-NO-COMMENT", level: ISSUE_LEVELS.SCORING },
   deletedRow: { code: "DELETED-ROW", level: ISSUE_LEVELS.SCORING },
+  redactedComment: { code: "REDACTED-COMMENT", level: ISSUE_LEVELS.SCORING },
   selfScore: { code: "SELF-SCORE", level: ISSUE_LEVELS.SCORING },
   noSuchGame: { code: "NO-SUCH-GAME", level: ISSUE_LEVELS.SCORING },
   duplicate: { code: "DUPLICATE", level: ISSUE_LEVELS.SCORING },
@@ -370,12 +371,12 @@ function _gameFindings_(
 }
 
 /**
- * one Deleted Row finding per deleted form
+ * one Deleted Row or Redacted Comment finding per deleted form
  * pure, never modifies its arguments
  *
  * a deleted form whose teams and submission time match a form still on Results, with a different comment,
- * is the original of an edited comment: Details says "Comment edited" and Comment shows both versions
- * any other deleted form was taken out: Details says "Deleted row" and Comment shows its comment
+ * is the original of a redacted comment: REDACTED-COMMENT, Comment shows both versions
+ * any other deleted form was taken out: DELETED-ROW, Comment shows its comment
  *
  * @param deleted     every deleted form
  * @param responses   every response, to find edited comments
@@ -399,12 +400,12 @@ function _deletedFindings_(
     const edited = f.timestamp === null ? undefined : kept.get(formKey(f));
     const isEdit = edited !== undefined && edited.comment !== f.comment;
     findings.push({
-      category: "deletedRow",
+      category: isEdit ? "redactedComment" : "deletedRow",
       event,
       team: f.scorer,
       game: "",
       opponent: f.receiver,
-      text: `${isEdit ? "Comment edited" : "Deleted row"}: ${reason}`,
+      text: `${isEdit ? "Comment redacted" : "Deleted row"}: ${reason}`,
       comment: isEdit
         ? `Original comment: ${_quoted_(f.comment) || "\"\""}\n\nRedacted comment: ${
           _quoted_(edited.comment) || "\"\""
