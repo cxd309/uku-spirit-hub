@@ -22,8 +22,10 @@ const EVENTS_INFO =
   + "otherwise OK\n\n"
   + "Publish Status, from the SOTG Folder on the Schedule List and the Published File Name on the Settings tab: "
   + "NO FOLDER the Schedule Manager has no SOTG Folder yet, NOT PUBLISHED no published file in it, "
-  + "PUBLISHED the file was written after the Form Responses and schedule last changed, "
-  + "OUT OF DATE they changed after it was written, ERROR the folder cannot be read\n\n"
+  + "PUBLISHED this hub's file was written after the Form Responses and schedule last changed, "
+  + "OUT OF DATE they changed after it was written, PUBLISHED EXTERNALLY a file this hub did not create, "
+  + "ERROR the folder cannot be read. The Schedule Manager's SOTG Results and Breakdown link is used "
+  + "when its file has the published name\n\n"
   + "To read the Schedule Manager again run \"Refresh Tournaments\", to import results run \"Refresh Results and Issues\"";
 
 /**
@@ -160,6 +162,7 @@ const PUBLISH_STATUS = Object.freeze(
     NOT_PUBLISHED: "NOT PUBLISHED",
     PUBLISHED: "PUBLISHED",
     OUT_OF_DATE: "OUT OF DATE",
+    PUBLISHED_EXTERNALLY: "PUBLISHED EXTERNALLY",
     ERROR: "ERROR",
   } as const,
 );
@@ -498,7 +501,11 @@ function _refreshTournaments_(): string {
     () => _readFileVersions_(list.rows.flatMap((r) => [r.scheduleUrl, r.spiritFormUrl])),
   );
   const synced = _syncEvents_(existing, list.rows, versions);
-  const events = _timed_("check published files", () => _withPublishStatus_(synced, settings.publishedFileName));
+  const links = new Map(list.rows.map((r) => [r.spiritFormUrl, r.publishedUrl]));
+  const events = _timed_(
+    "check published files",
+    () => _withPublishStatus_(synced, settings.publishedFileName, links),
+  );
   _timed_("write tournaments", () => _writeEvents_(sheet, events));
 
   // event names come from the Schedule List, so Teams and Clubs pick up any renames and International ticks

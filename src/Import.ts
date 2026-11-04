@@ -379,7 +379,7 @@ function _refreshResults_(): string {
   // a new import can make a published file out of date
   const published = _timed_(
     "check published files",
-    () => _withPublishStatus_(updatedEvents, _readHubSettings_().publishedFileName),
+    () => _withPublishStatus_(updatedEvents, _readHubSettings_().publishedFileName, new Map()),
   );
   _timed_("write tournaments", () => _writeEvents_(eventsSheet, published));
 
