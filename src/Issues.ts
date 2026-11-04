@@ -354,7 +354,7 @@ function _gameFindings_(
     }
   }
 
-  findings.push(..._duplicateFindings_(responses, eventByUrl));
+  findings.push(..._duplicateFindings_(responses, deleted, eventByUrl));
   findings.push(..._deletedFindings_(deleted, responses, eventByUrl, settings));
   return findings;
 }
@@ -425,6 +425,7 @@ function _isCommentRequiredReason_(reason: string): boolean {
  *
  * a deleted form whose teams and submission time match a form still on Results, with a different comment,
  * is the original of a redacted comment: REDACTED-COMMENT, in the game of the form on Results, Comment shows both
+ * a deleted form whose reason mentions "duplicate" is left to _duplicateFindings_
  * a deleted form whose reason says it needed a comment raises TOTAL-NO-COMMENT and CATEGORY-NO-COMMENT
  * as if it were still on Results, falling back to DELETED-ROW if its scores break neither
  * any other deleted form was taken out: DELETED-ROW, Comment shows its comment
@@ -467,6 +468,8 @@ function _deletedFindings_(
       });
       continue;
     }
+    // a duplicate the chair moved is raised by the duplicate check, with the pair's other forms
+    if (edited === undefined && _isDuplicateReason_(f.reason)) continue;
 
     const game = f.game;
     const comment = _quoted_(f.comment);
@@ -488,30 +491,63 @@ function _deletedFindings_(
  * one Duplicate finding per scoring team → receiving team with a duplicate, listing every form for that pair
  * pure, never modifies its arguments
  *
+ * a pair has a duplicate when a form on Results is a Duplicate, or the chair moved one to Deleted forms
+ * with a reason mentioning "duplicate"
+ * the list has every form on Results and every deleted form for the pair, deleted ones marked with their reason,
+ * leaving out deleted copies of forms still on Results (edited comments)
+ *
  * @param responses   every response, matched to games
+ * @param deleted     every deleted form, matched to games
  * @param eventByUrl  Spirit Form URL → included event
  * @returns the findings
  */
-function _duplicateFindings_(responses: ResponseRecord[], eventByUrl: Map<string, EventRecord>): IssueFinding[] {
-  const pairs: Map<string, ResponseRecord[]> = new Map();
+function _duplicateFindings_(
+  responses: ResponseRecord[],
+  deleted: DeletedFormRecord[],
+  eventByUrl: Map<string, EventRecord>,
+): IssueFinding[] {
+  const pairKey = (f: { spiritFormUrl: string; scorer: string; receiver: string }) =>
+    `${f.spiritFormUrl}|${_teamKey_(f.scorer)}|${_teamKey_(f.receiver)}`;
+  const submittedAt = new Set(
+    responses.filter((r) => r.timestamp !== null).map((r) => `${pairKey(r)}|${r.timestamp?.getTime()}`),
+  );
+  const isCopy = (f: DeletedFormRecord) =>
+    f.timestamp !== null && submittedAt.has(`${pairKey(f)}|${f.timestamp.getTime()}`);
+
+  type Listed = { form: ResponseRecord | DeletedFormRecord; isDuplicate: boolean; hasGame: boolean; note: string };
+  const pairs: Map<string, Listed[]> = new Map();
+  const add = (key: string, listed: Listed) => pairs.set(key, [...(pairs.get(key) ?? []), listed]);
   for (const r of responses) {
     if (r.match !== MATCH_RESULTS.OK && r.match !== MATCH_RESULTS.DUPLICATE) continue;
-    const key = `${r.spiritFormUrl}|${_teamKey_(r.scorer)}|${_teamKey_(r.receiver)}`;
-    pairs.set(key, [...(pairs.get(key) ?? []), r]);
+    add(pairKey(r), { form: r, isDuplicate: r.match === MATCH_RESULTS.DUPLICATE, hasGame: r.counted, note: "" });
   }
+  for (const f of deleted) {
+    if (isCopy(f)) continue;
+    const duplicate = _isDuplicateReason_(f.reason);
+    add(pairKey(f), {
+      form: f,
+      isDuplicate: duplicate,
+      hasGame: !duplicate && f.game !== "",
+      note: ` (deleted: ${f.reason})`,
+    });
+  }
+
   const findings: IssueFinding[] = [];
-  for (const forms of pairs.values()) {
-    const event = eventByUrl.get(forms[0].spiritFormUrl);
-    if (!event || !forms.some((r) => r.match === MATCH_RESULTS.DUPLICATE)) continue;
-    const lines = forms.map((r) => [_spiritText_(r), _quoted_(r.comment)].filter((x) => x !== "").join(" "));
+  for (const listed of pairs.values()) {
+    const first = listed[0].form;
+    const event = eventByUrl.get(first.spiritFormUrl);
+    if (!event || !listed.some((l) => l.isDuplicate)) continue;
+    const lines = [...listed]
+      .sort((a, b) => (a.form.timestamp?.getTime() ?? 0) - (b.form.timestamp?.getTime() ?? 0))
+      .map((l) => [_spiritText_(l.form), _quoted_(l.form.comment)].filter((x) => x !== "").join(" ") + l.note);
     findings.push({
       category: "duplicate",
       event,
-      team: forms[0].scorer,
+      team: first.scorer,
       game: "",
-      opponent: forms[0].receiver,
+      opponent: first.receiver,
       text: "More responses submitted than games played.\n\n"
-        + `Games played: ${forms.filter((r) => r.counted).length}.\n\n`
+        + `Games played: ${listed.filter((l) => l.hasGame).length}.\n\n`
         + `Responses:\n${lines.join("\n")}`,
       comment: "",
       spirit: "",
