@@ -47,6 +47,7 @@ function _instructionLines_(): InstructionLine[] {
         + "This will update the tournaments tab based on information in the schedule manager.",
     ),
     text("5a. On the tournaments tab tick \"Include Results\" for new tournaments that now have spirit data."),
+    text("5b. Set each new tournament's Div to O, W or X, for the Division Report."),
     text(
       "6. SpiritHub > Refresh Results and Issues. This will gather information from schedules and spirit form "
         + "responses and try to automatically raise issues based on the Settings tab. It will also raise all of the "

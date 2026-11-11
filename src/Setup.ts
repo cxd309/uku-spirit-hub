@@ -16,6 +16,7 @@ function _dataTabNames_(): string[] {
     CLUB_CONTACTS_SHEET,
     CLUB_STATS_SHEET,
     CLUB_REPORT_SHEET,
+    DIVISION_REPORT_SHEET,
   ];
 }
 
@@ -59,6 +60,7 @@ function _showSettings_(): string {
   _getClubContactsSheet_();
   _getClubStatsSheet_();
   _getClubReportSheet_();
+  _getDivisionReportSheet_();
   const settings = _getSettingsSheet_();
   _getEmailTemplatesSheet_();
   _writeInstructions_();

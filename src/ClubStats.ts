@@ -67,6 +67,8 @@ interface CountedScore {
   receiverClub: string;
   /** total score */
   total: number;
+  /** each category's score, in SCORE_KEYS order */
+  categories: number[];
   /** true when the clubs differ, only these count towards scores and models */
   counts: boolean;
 }
@@ -138,6 +140,7 @@ function _countedScores_(
       receiver: r.receiver,
       receiverClub: clubOf.get(_teamKey_(r.receiver)) ?? "",
       total: _responseTotal_(r),
+      categories: SCORE_KEYS.map((key) => r[key]),
     }))
     .filter((s) => s.receiverClub !== "")
     .map((s) => ({ ...s, counts: s.scorerClub !== s.receiverClub }));
@@ -289,7 +292,7 @@ function _clubStatsCiFormula_(row: number, sign: 1 | -1): string {
 }
 
 /**
- * recalculate the Club Statistics tab from the spreadsheet, no files are read
+ * recalculate the Club Statistics and Division Report tabs from the spreadsheet, no files are read
  *
  * @returns a one-line summary
  */
@@ -352,7 +355,10 @@ function _refreshClubStatistics_(): string {
     }
   }
 
+  const divisions = _timed_("division report", () => _refreshDivisionReport_(_sortEvents_(events), scores));
+
   const failed = Object.entries(models).filter(([, m]) => !m.ok).map(([name]) => name);
   return `Statistics for ${rows.length} club(s) from ${countedTotal} score(s)`
-    + (failed.length > 0 ? `; ${failed.join(" and ")} could not be fitted (see tab info)` : "");
+    + (failed.length > 0 ? `; ${failed.join(" and ")} could not be fitted (see tab info)` : "")
+    + (divisions !== "" ? `; ${divisions}` : "");
 }

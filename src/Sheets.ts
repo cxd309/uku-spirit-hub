@@ -3,8 +3,10 @@
  * a new tab gets a wrapped info row, then a bold header row, both frozen
  *
  * if the tab exists, its header row must match `headers` exactly, so code and sheet cannot silently disagree
- * the one exception is a tab from an earlier version that lacks columns added at the end:
- * they are added, with their headers and the new info row, and everything already on the tab is kept
+ * the one exception is a tab from an earlier version that lacks columns added since, anywhere in the table:
+ * columns are inserted for them, with their headers and the new info row, and everything already on the tab is kept
+ * Sheets moves the references of formulas pointing past an inserted column, so other tabs keep working
+ * a new column takes its left neighbour's formatting until the tab is next written
  *
  * @param ss       spreadsheet to examine
  * @param name     tab name
@@ -12,7 +14,7 @@
  * @param info     text for the info row
  *                 line breaks separate points
  * @returns the tab
- * @throws {Error} if the tab exists but its header row differs from `headers`
+ * @throws {Error} if the tab exists but its header row is not `headers`, or `headers` with some left out
  */
 function _getOrCreateSheet_(
   ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
@@ -22,26 +24,33 @@ function _getOrCreateSheet_(
 ): GoogleAppsScript.Spreadsheet.Sheet {
   const existing = ss.getSheetByName(name);
   if (existing) {
-    const width = Math.min(existing.getMaxColumns(), headers.length);
-    const actual = existing.getRange(HEADER_ROW, 1, 1, width).getValues()[0].map((cell) => String(cell).trim());
-    let present = actual.length;
-    while (present > 0 && actual[present - 1] === "") present--;
-    const matches = actual.join("|") === headers.slice(0, width).join("|");
-    const isOlder = present > 0 && present < headers.length && actual.slice(0, present).join("|")
-        === headers.slice(0, present).join("|");
-    if (matches && width === headers.length) return existing;
-    if (!isOlder) {
+    const row = existing
+      .getRange(HEADER_ROW, 1, 1, existing.getMaxColumns())
+      .getValues()[0]
+      .map((cell) => String(cell).trim());
+    if (row.slice(0, headers.length).join("|") === headers.join("|")) return existing;
+
+    // an earlier version's headers are these headers with some left out, in the same order
+    let present = row.length;
+    while (present > 0 && row[present - 1] === "") present--;
+    const found = row.slice(0, present);
+    const missing: number[] = [];
+    let next = 0;
+    headers.forEach((header, i) => {
+      if (found[next] === header) next++;
+      else missing.push(i);
+    });
+    if (present === 0 || next < present) {
       throw new Error(
-        `Tab "${name}" has unexpected headers: expected [${headers.join(", ")}], found [${actual.join(", ")}]`,
+        `Tab "${name}" has unexpected headers: expected [${headers.join(", ")}], found [${found.join(", ")}]`,
       );
     }
-    if (existing.getMaxColumns() < headers.length) {
-      existing.insertColumnsAfter(existing.getMaxColumns(), headers.length - existing.getMaxColumns());
+    // in column order, so every column left of the one being inserted is already in place
+    for (const i of missing) {
+      if (i === 0) existing.insertColumnBefore(1);
+      else existing.insertColumnAfter(i);
+      existing.getRange(HEADER_ROW, i + 1).setValue(headers[i]).setFontWeight("bold");
     }
-    existing
-      .getRange(HEADER_ROW, present + 1, 1, headers.length - present)
-      .setValues([headers.slice(present)])
-      .setFontWeight("bold");
     existing.getRange(INFO_ROW, 1, 1, existing.getMaxColumns()).breakApart();
     existing.getRange(INFO_ROW, 1, 1, headers.length).merge().setValue(info).setWrap(true).setVerticalAlignment("top");
     return existing;

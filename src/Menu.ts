@@ -201,7 +201,7 @@ function publishResults() {
 }
 
 /**
- * menu: recalculate the Club Statistics tab from what is already in the spreadsheet
+ * menu: recalculate the Club Statistics and Division Report tabs from what is already in the spreadsheet
  * only ever run from the menu
  */
 function refreshClubStatistics() {

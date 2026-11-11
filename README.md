@@ -134,12 +134,12 @@ Everything runs from the **SpiritHub** menu.
 | Refresh Tournaments        | Reads the Schedule List of the Schedule Manager and updates the Tournaments tab, see [Schedule Manager](#schedule-manager)                                                                                                                                      |
 | Refresh Results and Issues | Imports every included tournament's files marked NEW, EDITED or REFRESH: schedules onto Games, Form Responses onto Results and Deleted Forms. Then updates Teams and Clubs, and adds any new issues. With nothing to import it just runs the issue checks again |
 | Publish Results            | Writes the Results and Breakdown file of every tournament ready to publish, see [publishing](#publishing)                                                                                                                                                       |
-| Refresh Club Statistics    | Recalculates the Club Statistics tab, no data import                                                                                                                                                                                                            |
+| Refresh Club Statistics    | Recalculates the Club Statistics and Division Report tabs, no data import                                                                                                                                                                                       |
 
 A normal update after uploading tournament results:
 
 1. **Refresh Tournaments.**
-2. On the Tournaments tab, tick **Include Results** for this hub's tournaments and **International** for international events, and set any file you want re-imported to **REFRESH**.
+2. On the Tournaments tab, tick **Include Results** for this hub's tournaments and **International** for international events, set each tournament's **Div** (O, W or X), and set any file you want re-imported to **REFRESH**.
 3. **Refresh Results and Issues.**
 4. Check the Clubs tab for any duplicate looking clubs and set **Club Override** on the Teams tab to correct them. Clubs, and the Club column of Issues, update on edit.
 5. **Refresh Club Statistics** to calculate spirit award winners.
@@ -162,6 +162,7 @@ Every refresh logs how long each step took to the Apps Script **Executions** log
 | Clubs           | All the clubs present in the Teams table, used to check for duplicates                                                                                                                                                  |
 | Club Statistics | Statistics of club spirit across a season, used to determine spirit award winner                                                                                                                                        |
 | Club Report     | Pick a club, then one of its teams, to see the totals and category scores each received, totals split by tournament. Teams ignore trailing brackets, so Birmingham 1 (WW4) and Birmingham 1 (WW2) are one team          |
+| Division Report | Totals by tournament and category scores, for All tournaments and for each Div (O, W, X) set on the Tournaments tab. Rebuilt by Refresh Club Statistics                                                                 |
 | Club Contacts   | Email address for each club. New clubs are added at the bottom, the script never changes existing rows                                                                                                                  |
 | Email Templates | Hidden while refreshing. One subject and body per issue check, plus MULTIPLE for issues with several checks, with placeholders filled from the issue                                                                    |
 | Settings        | Hidden while refreshing. Sections for the Hub (Schedule Manager and dates), Spirit Award (minimum tournaments, international), Name Rules and Issue Rules                                                               |

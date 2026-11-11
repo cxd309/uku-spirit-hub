@@ -12,6 +12,7 @@ const EVENTS_INFO =
   + "Rows without a Schedule URL or SOTG Sheet are left out, the SOTG Sheet link identifies each tournament\n\n"
   + "Grey columns are filled on refresh, white columns are yours to edit:\n"
   + "- Event Name Override: a name to use instead of the Schedule Manager's, leave blank to use theirs\n"
+  + "- Div: the tournament's division, O, W or X, for the Division Report\n"
   + "- Schedule Status / Spirit Form Status: set REFRESH to import that file again\n"
   + "- Include Results: import this tournament's results, unticked rows are NOT INCLUDED\n"
   + "- International: only the receiving teams are UK teams\n"
@@ -39,6 +40,7 @@ const EVENT_HEADERS = Object.freeze(
     scheduleEventName: "Schedule Event Name",
     eventNameOverride: "Event Name Override",
     eventName: "Event Name",
+    division: "Div",
     startDate: "Start Date",
     endDate: "End Date",
     scheduleUrl: "Schedule URL",
@@ -98,8 +100,13 @@ const EVENT_STATUS_ORDER = Object.freeze(
  * columns a person edits, left white, every other column is shaded as generated
  */
 const EVENT_EDITABLE = Object.freeze(
-  ["eventNameOverride", "scheduleStatus", "spiritFormStatus", "includeResults", "international"] as const,
+  ["eventNameOverride", "division", "scheduleStatus", "spiritFormStatus", "includeResults", "international"] as const,
 );
+
+/**
+ * choices for the Div column, a tournament with no Div is only in the Division Report's All charts
+ */
+const EVENT_DIVISIONS = Object.freeze(["O", "W", "X"] as const);
 
 /**
  * tick box columns of the Events tab
@@ -121,6 +128,8 @@ interface EventRecord {
   eventNameOverride: string;
   /** the name used everywhere else: the override if there is one */
   eventName: string;
+  /** one of EVENT_DIVISIONS, "" if not set */
+  division: string;
   /** Start date on the Schedule List, null if it could not be read */
   startDate: Date | null;
   /** End date on the Schedule List, null if blank */
@@ -240,6 +249,7 @@ function _eventFromRow_(row: unknown[]): EventRecord {
   const event = {
     scheduleEventName: String(cell("scheduleEventName")),
     eventNameOverride: String(cell("eventNameOverride")),
+    division: String(cell("division")).trim().toUpperCase(),
     startDate: date("startDate"),
     endDate: date("endDate"),
     scheduleUrl: String(cell("scheduleUrl")).trim(),
@@ -316,6 +326,9 @@ function _writeEvents_(sheet: GoogleAppsScript.Spreadsheet.Sheet, events: EventR
   const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(Object.values(SOURCE_STATUS), true).build();
   range("scheduleStatus").setDataValidation(statusRule);
   range("spiritFormStatus").setDataValidation(statusRule);
+  range("division").setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList([...EVENT_DIVISIONS], true).setAllowInvalid(false).build(),
+  );
 
   const checkbox = SpreadsheetApp.newDataValidation().requireCheckbox().build();
   for (const key of EVENT_TOGGLES) range(key).setDataValidation(checkbox);
@@ -418,6 +431,7 @@ function _syncEvents_(
       scheduleEventName: row.eventName,
       eventNameOverride,
       eventName: _eventName_(row.eventName, eventNameOverride),
+      division: previous?.division ?? "",
       startDate: row.startDate,
       endDate: row.endDate,
       scheduleUrl: row.scheduleUrl,
