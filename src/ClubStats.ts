@@ -292,7 +292,7 @@ function _clubStatsCiFormula_(row: number, sign: 1 | -1): string {
 }
 
 /**
- * recalculate the Club Statistics and Division Report tabs from the spreadsheet, no files are read
+ * recalculate the Club Statistics, Division Report and Team Results tabs from the spreadsheet, no files are read
  *
  * @returns a one-line summary
  */
@@ -356,6 +356,7 @@ function _refreshClubStatistics_(): string {
   }
 
   const divisions = _timed_("division report", () => _refreshDivisionReport_(_sortEvents_(events), scores));
+  _timed_("team results", () => _refreshTeamResults_(_sortEvents_(events), responses, clubOf));
 
   const failed = Object.entries(models).filter(([, m]) => !m.ok).map(([name]) => name);
   return `Statistics for ${rows.length} club(s) from ${countedTotal} score(s)`
